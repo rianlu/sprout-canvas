@@ -17,22 +17,6 @@
       "generationMode": "images"
     },
     {
-      "id": "elysiver",
-      "name": "Elysiver",
-      "baseUrl": "https://elysia.h-e.top",
-      "apiKey": "sk-your-elysiver-api-key",
-      "imageModel": "gpt-image-2",
-      "generationMode": "images"
-    },
-    {
-      "id": "abrdns",
-      "name": "abrdns",
-      "baseUrl": "https://new-api.abrdns.com",
-      "apiKey": "sk-your-abrdns-api-key",
-      "imageModel": "gpt-image-2_1k",
-      "generationMode": "images"
-    },
-    {
       "id": "anyrouter",
       "name": "AnyRouter",
       "baseUrl": "https://a-ocnfniawgw.cn-shanghai.fcapp.run",
