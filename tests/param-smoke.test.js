@@ -244,8 +244,8 @@ elements.get('imageModel').value = 'gpt-5.3-codex';
   assert.equal(imagePayload.model, 'gpt-5.3-codex');
   assert.equal(optimizePayload.model, 'gpt-5-mini');
   assert.equal(optimizePayload.input[1].content, '测试图片');
-  assert.match(optimizePayload.input[0].content, /expert prompt writer/);
-  assert.match(optimizePayload.input[0].content, /Text overlay/);
+  assert.match(optimizePayload.input[0].content, /prompt editor/);
+  assert.match(optimizePayload.input[0].content, /文字:/);
   assert.equal(config.textModel, 'gpt-5-mini');
 }
 assert.equal(

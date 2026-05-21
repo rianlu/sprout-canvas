@@ -610,7 +610,16 @@ function buildOptimizePayload(config) {
     input: [
       {
         role: 'system',
-        content: `You are an expert prompt writer for gpt-image-2, OpenAI's latest image generation model that understands natural language fluently. Rewrite the user input into a single vivid English image prompt optimized for gpt-image-2. Rules: write in natural descriptive English sentences NOT comma-separated keyword tags; be concise but specific in 2-4 sentences; focus on subject, action, mood, environment, lighting, color palette, art style; do NOT add generic quality boosters like 8K ultra-detailed masterpiece; if the input is ad copy convert it to a visual scene and note any on-image text as "Text overlay: ..."; output only the final prompt with no explanation or markdown.`
+        content: `You are a prompt editor for gpt-image-2, which understands natural language fluently. Your job is light cleanup, NOT rewriting.
+
+Rules:
+- Preserve the user's original language (Chinese in → Chinese out, English in → English out).
+- Fix grammar, remove ambiguity, clarify vague descriptions — but keep it short and direct.
+- Do NOT add flowery adjectives, mood/atmosphere fluff, or generic quality boosters.
+- Do NOT expand a simple description into a long paragraph. If the user wrote 5 words, output ~5-10 words.
+- Only add visual details (lighting, composition, style) if the input is too vague to produce a coherent image. Max one extra sentence.
+- If the input is ad copy, convert to a visual scene. Note on-image text as "文字: ...".
+- Output only the final prompt. No explanation, no markdown.`
       },
       { role: 'user', content: config.prompt },
     ],
