@@ -10,8 +10,8 @@ const __dirname = path.dirname(__filename);
 const ROOT = __dirname;
 const LOCAL_CONFIG_PATH = path.join(ROOT, 'config', 'local.config.json');
 const DEFAULT_MAX_REQUEST_BYTES = 80 * 1024 * 1024;
-const TEXT_UPSTREAM_TIMEOUT_MS = 120_000;
-const IMAGE_UPSTREAM_TIMEOUT_MS = 600_000;
+const TEXT_UPSTREAM_TIMEOUT_MS = 25_000;
+const IMAGE_UPSTREAM_TIMEOUT_MS = 180_000;
 const authSessions = new Map();
 
 function timeoutSignal(ms) {
@@ -19,6 +19,10 @@ function timeoutSignal(ms) {
   const timer = setTimeout(() => ac.abort(), ms);
   timer.unref?.();
   return ac.signal;
+}
+
+function isTimeoutError(error) {
+  return error?.name === 'AbortError' || /aborted|timeout|timed out/i.test(error?.message || String(error));
 }
 let shuttingDown = false;
 
@@ -467,14 +471,23 @@ function responsesPayloadToChatPayload(payload, config) {
 }
 
 async function callJsonUpstream(config, upstreamPath, payload) {
-  const upstream = await fetch(`${config.baseUrl}${upstreamPath}`, {
-    method: 'POST',
-    headers: upstreamHeaders(config, 'application/json'),
-    body: JSON.stringify(payload),
-    signal: timeoutSignal(TEXT_UPSTREAM_TIMEOUT_MS),
-  });
-  if (!upstream.ok) throw new Error(await readUpstreamError(upstream));
-  return upstream.json();
+  try {
+    const upstream = await fetch(`${config.baseUrl}${upstreamPath}`, {
+      method: 'POST',
+      headers: upstreamHeaders(config, 'application/json'),
+      body: JSON.stringify(payload),
+      signal: timeoutSignal(TEXT_UPSTREAM_TIMEOUT_MS),
+    });
+    if (!upstream.ok) throw new Error(await readUpstreamError(upstream));
+    return upstream.json();
+  } catch (error) {
+    if (isTimeoutError(error)) {
+      const timeoutError = new Error(`文本上游 ${Math.round(TEXT_UPSTREAM_TIMEOUT_MS / 1000)}s 内未响应, 已切换备用服务商`);
+      timeoutError.isTextTimeout = true;
+      throw timeoutError;
+    }
+    throw error;
+  }
 }
 
 async function handleTextGeneration(req, res) {
@@ -493,6 +506,7 @@ async function handleTextGeneration(req, res) {
     return;
   }
   const errors = [];
+  const attempts = [];
   for (const textProvider of config.textProviders) {
     const model = textProvider.textModel;
     try {
@@ -501,12 +515,14 @@ async function handleTextGeneration(req, res) {
       const text = extractChatText(data);
       if (!text) throw new Error('Chat Completions API 未返回文本内容');
       if (errors.length) logLine('INFO', `[text-provider] fallback success provider=${textProvider.name} mode=chat_completions`);
-      json(res, 200, { text, provider: 'chat_completions', providerName: textProvider.name });
+      json(res, 200, { text, provider: 'chat_completions', providerName: textProvider.name, attempts });
       return;
     } catch (error) {
       const message = error.message || String(error);
       errors.push(`${textProvider.name} Chat Completions: ${message}`);
+      attempts.push({ providerName: textProvider.name, mode: 'chat_completions', timeout: Boolean(error.isTextTimeout), error: message.slice(0, 180) });
       logLine('WARN', `[text-provider] failed provider=${textProvider.name} mode=chat_completions error=${message.slice(0, 240)}`);
+      if (error.isTextTimeout) continue;
     }
     try {
       const responsesPayload = { ...payload, model, stream: false };
@@ -514,15 +530,16 @@ async function handleTextGeneration(req, res) {
       const text = extractResponsesText(data);
       if (!text) throw new Error('Responses API 未返回文本内容');
       if (errors.length) logLine('INFO', `[text-provider] fallback success provider=${textProvider.name} mode=responses`);
-      json(res, 200, { text, provider: 'responses', providerName: textProvider.name });
+      json(res, 200, { text, provider: 'responses', providerName: textProvider.name, attempts });
       return;
     } catch (error) {
       const message = error.message || String(error);
       errors.push(`${textProvider.name} Responses: ${message}`);
+      attempts.push({ providerName: textProvider.name, mode: 'responses', timeout: Boolean(error.isTextTimeout), error: message.slice(0, 180) });
       logLine('WARN', `[text-provider] failed provider=${textProvider.name} mode=responses error=${message.slice(0, 240)}`);
     }
   }
-  json(res, 502, { error: errors.join(' | ') });
+  json(res, 502, { error: errors.join(' | '), attempts });
 }
 
 async function proxyRequest(req, res, upstreamPath) {
@@ -653,6 +670,15 @@ function rankedImageProviders(config, upstreamPath, contentType, excludeId) {
     .map((provider, index) => ({ provider, load: providerLoad(provider.id), order: (index + providerPickSeq) % candidates.length }))
     .sort((left, right) => left.load - right.load || left.order - right.order)
     .map((item) => item.provider);
+}
+
+function providersForJob(job, config) {
+  if (!job.autoProviderRouting) return [config];
+  const providers = rankedImageProviders(config, job.upstreamPath, job.contentType, job.excludeProviderId);
+  const selectedIndex = providers.findIndex((provider) => provider.id === job.providerId);
+  if (selectedIndex <= 0) return providers;
+  const [selectedProvider] = providers.splice(selectedIndex, 1);
+  return [selectedProvider, ...providers];
 }
 
 function chooseImageProvider(config, upstreamPath, contentType, excludeId) {
@@ -830,7 +856,7 @@ async function processImageJob(job) {
   try {
     const initialConfig = await readLocalConfig(job.providerId);
     maxImageConcurrency = initialConfig.imageConcurrency;
-    const providers = job.autoProviderRouting ? rankedImageProviders(initialConfig, job.upstreamPath, job.contentType, job.excludeProviderId) : [initialConfig];
+    const providers = providersForJob(job, initialConfig);
     let jobResult = null;
     let lastConfig = initialConfig;
     for (let index = 0; index < providers.length; index += 1) {

@@ -120,6 +120,7 @@ const SETTINGS_KEY = 'img_gen_studio_settings_v2';
 const DB_NAME = 'img-gen-gallery';
 const DB_VERSION = 2;
 const MAX_REF_SIZE = 50 * 1024 * 1024;
+const TEXT_FEEDBACK_MS = 8000;
 
 let refImages = [];
 let seriesRefImages = [];
@@ -148,6 +149,31 @@ let isDragging = false;
 let dragStartX = 0;
 let dragStartY = 0;
 let panStartX = 0;
+
+function textAttemptSummary(attempts = []) {
+  const failed = attempts.filter((attempt) => attempt?.providerName);
+  if (!failed.length) return '';
+  const timedOut = failed.filter((attempt) => attempt.timeout);
+  const names = [...new Set((timedOut.length ? timedOut : failed).map((attempt) => attempt.providerName))];
+  return timedOut.length
+    ? `已自动跳过超时文本服务商: ${names.join(', ')}.`
+    : `已自动尝试备用文本服务商: ${names.join(', ')}.`;
+}
+
+function startTextWaitFeedback(setMessage) {
+  let step = 0;
+  const messages = [
+    '文本服务商响应较慢, 仍在等待...',
+    '如果当前服务商超时, 后台会自动切换到备用文本服务商.',
+    '仍在处理, 请保持页面打开.',
+  ];
+  const timer = setInterval(() => {
+    const message = messages[Math.min(step, messages.length - 1)];
+    setMessage(message);
+    step += 1;
+  }, TEXT_FEEDBACK_MS);
+  return () => clearInterval(timer);
+}
 let panStartY = 0;
 
 function normalizeBaseUrl(input) {
@@ -341,7 +367,6 @@ function readSettings() {
 
 function saveSettings() {
   localStorage.setItem(SETTINGS_KEY, JSON.stringify({
-    providerId: selectedProviderId(),
     imageCount: els.imageCount.value,
     aspectRatio: els.aspectRatio.value,
     imageQuality: els.imageQuality.value,
@@ -350,7 +375,7 @@ function saveSettings() {
 }
 
 function selectedProviderId() {
-  return preferredProviderId;
+  return '';
 }
 
 function findServerProvider(providerId) {
@@ -358,22 +383,38 @@ function findServerProvider(providerId) {
 }
 
 function providerHeader(config) {
-  const headers = config.providerId ? { 'X-Provider-Id': config.providerId } : {};
+  const headers = {};
+  if (config.providerId) headers['X-Provider-Id'] = config.providerId;
   if (config._excludeProviderId) headers['X-Exclude-Provider-Id'] = config._excludeProviderId;
   return headers;
 }
 
 function renderProviderOptions(select, selectedId) {
   if (!select) return;
-  select.innerHTML = serverProviders.map((provider) => {
+  select.innerHTML = '<option value="">自动调度</option>' + serverProviders.map((provider) => {
     const label = `${provider.name} · ${provider.imageModel || '未配置生图模型'}`;
     return `<option value="${escapeHtml(provider.id)}">${escapeHtml(label)}</option>`;
   }).join('');
-  if (serverProviders.length) select.value = findServerProvider(selectedId)?.id || serverProviders[0].id;
+  select.value = selectedId || '';
   select.disabled = serverProviders.length <= 1;
 }
 
 function applyProviderSelection(providerId, persist = true) {
+  if (!providerId) {
+    preferredProviderId = '';
+    if (els.providerSelect) els.providerSelect.value = '';
+    if (els.seriesProviderSelect) els.seriesProviderSelect.value = '';
+    const provider = findServerProvider(serverDefaultProviderId);
+    els.baseUrl.value = '/api';
+    els.apiKey.value = '__server__';
+    els.textModel.value = provider?.textModel || 'gpt-5-mini';
+    els.imageModel.value = provider?.imageModel || 'gpt-image-2';
+    els.generationMode.value = provider?.generationMode || 'images';
+    if (els.configStatus) els.configStatus.textContent = '后台自动调度已启用';
+    if (els.configSummary) els.configSummary.textContent = `生图会由服务端自动选择空闲上游, 提示词增强固定使用文本服务商 ${serverTextProviderName}. API Key 只保存在本地服务端配置文件中.`;
+    if (persist) saveSettings();
+    return;
+  }
   const provider = findServerProvider(providerId);
   if (!provider) return;
   preferredProviderId = provider.id;
@@ -385,7 +426,7 @@ function applyProviderSelection(providerId, persist = true) {
   els.imageModel.value = provider.imageModel || 'gpt-image-2';
   els.generationMode.value = provider.generationMode || 'images';
   if (els.configStatus) els.configStatus.textContent = '后台自动调度已启用';
-  if (els.configSummary) els.configSummary.textContent = `生图会由服务端自动选择空闲上游, 提示词优化固定使用文本服务商 ${serverTextProviderName}. API Key 只保存在本地服务端配置文件中.`;
+  if (els.configSummary) els.configSummary.textContent = `生图会由服务端自动选择空闲上游, 提示词增强固定使用文本服务商 ${serverTextProviderName}. API Key 只保存在本地服务端配置文件中.`;
   if (persist) saveSettings();
 }
 
@@ -401,7 +442,7 @@ function renderProviderSelectors(config) {
       generationMode: config.generationMode,
     }];
   serverDefaultProviderId = config.defaultProvider || config.activeProvider || serverProviders[0]?.id || '';
-  const selectedId = preferredProviderId || config.activeProvider || serverDefaultProviderId;
+  const selectedId = preferredProviderId || '';
   renderProviderOptions(els.providerSelect, selectedId);
   renderProviderOptions(els.seriesProviderSelect, selectedId);
   applyProviderSelection(selectedId, false);
@@ -511,7 +552,7 @@ function getConfig(options = {}) {
 
   const prompt = String(options.promptOverride ?? els.prompt.value).trim();
   if (!prompt) throw new Error('请填写提示词');
-  if (requireTextModel && !textModel) throw new Error('请填写文本模型, 用于提示词优化和 Responses 工具模式');
+  if (requireTextModel && !textModel) throw new Error('请填写文本模型, 用于提示词增强和 Responses 工具模式');
   if (generationMode === 'images' && !imageModel) throw new Error('请填写图片模型, 例如 gpt-image-2');
   if (generationMode === 'responses' && !imageModel) throw new Error('Responses 工具模式需要生图模型, 例如 gpt-5.3-codex');
   const outputFormat = 'auto';
@@ -610,26 +651,24 @@ function buildOptimizePayload(config) {
     input: [
       {
         role: 'system',
-        content: `You are a prompt optimizer for gpt-image-2. Your job is to rewrite user input into a better image generation prompt.
+        content: `You are a conservative prompt enhancer for image generation. Your job is to preserve the user's original intent and make only minimal useful improvements.
 
 CRITICAL: Output MUST be in the SAME language as the user input. Chinese input → Chinese output. English input → English output. Never switch languages.
 
-Before writing, mentally check these dimensions and fill in what's missing from the user input:
-- Subject: who/what is the main focus.
-- Action/Scene: what's happening, where, when.
-- Visual details: lighting direction and quality, colors, materials, textures. Use concrete terms.
-- Composition: camera angle, framing, depth of field, lens feel (e.g. close-up, wide shot, bird's-eye).
-- Style/Medium: photorealistic, illustration, oil painting, product photo, cinematic, etc.
-- Constraints: no watermark, clean background, exact text — only if relevant.
+Core principles:
+- Preserve every named IP, brand, game, character, product, person, place, meme, and style keyword exactly as written. Do not replace, translate, generalize, or dilute them.
+- Do not invent specific characters, scenes, camera lenses, art styles, materials, slogans, logos, or story details unless the user already provided them.
+- For short conceptual prompts, keep the result short and close to the original. Add only broad visual guidance such as theme, composition clarity, color mood, atmosphere, and focal point.
+- For detailed prompts, lightly organize and clarify the existing information.
+- If the prompt is already strong, return a slightly polished version rather than a full rewrite.
+- For ad copy, convert it into a visual scene only when the user clearly asks for a visual/poster/image. Mark on-image text as "文字: ...".
 
-Then output a single natural-language prompt. Rules:
-- Write as a cohesive description, NOT a labeled list. No "Subject:", no numbers, no bullet points.
-- Add missing dimensions with specific visual facts. This is your main job.
-- Do NOT add vague praise words (stunning, masterpiece, epic, ultra-detailed, 8K).
-- Prefer one precise adjective over three vague ones.
-- 2-5 sentences total. Dense and specific, not long and flowery.
-- For ad copy, convert to a visual scene. Mark on-image text as "文字: ...".
-- Output only the final prompt. No explanation.`
+Output rules:
+- Output one natural-language prompt only. No explanation, no bullet points, no Markdown.
+- Keep short inputs concise: usually 1 sentence, at most 2 sentences.
+- Keep detailed inputs compact: usually 2-3 sentences.
+- Do NOT add vague praise words such as masterpiece, stunning, epic, ultra-detailed, 8K.
+- Prefer preserving keyword weight over adding decorative details.`
       },
       { role: 'user', content: config.prompt },
     ],
@@ -1763,13 +1802,16 @@ function buildSeriesOptimizePayload(config) {
 
 async function requestTextGeneration(payload) {
   const config = getConfig({ promptOverride: els.prompt.value || '占位提示词', requireTextModel: true });
+  const stopFeedback = startTextWaitFeedback((message) => setSeriesStatus('info', message));
   const response = await fetch(isProxyBaseUrl(config.baseUrl) ? '/api/text' : apiEndpoint(config, '/v1/responses'), {
     method: 'POST',
     headers: requestHeaders(config, false),
     body: JSON.stringify(payload(config)),
-  });
+  }).finally(stopFeedback);
   if (!response.ok) throw new Error(`HTTP ${response.status}: ${await parseErrorResponse(response)}`);
   const data = await response.json();
+  const summary = textAttemptSummary(data.attempts);
+  if (summary) setSeriesStatus('info', `${summary} 当前结果已返回, 正在写入.`);
   const text = data.text || extractText(data);
   if (!text) throw new Error('文本模型没有返回内容');
   return text;
@@ -1802,7 +1844,7 @@ async function optimizeSeriesStyle() {
     originalSeriesStyle = els.seriesStylePrompt.value;
     markTaskActive(true);
     els.seriesOptimizeBtn.disabled = true;
-    els.seriesOptimizeBtn.textContent = '优化中...';
+    els.seriesOptimizeBtn.textContent = '增强中...';
     setSeriesStatus('info', '正在提炼系列母版...');
     const text = await requestTextGeneration(buildSeriesOptimizePayload);
     els.seriesStylePrompt.value = text.trim();
@@ -1940,12 +1982,16 @@ async function optimizePrompt() {
   }
   originalPrompt = els.prompt.value;
   startTime = Date.now();
-  startProgress('正在优化提示词', '已发送到文本模型, 正在等待返回优化结果.', ['校验输入', '请求文本模型', '解析优化结果']);
-  updateProgress('正在优化提示词', `使用 ${config.textModel} 优化当前提示词.`, 1);
+  startProgress('正在轻微增强', '已发送到文本模型, 正在等待返回增强结果.', ['校验输入', '请求文本模型', '解析增强结果']);
+  updateProgress('正在轻微增强', `使用 ${config.textModel} 轻微增强当前提示词.`, 1);
   markTaskActive(true);
   els.optimizeBtn.disabled = true;
-  els.optimizeBtn.textContent = '优化中...';
+  els.optimizeBtn.textContent = '增强中...';
   clearStatus();
+  const stopFeedback = startTextWaitFeedback((message) => {
+    setStatus('info', message);
+    updateProgress('文本服务商响应较慢', message, 1);
+  });
   try {
     const response = await fetch(isProxyBaseUrl(config.baseUrl) ? '/api/text' : apiEndpoint(config, '/v1/responses'), {
       method: 'POST',
@@ -1953,19 +1999,21 @@ async function optimizePrompt() {
       body: JSON.stringify(buildOptimizePayload(config)),
     });
     if (!response.ok) throw new Error(`HTTP ${response.status}: ${await parseErrorResponse(response)}`);
-    updateProgress('正在解析结果', '文本模型已返回, 正在提取优化后的提示词.', 2);
+    updateProgress('正在解析结果', '文本模型已返回, 正在提取增强后的提示词.', 2);
     const data = await response.json();
+    const summary = textAttemptSummary(data.attempts);
     const optimized = validateOptimizedPrompt(data.text || extractText(data));
     els.prompt.value = optimized;
-    setStatus('done', '提示词已优化. 如果不满意, 可以点击恢复原提示词.');
-    finishProgress('done', '提示词优化完成', '已替换为优化后的提示词, 可继续编辑或直接生成.');
+    setStatus('done', `${summary ? `${summary} ` : ''}提示词已增强. 如果不满意, 可以点击恢复原提示词.`);
+    finishProgress('done', '提示词增强完成', `${summary ? `${summary} ` : ''}已替换为轻微增强后的提示词, 可继续编辑或直接生成.`);
   } catch (error) {
-    setStatus('err', `提示词优化失败: ${error.message || error}`);
-    finishProgress('err', '提示词优化失败', error.message || String(error));
+    setStatus('err', `提示词增强失败: ${error.message || error}`);
+    finishProgress('err', '提示词增强失败', error.message || String(error));
   } finally {
+    stopFeedback();
     markTaskActive(false);
     els.optimizeBtn.disabled = false;
-    els.optimizeBtn.textContent = '优化提示词';
+    els.optimizeBtn.textContent = '轻微增强';
   }
 }
 
