@@ -1,0 +1,499 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>芽绘台 - SproutCanvas</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/styles.css?v=2" />
+</head>
+<body>
+  <div class="noise-overlay"></div>
+
+  <div id="authOverlay" class="auth-overlay" hidden>
+    <form id="authForm" class="auth-card">
+      <span class="bento-subtitle">Private Studio</span>
+      <h1>访问验证</h1>
+      <p>请输入部署配置里的访问密码, 通过后再使用 AI 图片工作台.</p>
+      <label>
+        <span>访问密码</span>
+        <input id="authPassword" type="password" autocomplete="current-password" placeholder="请输入访问密码" />
+      </label>
+      <button id="authSubmitBtn" class="btn-primary" type="submit">进入工作台</button>
+      <div id="authStatus" class="status-bar"></div>
+    </form>
+  </div>
+
+  <div class="app-layout">
+    <!-- 左侧导航 Dock -->
+    <nav class="side-dock">
+      <div class="dock-brand">
+        <svg width="32" height="32" viewBox="0 0 24 24" fill="none">
+          <path d="M12 2L2 7l10 5 10-5-10-5z" fill="var(--leaf-green)"/>
+          <path d="M2 17l10 5 10-5M2 12l10 5 10-5" stroke="var(--leaf-green)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </div>
+      <div class="dock-tabs">
+        <button id="tabDrawBtn" class="tab-button active" data-page="draw">
+          <span class="tab-icon">🌿</span>单图创作
+        </button>
+        <button id="tabSeriesBtn" class="tab-button" data-page="series">
+          <span class="tab-icon">🪴</span>系列创作
+        </button>
+        <button id="tabSplitBtn" class="tab-button" data-page="split">
+          <span class="tab-icon">✂</span>切图工具
+        </button>
+        <button id="tabGalleryBtn" class="tab-button" data-page="gallery">
+          <span class="tab-icon">🖼️</span>画廊<span id="topGalleryBadge" class="badge-mini"></span>
+        </button>
+      </div>
+    </nav>
+
+    <!-- 移动端抽屉遮罩 -->
+    <div id="mobileDrawerOverlay" class="mobile-drawer-overlay"></div>
+
+    <!-- ══ 单图创作 ══════════════════════════════════════ -->
+    <main id="tabDraw" class="page active">
+      <form id="controlForm" class="workbench-grid">
+
+        <aside class="param-panel" id="drawParamPanel">
+          <div class="mobile-only-drag"></div>
+          <div class="panel-scroll-content">
+            <header class="panel-title-block">
+              <h1>单图创作</h1>
+              <p>让灵感如植物般自然生长</p>
+            </header>
+
+            <!-- Prompt -->
+            <section class="bento-card">
+              <div class="bento-header">
+                <div>
+                  <span class="bento-subtitle">Prompt</span>
+                  <h2>画面描述</h2>
+                </div>
+                <div class="action-row">
+                  <button id="optimizeBtn" type="button" class="btn-ghost">✨ 优化</button>
+                  <button id="restorePromptBtn" type="button" class="btn-ghost">恢复</button>
+                </div>
+              </div>
+              <textarea id="prompt" placeholder="例如：一缕阳光穿过巨大的龟背竹叶片，洒在原木桌面上，静谧的早晨..."></textarea>
+            </section>
+
+            <!-- 参考灵感 -->
+            <section class="bento-card">
+              <div class="bento-header">
+                <div>
+                  <span class="bento-subtitle">Reference</span>
+                  <h2>参考灵感 <span class="optional-tag">可选</span></h2>
+                </div>
+                <button id="clearRefsBtn" type="button" class="btn-ghost">清空</button>
+              </div>
+              <div id="thumbRow" class="thumb-row">
+                <input id="imageFile" type="file" accept="image/*" multiple hidden />
+                <button id="thumbAdd" type="button" class="thumb-add" title="添加图片">
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14m-7-7h14"/></svg>
+                </button>
+              </div>
+            </section>
+
+            <!-- 规格设定 -->
+            <section class="bento-card">
+              <div class="bento-header">
+                <div>
+                  <span class="bento-subtitle">Presets</span>
+                  <h2>规格设定</h2>
+                </div>
+              </div>
+              <div class="param-grid">
+                <label>
+                  <span>生成数量</span>
+                  <select id="imageCount">
+                    <option value="1">1 张</option>
+                    <option value="2">2 张</option>
+                    <option value="3">3 张</option>
+                    <option value="4">4 张</option>
+                  </select>
+                </label>
+                <label>
+                  <span>画面比例</span>
+                  <select id="aspectRatio">
+                    <option value="auto">自动匹配</option>
+                    <option value="1:1">1:1 方形</option>
+                    <option value="16:9">16:9 横版</option>
+                    <option value="9:16">9:16 竖版</option>
+                    <option value="4:3">4:3 横图</option>
+                    <option value="3:4">3:4 竖图</option>
+                    <option value="3:2">3:2 横图</option>
+                    <option value="2:3">2:3 竖图</option>
+                  </select>
+                </label>
+              </div>
+              <p class="help-text spec-note">画面比例用于控制构图方向. 实际像素由图片模型或上游服务决定, 结果区会显示真实返回尺寸.</p>
+            </section>
+
+            <!-- 模型细节与导出设置 -->
+            <details class="bento-card">
+              <summary><span><strong>模型细节与导出设置</strong></span><span class="summary-icon">▼</span></summary>
+              <div class="param-grid">
+                <label><span>模型细节</span><select id="imageQuality"><option value="auto">自动 · 推荐</option><option value="low">快速草稿</option><option value="medium">均衡细节</option><option value="high">精细渲染</option></select></label>
+                <label><span>导出格式</span><select id="outputFormat"><option value="auto">自动 · 保持返回格式</option><option value="png">PNG · 无损/透明</option><option value="jpeg">JPEG · 照片小体积</option><option value="webp">WebP · 高效压缩</option></select></label>
+                <label><span>背景</span><select id="background"><option value="auto">自动 · 模型决定</option><option value="transparent">透明背景</option><option value="opaque">不透明背景</option></select></label>
+                <label><span>导出质量</span><input id="outputCompression" type="number" min="0" max="100" value="90" /></label>
+              </div>
+              <p class="help-text spec-note">模型细节影响生成成本和细腻度, 不等于像素分辨率. 导出格式和质量会在浏览器后处理, JPEG/WebP 才使用导出质量.</p>
+            </details>
+
+            <!-- 隐藏配置（JS 兼容性保留） -->
+            <div style="display:none">
+              <input id="baseUrl" type="hidden" value="/api" />
+              <input id="apiKey" type="hidden" value="__server__" />
+              <input id="textModel" type="hidden" value="gpt-4.1" />
+              <input id="imageModel" type="hidden" value="gpt-image-1" />
+              <select id="generationMode" style="display:none;"><option value="images">Images API</option><option value="responses">Responses</option></select>
+              <select id="providerSelect"><option value="">自动调度</option></select>
+              <select id="seriesProviderSelect"><option value="">自动调度</option></select>
+              <button id="pwdToggle" type="button">显示</button>
+              <div id="modelPanel" class="combo-panel"></div>
+              <strong id="configStatus"></strong>
+              <p id="configSummary"></p>
+            </div>
+          </div>
+
+          <div class="panel-footer task-aware-footer">
+            <button id="genBtn" type="submit" class="btn-primary">开始生成</button>
+            <p class="help-text task-note">生成或优化期间请保持页面打开. 生图上游由后台自动调度, 应用内切换 Tab 不会中断.</p>
+          </div>
+        </aside>
+
+        <!-- 画布 -->
+        <section class="canvas-panel">
+          <button type="button" id="mobileParamTrigger" class="mobile-param-trigger">⚙️ 调整参数</button>
+
+          <div class="canvas-header">
+            <div>
+              <h2>生成结果</h2>
+              <p id="runSummary" class="canvas-sub">静待灵感绽放...</p>
+            </div>
+            <button id="clearResultsBtn" class="btn-ghost" type="button">清空画布</button>
+          </div>
+
+          <div id="progressPanel" class="progress-card">
+            <p class="progress-guard-note">生成任务已提交后请勿刷新或关闭页面; 服务端会自动选择空闲上游, 如果进入队列, 页面会显示当前排队信息.</p>
+            <div class="progress-header">
+              <div>
+                <strong id="progressTitle">准备中</strong>
+                <p id="progressDetail">初始化...</p>
+              </div>
+              <span id="progressMeta" class="progress-meta">0s</span>
+            </div>
+            <div class="progress-track"><div id="progressFill" class="progress-fill"></div></div>
+            <div id="progressSteps" class="progress-steps"></div>
+          </div>
+
+          <div id="statusBar" class="status-bar"></div>
+          <div id="resultGrid" class="image-grid"></div>
+          <div id="resultEmpty" class="canvas-empty-state">
+            <div class="empty-icon">🪴</div>
+            <p>画面将在这里如植物般生长...</p>
+          </div>
+
+          <details class="bento-card log-card">
+            <summary>
+              <div id="loadingMini" class="loading-mini">
+                <span class="spinner-sm"></span>
+                <span id="statEvents">事件: 0</span>
+                <span id="statTextLen">文本: 0 字</span>
+                <span id="statElapsed">0s</span>
+              </div>
+              <em>系统日志</em>
+            </summary>
+            <div class="log-grid">
+              <div id="eventLog" class="event-log"></div>
+              <div id="textStream" class="text-stream"></div>
+            </div>
+          </details>
+        </section>
+      </form>
+    </main>
+
+    <!-- ══ 系列资产包 ════════════════════════════════════ -->
+    <main id="tabSeries" class="page">
+      <form id="seriesForm" class="workbench-grid series-mode series-workbench">
+
+        <aside class="param-panel series-master-panel" id="seriesParamPanel">
+          <div class="mobile-only-drag"></div>
+          <div class="panel-scroll-content">
+            <header class="panel-title-block series-title-block">
+              <span class="series-kicker">Series Kit</span>
+              <h1>系列资产包</h1>
+              <p>先建立统一母版, 再拆成多张可控画面</p>
+            </header>
+
+            <section class="series-brief-card series-how-card">
+              <div>
+                <span>怎么用</span>
+                <strong>先固定不变项, 再逐张写变化项, 最后生成整套图.</strong>
+              </div>
+              <ol class="series-mini-steps">
+                <li><b>1 定母版</b><span>选择类型, 填主体资料, 提炼统一设定.</span></li>
+                <li><b>2 编页表</b><span>每行一张图, 只写这一张要变化什么.</span></li>
+                <li><b>3 生成</b><span>系统会用“母版 + 当前行”逐张出图.</span></li>
+              </ol>
+            </section>
+
+            <section class="bento-card series-step-card series-card-accent">
+              <div class="series-step-label"><strong>1</strong><span>定母版</span></div>
+              <div class="bento-header">
+                <div><span class="bento-subtitle">Template</span><h2>选择系列类型</h2></div>
+              </div>
+              <label>
+                <span>创作场景</span>
+                <select id="seriesType">
+                  <option value="ecommerce">产品视觉展示</option>
+                  <option value="sticker">IP 角色表情包</option>
+                  <option value="character_action">人物动作序列</option>
+                  <option value="storyboard">分镜故事板</option>
+                  <option value="poster_campaign">视觉海报组</option>
+                  <option value="custom">自定义系列</option>
+                </select>
+              </label>
+            </section>
+
+            <section class="bento-card series-step-card">
+              <div class="bento-header">
+                <div><span class="bento-subtitle">Master</span><h2 id="seriesBriefTitle">主体资料</h2><p id="seriesBriefHelp" class="help-text">描述系列的核心物件或角色</p></div>
+              </div>
+              <div class="param-grid">
+                <label><span>系列名称</span><input id="seriesTitle" placeholder="例如：春日绿植图鉴" /></label>
+                <label><span id="seriesAudienceLabel">受众群体</span><input id="seriesAudience" placeholder="例如：自然生活爱好者" /></label>
+              </div>
+              <label><span id="seriesBriefLabel">核心特征描述</span><textarea id="seriesProductBrief" placeholder="写清主体, 不变元素, 目标用途. 例如：一个圆滚滚的原创熊猫 IP, 戴绿色围巾, 用于微信表情包..."></textarea></label>
+            </section>
+
+            <section class="bento-card series-step-card">
+              <div class="bento-header">
+                <div><span class="bento-subtitle">Consistency</span><h2>统一设定</h2></div>
+                <button id="seriesOptimizeBtn" type="button" class="btn-ghost">✨ 提炼母版</button>
+              </div>
+              <textarea id="seriesStylePrompt" placeholder="统一视觉规则: 角色/产品外观, 色彩, 光影, 构图, 背景, 禁止变化项..."></textarea>
+              <p class="help-text">这里决定每张图必须保持一致的部分. 如果不确定, 先填主体资料, 再点“提炼母版”.</p>
+            </section>
+
+            <section class="bento-card series-step-card">
+              <div class="bento-header">
+                <div><span class="bento-subtitle">References</span><h2>参考图 <span class="optional-tag">可选</span></h2></div>
+                <button id="seriesClearRefsBtn" type="button" class="btn-ghost">清空</button>
+              </div>
+              <div id="seriesThumbRow" class="thumb-row">
+                <input id="seriesImageFile" type="file" accept="image/*" multiple hidden />
+                <button id="seriesThumbAdd" type="button" class="thumb-add">
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14m-7-7h14"/></svg>
+                </button>
+              </div>
+              <p class="help-text">建议放产品照, 角色设定图, 品牌风格图或满意的上一张结果.</p>
+            </section>
+
+            <details class="bento-card series-step-card">
+              <summary><span><strong>出图参数</strong></span><span class="summary-icon">▼</span></summary>
+              <div class="param-grid">
+                <label><span>画面比例</span><select id="seriesAspectRatio"><option value="auto">自动匹配</option><option value="1:1">1:1 方形</option><option value="16:9">16:9 横版</option><option value="9:16">9:16 竖版</option><option value="4:3">4:3 横图</option><option value="3:4">3:4 竖图</option><option value="3:2">3:2 横图</option><option value="2:3">2:3 竖图</option></select></label>
+                <label><span>模型细节</span><select id="seriesImageQuality"><option value="auto">自动 · 推荐</option><option value="low">快速草稿</option><option value="medium">均衡细节</option><option value="high">精细渲染</option></select></label>
+                <label><span>导出格式</span><select id="seriesOutputFormat"><option value="auto">自动 · 保持返回格式</option><option value="png">PNG · 无损/透明</option><option value="jpeg">JPEG · 照片小体积</option><option value="webp">WebP · 高效压缩</option></select></label>
+                <label><span>背景</span><select id="seriesBackground"><option value="auto">自动 · 模型决定</option><option value="transparent">透明背景</option><option value="opaque">不透明背景</option></select></label>
+                <label><span>导出质量</span><input id="seriesOutputCompression" type="number" min="0" max="100" value="90" /></label>
+              </div>
+              <p class="help-text spec-note">系列图会共用同一画面比例, 便于成套排版和保持视觉一致.</p>
+            </details>
+          </div>
+
+          <div class="panel-footer series-panel-footer">
+            <button id="seriesGenBtn" type="submit" class="btn-primary">生成整套资产</button>
+            <p>逐张返回结果, 中途失败也会保留已完成图片. 生成期间请勿刷新或关闭页面, 应用内切换 Tab 不影响任务.</p>
+          </div>
+        </aside>
+
+        <section class="canvas-panel series-canvas-panel">
+          <button type="button" id="seriesMobileParamTrigger" class="mobile-param-trigger">⚙️ 调整母版</button>
+          <div class="series-hero">
+            <div>
+              <span class="series-kicker">Asset Board</span>
+              <h2>系列编排台</h2>
+              <p id="seriesRunSummary" class="canvas-sub">先定母版, 再规划每张图的差异.</p>
+            </div>
+            <button id="seriesClearResultsBtn" class="btn-ghost" type="button">清空结果</button>
+          </div>
+
+          <div class="series-flow">
+            <div class="series-flow-step active"><strong>1</strong><span>定母版</span><small>左侧完成</small></div>
+            <div class="series-flow-step active"><strong>2</strong><span>编页表</span><small>这里填写</small></div>
+            <div class="series-flow-step"><strong>3</strong><span>生成结果</span><small>逐张返回</small></div>
+          </div>
+
+          <div class="series-board-grid series-board-single">
+            <section class="bento-card series-plan-card series-step-card">
+              <div class="series-step-label"><strong>2</strong><span>编页表</span></div>
+              <div class="bento-header">
+                <div><span class="bento-subtitle">Shot List</span><h2 id="seriesPlanTitle">页表 / 镜头清单</h2></div>
+                <button id="seriesPlanBtn" type="button" class="btn-ghost">✨ 规划页表</button>
+              </div>
+              <p id="seriesPlanHelp" class="help-text">每行就是一张图. 左边写标题, 右边只写这一张相对母版要变化的内容.</p>
+              <div class="series-example-card">
+                <strong>示例</strong>
+                <code>封面主视觉: 主体居中, 展示整体外观, 背景干净</code>
+                <code>细节特写: 镜头靠近材质或角色标志物, 保持统一光影</code>
+              </div>
+              <textarea id="seriesPagePlan" class="large-textarea series-plan-textarea" placeholder="封面主视觉: 主体居中, 建立第一印象, 背景干净&#10;细节特写: 突出材质或角色标志物, 保持统一光影&#10;场景延展: 展示使用场景或动作变化, 不改变主体设定"></textarea>
+              <div class="series-plan-footer">
+                <p id="seriesCountHint" class="help-text">准备规划资产...</p>
+                <span>生成时会按行逐张返回, 已完成图片会先保留.</span>
+              </div>
+            </section>
+          </div>
+
+          <div id="seriesStatusBar" class="status-bar"></div>
+          <p class="help-text task-note series-task-note">系列生成会逐张排队执行. 刷新或关闭页面会丢失当前前端状态, 已保存到画廊的图片仍会保留.</p>
+          <div class="series-results-header series-step-card">
+            <div class="series-step-label"><strong>3</strong><span>生成结果</span></div>
+            <div>
+              <span class="bento-subtitle">Output</span>
+              <h2>生成结果</h2>
+            </div>
+          </div>
+          <div id="seriesResultGrid" class="image-grid"></div>
+          <div id="seriesResultEmpty" class="canvas-empty-state series-empty-state">
+            <div class="empty-icon">🪴</div>
+            <p>完善母版和页表后点击生成, 资产包会逐张出现在这里.</p>
+          </div>
+        </section>
+      </form>
+    </main>
+
+
+
+    <!-- ══ 切图工具 ══════════════════════════════════════ -->
+    <main id="tabSplit" class="page">
+      <section class="split-container">
+        <div class="canvas-header">
+          <div>
+            <h2>切图工具</h2>
+            <p class="canvas-sub">把完整分镜图, 表情包集合或九宫格拆成独立小图, 全程本地处理.</p>
+          </div>
+          <div class="action-row">
+            <button id="splitDownloadAllBtn" class="btn-primary split-top-btn" type="button">下载全部</button>
+            <button id="splitClearBtn" class="btn-ghost" type="button">清空</button>
+          </div>
+        </div>
+
+        <div class="split-workbench">
+          <aside class="split-panel bento-card">
+            <div class="bento-header">
+              <div><span class="bento-subtitle">Source</span><h2>上传整图</h2></div>
+            </div>
+            <input id="splitFile" type="file" accept="image/*" hidden />
+            <button id="splitUploadBtn" type="button" class="split-upload">
+              <strong>选择图片</strong>
+              <span>支持分镜大图, 表情包合集, 角色动作表等.</span>
+            </button>
+            <button id="splitGalleryBtn" type="button" class="btn-ghost split-gallery-btn">从画廊选择</button>
+            <div id="splitGalleryPicker" class="split-gallery-picker"></div>
+            <div id="splitSourceInfo" class="split-source-info">尚未选择图片.</div>
+
+            <div class="split-param-section">
+              <h3>切分方式</h3>
+              <div class="param-grid">
+                <label><span>行数</span><input id="splitRows" type="number" min="1" max="20" value="2" /></label>
+                <label><span>列数</span><input id="splitCols" type="number" min="1" max="20" value="2" /></label>
+                <label><span>外边距 X</span><input id="splitMarginX" type="number" min="0" max="2000" value="0" /></label>
+                <label><span>外边距 Y</span><input id="splitMarginY" type="number" min="0" max="2000" value="0" /></label>
+                <label><span>间距 X</span><input id="splitGapX" type="number" min="0" max="2000" value="0" /></label>
+                <label><span>间距 Y</span><input id="splitGapY" type="number" min="0" max="2000" value="0" /></label>
+              </div>
+              <p class="help-text spec-note">默认按均匀网格切分. 如果大图中每格之间有白边或描边, 用间距和外边距扣除.</p>
+            </div>
+
+            <div class="split-param-section">
+              <h3>导出设置</h3>
+              <div class="param-grid">
+                <label><span>导出格式</span><select id="splitFormat"><option value="png">PNG</option><option value="jpeg">JPEG</option><option value="webp">WebP</option></select></label>
+                <label><span>导出质量</span><input id="splitQuality" type="number" min="0" max="100" value="92" /></label>
+              </div>
+            </div>
+          </aside>
+
+          <section class="split-preview-panel">
+            <div id="splitStatus" class="status-bar"></div>
+            <div id="splitPreview" class="split-preview-empty">
+              <div class="empty-icon">✂</div>
+              <p>上传一张合集图后, 切片预览会显示在这里.</p>
+            </div>
+          </section>
+        </div>
+      </section>
+    </main>
+
+    <!-- ══ 画廊 ══════════════════════════════════════════ -->
+    <main id="tabGallery" class="page">
+      <section class="gallery-container">
+        <div class="canvas-header">
+          <div>
+            <h2>往期沉淀 <span id="galleryCount" class="badge-mini"></span></h2>
+            <p class="canvas-sub">保存在浏览器本地的记忆</p>
+          </div>
+          <button id="clearGalleryBtn" class="btn-ghost" type="button">清空所有</button>
+        </div>
+        <div id="galleryGrid" class="image-grid gallery-grid-large"></div>
+        <div id="galleryEmpty" class="canvas-empty-state">
+          <div class="empty-icon">🍂</div>
+          <p>暂无任何记录...</p>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- 图片预览遮罩 -->
+  <div id="previewOverlay" class="preview-overlay">
+    <button class="preview-close" type="button">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+    </button>
+    <img id="previewImg" alt="预览" draggable="false" />
+    <span id="previewHint" class="preview-hint">滚轮缩放 · 拖拽平移 · ESC 关闭</span>
+  </div>
+
+  <script src="js/app.js?v=2" defer></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+
+      // ── 移动端底部抽屉 ──────────────────────────────
+      var paramPanel      = document.getElementById('drawParamPanel');
+      var seriesParamPanel= document.getElementById('seriesParamPanel');
+      var overlay         = document.getElementById('mobileDrawerOverlay');
+      var mobileTrigger   = document.getElementById('mobileParamTrigger');
+      var seriesTrigger   = document.getElementById('seriesMobileParamTrigger');
+
+      function openDrawer(panel) {
+        panel.classList.add('drawer-open');
+        overlay.classList.add('show');
+        document.body.style.overflow = 'hidden';
+      }
+      function closeAllDrawers() {
+        paramPanel.classList.remove('drawer-open');
+        seriesParamPanel.classList.remove('drawer-open');
+        overlay.classList.remove('show');
+        document.body.style.overflow = '';
+      }
+
+      if (mobileTrigger)  mobileTrigger.addEventListener('click',  function() { openDrawer(paramPanel); });
+      if (seriesTrigger)  seriesTrigger.addEventListener('click',   function() { openDrawer(seriesParamPanel); });
+      if (overlay)        overlay.addEventListener('click', closeAllDrawers);
+
+      var controlForm = document.getElementById('controlForm');
+      var seriesForm  = document.getElementById('seriesForm');
+      if (controlForm) controlForm.addEventListener('submit', function() { if (window.innerWidth <= 900) closeAllDrawers(); });
+      if (seriesForm)  seriesForm.addEventListener('submit',  function() { if (window.innerWidth <= 900) closeAllDrawers(); });
+
+    });
+  </script>
+</body>
+</html>

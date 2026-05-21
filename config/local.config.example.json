@@ -1,0 +1,73 @@
+{
+  "textProvider": {
+    "id": "text",
+    "name": "文本服务商",
+    "baseUrl": "https://api.openai.com",
+    "apiKey": "sk-your-text-api-key",
+    "model": "gpt-5-mini"
+  },
+  "defaultImageProvider": "default",
+  "imageProviders": [
+    {
+      "id": "default",
+      "name": "默认服务商",
+      "baseUrl": "https://api.openai.com",
+      "apiKey": "sk-your-default-api-key",
+      "imageModel": "gpt-image-2",
+      "generationMode": "images"
+    },
+    {
+      "id": "elysiver",
+      "name": "Elysiver",
+      "baseUrl": "https://elysia.h-e.top",
+      "apiKey": "sk-your-elysiver-api-key",
+      "imageModel": "gpt-image-2",
+      "generationMode": "images"
+    },
+    {
+      "id": "abrdns",
+      "name": "abrdns",
+      "baseUrl": "https://new-api.abrdns.com",
+      "apiKey": "sk-your-abrdns-api-key",
+      "imageModel": "gpt-image-2_1k",
+      "generationMode": "images"
+    },
+    {
+      "id": "anyrouter",
+      "name": "AnyRouter",
+      "baseUrl": "https://a-ocnfniawgw.cn-shanghai.fcapp.run",
+      "apiKey": "sk-your-anyrouter-api-key",
+      "imageModel": "gpt-5.3-codex",
+      "generationMode": "responses",
+      "requestHeaders": {
+        "chatgpt-account-id": "",
+        "version": "0.122.0",
+        "originator": "codex_cli_rs",
+        "session_id": "{{sessionId}}"
+      }
+    }
+  ],
+  "imageConcurrency": 3,
+  "host": "127.0.0.1",
+  "port": 8787,
+  "accessPassword": "change-this-password",
+  "authSessionDays": 7,
+  "secureCookies": false,
+  "logFile": "logs/server.log",
+  "textProviders": [
+    {
+      "id": "text",
+      "name": "文本服务商",
+      "baseUrl": "https://api.openai.com",
+      "apiKey": "sk-your-text-api-key",
+      "model": "gpt-5-mini"
+    },
+    {
+      "id": "backup-text",
+      "name": "备用文本服务商",
+      "baseUrl": "https://api.openai.com",
+      "apiKey": "sk-your-backup-text-api-key",
+      "model": "gpt-5-mini"
+    }
+  ]
+}

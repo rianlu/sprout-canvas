@@ -1,0 +1,14 @@
+services:
+  image-generator:
+    container_name: image-generator
+    build: .
+    ports:
+      - "8888:8787"
+    volumes:
+      - ./config:/app/config
+      - ./logs:/app/logs
+      - ./output:/app/output
+    environment:
+      TZ: Asia/Shanghai
+      NODE_ENV: production
+    restart: unless-stopped
