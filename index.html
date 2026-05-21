@@ -96,6 +96,7 @@
                   <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14m-7-7h14"/></svg>
                 </button>
               </div>
+              <p id="pasteHint" class="help-text ref-hint">可点击添加, 拖拽图片到这里, 或直接按 Cmd/Ctrl + V 粘贴截图和复制的图片.</p>
             </section>
 
             <!-- 规格设定 -->
@@ -133,16 +134,14 @@
               <p class="help-text spec-note">画面比例用于控制构图方向. 实际像素由图片模型或上游服务决定, 结果区会显示真实返回尺寸.</p>
             </section>
 
-            <!-- 模型细节与导出设置 -->
+            <!-- 模型细节设置 -->
             <details class="bento-card">
-              <summary><span><strong>模型细节与导出设置</strong></span><span class="summary-icon">▼</span></summary>
+              <summary><span><strong>模型细节设置</strong></span><span class="summary-icon">▼</span></summary>
               <div class="param-grid">
                 <label><span>模型细节</span><select id="imageQuality"><option value="auto">自动 · 推荐</option><option value="low">快速草稿</option><option value="medium">均衡细节</option><option value="high">精细渲染</option></select></label>
-                <label><span>导出格式</span><select id="outputFormat"><option value="auto">自动 · 保持返回格式</option><option value="png">PNG · 无损/透明</option><option value="jpeg">JPEG · 照片小体积</option><option value="webp">WebP · 高效压缩</option></select></label>
                 <label><span>背景</span><select id="background"><option value="auto">自动 · 模型决定</option><option value="transparent">透明背景</option><option value="opaque">不透明背景</option></select></label>
-                <label><span>导出质量</span><input id="outputCompression" type="number" min="0" max="100" value="90" /></label>
               </div>
-              <p class="help-text spec-note">模型细节影响生成成本和细腻度, 不等于像素分辨率. 导出格式和质量会在浏览器后处理, JPEG/WebP 才使用导出质量.</p>
+              <p class="help-text spec-note">模型细节影响生成成本和细腻度, 不等于像素分辨率. 图片默认保持上游返回格式, 无需手动选择导出格式.</p>
             </details>
 
             <!-- 隐藏配置（JS 兼容性保留） -->
@@ -152,6 +151,8 @@
               <input id="textModel" type="hidden" value="gpt-4.1" />
               <input id="imageModel" type="hidden" value="gpt-image-1" />
               <select id="generationMode" style="display:none;"><option value="images">Images API</option><option value="responses">Responses</option></select>
+              <select id="outputFormat"><option value="auto">自动</option></select>
+              <input id="outputCompression" type="hidden" value="90" />
               <select id="providerSelect"><option value="">自动调度</option></select>
               <select id="seriesProviderSelect"><option value="">自动调度</option></select>
               <button id="pwdToggle" type="button">显示</button>
@@ -300,9 +301,9 @@
               <div class="param-grid">
                 <label><span>画面比例</span><select id="seriesAspectRatio"><option value="auto">自动匹配</option><option value="1:1">1:1 方形</option><option value="16:9">16:9 横版</option><option value="9:16">9:16 竖版</option><option value="4:3">4:3 横图</option><option value="3:4">3:4 竖图</option><option value="3:2">3:2 横图</option><option value="2:3">2:3 竖图</option></select></label>
                 <label><span>模型细节</span><select id="seriesImageQuality"><option value="auto">自动 · 推荐</option><option value="low">快速草稿</option><option value="medium">均衡细节</option><option value="high">精细渲染</option></select></label>
-                <label><span>导出格式</span><select id="seriesOutputFormat"><option value="auto">自动 · 保持返回格式</option><option value="png">PNG · 无损/透明</option><option value="jpeg">JPEG · 照片小体积</option><option value="webp">WebP · 高效压缩</option></select></label>
                 <label><span>背景</span><select id="seriesBackground"><option value="auto">自动 · 模型决定</option><option value="transparent">透明背景</option><option value="opaque">不透明背景</option></select></label>
-                <label><span>导出质量</span><input id="seriesOutputCompression" type="number" min="0" max="100" value="90" /></label>
+                <select id="seriesOutputFormat" style="display:none;"><option value="auto">自动</option></select>
+                <input id="seriesOutputCompression" type="hidden" value="90" />
               </div>
               <p class="help-text spec-note">系列图会共用同一画面比例, 便于成套排版和保持视觉一致.</p>
             </details>

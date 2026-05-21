@@ -142,9 +142,9 @@ function setBaseValues() {
   elements.get('imageCount').value = '3';
   elements.get('aspectRatio').value = '16:9';
   elements.get('imageQuality').value = 'high';
-  elements.get('outputFormat').value = 'webp';
   elements.get('background').value = 'opaque';
-  elements.get('outputCompression').value = '85';
+  elements.get('outputFormat').value = 'auto';
+  elements.get('outputCompression').value = '90';
 }
 
 function assertConfig(expectedRequestSize) {
@@ -152,8 +152,8 @@ function assertConfig(expectedRequestSize) {
   assert.equal(config.size, expectedRequestSize);
   assert.equal(config.requestSize, expectedRequestSize);
   assert.equal(config.quality, 'high');
-  assert.equal(config.outputFormat, 'webp');
-  assert.equal(config.outputCompression, 85);
+  assert.equal(config.outputFormat, 'auto');
+  assert.equal(config.outputCompression, 90);
   const payload = context.buildImagesPayload(config, 1);
   assert.equal(payload.n, 1);
   if (expectedRequestSize === 'auto') {
@@ -162,8 +162,8 @@ function assertConfig(expectedRequestSize) {
     assert.equal(payload.size, expectedRequestSize);
   }
   assert.equal(payload.quality, 'high');
-  assert.equal(payload.output_format, 'webp');
-  assert.equal(payload.output_compression, 85);
+  assert.equal(Object.hasOwn(payload, 'output_format'), false);
+  assert.equal(Object.hasOwn(payload, 'output_compression'), false);
 }
 
 setBaseValues();
@@ -205,12 +205,6 @@ elements.get('aspectRatio').value = 'custom';
 assert.throws(() => context.getConfig(), /有效的画面比例/);
 
 setBaseValues();
-elements.get('outputFormat').value = 'jpeg';
-elements.get('background').value = 'transparent';
-assert.throws(() => context.getConfig(), /JPEG 不支持透明背景/);
-
-
-setBaseValues();
 elements.get('splitRows').value = '3';
 elements.get('splitCols').value = '4';
 elements.get('splitMarginX').value = '8';
@@ -244,7 +238,7 @@ elements.get('imageModel').value = 'gpt-5.3-codex';
   assert.equal(imagePayload.model, 'gpt-5.3-codex');
   assert.equal(optimizePayload.model, 'gpt-5-mini');
   assert.equal(optimizePayload.input[1].content, '测试图片');
-  assert.match(optimizePayload.input[0].content, /prompt editor/);
+  assert.match(optimizePayload.input[0].content, /prompt optimizer/);
   assert.match(optimizePayload.input[0].content, /文字:/);
   assert.equal(config.textModel, 'gpt-5-mini');
 }
@@ -308,10 +302,11 @@ async function testImagesApiSingleRequestPayload() {
   assert.equal(captured.body.n, 1);
   assert.equal(captured.body.size, '1536x1024');
   assert.match(captured.body.prompt, /画面比例 16:9/);
-  assert.equal(dataUrl, `data:image/webp;base64,${Buffer.from('fake-image').toString('base64')}`);
+  assert.equal(Object.hasOwn(captured.body, 'output_format'), false);
+  assert.equal(Object.hasOwn(captured.body, 'output_compression'), false);
+  assert.equal(dataUrl, `data:image/png;base64,${Buffer.from('fake-image').toString('base64')}`);
 
   setBaseValues();
-  elements.get('outputFormat').value = 'auto';
   const autoConfig = context.getConfig();
   const pngBase64 = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3, 4]).toString('base64');
   context.fetch = mockQueuedImageFetch({
@@ -346,7 +341,7 @@ async function testImagesApiSingleRequestPayload() {
   };
   const retryDataUrl = await context.generateWithImagesApi(retryConfig, 0);
   assert.equal(retryCalls, 2);
-  assert.equal(retryDataUrl, `data:image/webp;base64,${Buffer.from('retry-image').toString('base64')}`);
+  assert.equal(retryDataUrl, `data:image/png;base64,${Buffer.from('retry-image').toString('base64')}`);
 
   context.fetch = async () => ({
     ok: false,

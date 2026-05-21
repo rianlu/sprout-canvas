@@ -38,6 +38,7 @@ const els = {
   thumbRow: $('#thumbRow'),
   thumbAdd: $('#thumbAdd'),
   clearRefsBtn: $('#clearRefsBtn'),
+  pasteHint: $('#pasteHint'),
   genBtn: $('#genBtn'),
   resultGrid: $('#resultGrid'),
   resultEmpty: $('#resultEmpty'),
@@ -333,9 +334,9 @@ function readSettings() {
   els.imageCount.value = saved.imageCount || '1';
   els.aspectRatio.value = saved.aspectRatio || '1:1';
   els.imageQuality.value = saved.imageQuality || 'auto';
-  els.outputFormat.value = normalizeOutputFormat(saved.outputFormat || 'auto');
+  els.outputFormat.value = 'auto';
   els.background.value = saved.background || 'auto';
-  els.outputCompression.value = saved.outputCompression || '90';
+  els.outputCompression.value = '90';
 }
 
 function saveSettings() {
@@ -344,9 +345,7 @@ function saveSettings() {
     imageCount: els.imageCount.value,
     aspectRatio: els.aspectRatio.value,
     imageQuality: els.imageQuality.value,
-    outputFormat: els.outputFormat.value,
     background: els.background.value,
-    outputCompression: els.outputCompression.value,
   }));
 }
 
@@ -359,7 +358,9 @@ function findServerProvider(providerId) {
 }
 
 function providerHeader(config) {
-  return config.providerId ? { 'X-Provider-Id': config.providerId } : {};
+  const headers = config.providerId ? { 'X-Provider-Id': config.providerId } : {};
+  if (config._excludeProviderId) headers['X-Exclude-Provider-Id'] = config._excludeProviderId;
+  return headers;
 }
 
 function renderProviderOptions(select, selectedId) {
@@ -513,11 +514,10 @@ function getConfig(options = {}) {
   if (requireTextModel && !textModel) throw new Error('请填写文本模型, 用于提示词优化和 Responses 工具模式');
   if (generationMode === 'images' && !imageModel) throw new Error('请填写图片模型, 例如 gpt-image-2');
   if (generationMode === 'responses' && !imageModel) throw new Error('Responses 工具模式需要生图模型, 例如 gpt-5.3-codex');
-  const outputFormat = normalizeOutputFormat(els.outputFormat.value);
-  const outputCompression = normalizeCompression(els.outputCompression.value, outputFormat);
-  if (outputFormat === 'jpeg' && els.background.value === 'transparent') {
-    throw new Error('JPEG 不支持透明背景, 请改用 PNG/WebP 或选择不透明背景');
-  }
+  const outputFormat = 'auto';
+  const outputCompression = 90;
+  els.outputFormat.value = outputFormat;
+  els.outputCompression.value = String(outputCompression);
   const spec = resolveImageSpec();
   return {
     apiKey,
@@ -610,16 +610,26 @@ function buildOptimizePayload(config) {
     input: [
       {
         role: 'system',
-        content: `You are a prompt editor for gpt-image-2, which understands natural language fluently. Your job is light cleanup, NOT rewriting.
+        content: `You are a prompt optimizer for gpt-image-2. Your job is to rewrite user input into a better image generation prompt.
 
-Rules:
-- Preserve the user's original language (Chinese in → Chinese out, English in → English out).
-- Fix grammar, remove ambiguity, clarify vague descriptions — but keep it short and direct.
-- Do NOT add flowery adjectives, mood/atmosphere fluff, or generic quality boosters.
-- Do NOT expand a simple description into a long paragraph. If the user wrote 5 words, output ~5-10 words.
-- Only add visual details (lighting, composition, style) if the input is too vague to produce a coherent image. Max one extra sentence.
-- If the input is ad copy, convert to a visual scene. Note on-image text as "文字: ...".
-- Output only the final prompt. No explanation, no markdown.`
+CRITICAL: Output MUST be in the SAME language as the user input. Chinese input → Chinese output. English input → English output. Never switch languages.
+
+Before writing, mentally check these dimensions and fill in what's missing from the user input:
+- Subject: who/what is the main focus.
+- Action/Scene: what's happening, where, when.
+- Visual details: lighting direction and quality, colors, materials, textures. Use concrete terms.
+- Composition: camera angle, framing, depth of field, lens feel (e.g. close-up, wide shot, bird's-eye).
+- Style/Medium: photorealistic, illustration, oil painting, product photo, cinematic, etc.
+- Constraints: no watermark, clean background, exact text — only if relevant.
+
+Then output a single natural-language prompt. Rules:
+- Write as a cohesive description, NOT a labeled list. No "Subject:", no numbers, no bullet points.
+- Add missing dimensions with specific visual facts. This is your main job.
+- Do NOT add vague praise words (stunning, masterpiece, epic, ultra-detailed, 8K).
+- Prefer one precise adjective over three vague ones.
+- 2-5 sentences total. Dense and specific, not long and flowery.
+- For ad copy, convert to a visual scene. Mark on-image text as "文字: ...".
+- Output only the final prompt. No explanation.`
       },
       { role: 'user', content: config.prompt },
     ],
@@ -1076,26 +1086,66 @@ function renderThumbnails() {
   });
 }
 
+function addRefFile(file) {
+  if (!file?.type?.startsWith('image/')) return false;
+  if (file.size > MAX_REF_SIZE) {
+    alert(`${file.name || '图片'} 超过 50MB, 已跳过`);
+    return false;
+  }
+  const reader = new FileReader();
+  reader.onload = () => {
+    refImages.push({ name: file.name || `pasted-${Date.now()}.png`, file, dataUrl: reader.result });
+    renderThumbnails();
+  };
+  reader.readAsDataURL(file);
+  return true;
+}
+
 function addRefFiles(files) {
-  Array.from(files).forEach((file) => {
-    if (!file.type.startsWith('image/')) return;
-    if (file.size > MAX_REF_SIZE) {
-      alert(`${file.name} 超过 50MB, 已跳过`);
-      return;
-    }
-    const reader = new FileReader();
-    reader.onload = () => {
-      refImages.push({ name: file.name, file, dataUrl: reader.result });
-      renderThumbnails();
-    };
-    reader.readAsDataURL(file);
-  });
+  Array.from(files || []).forEach(addRefFile);
   els.imageFile.value = '';
 }
 
 function clearRefImages() {
   refImages = [];
   renderThumbnails();
+}
+
+function clipboardImageFiles(event) {
+  const items = Array.from(event.clipboardData?.items || []);
+  return items
+    .filter((item) => item.kind === 'file' && item.type.startsWith('image/'))
+    .map((item) => item.getAsFile())
+    .filter(Boolean);
+}
+
+function handlePasteImages(event) {
+  if (!els.tabDraw.classList.contains('active')) return;
+  const files = clipboardImageFiles(event);
+  if (!files.length) return;
+  event.preventDefault();
+  files.forEach(addRefFile);
+  setStatus('done', `已从剪贴板添加 ${files.length} 张参考图.`);
+}
+
+function handleRefDragOver(event) {
+  if (!Array.from(event.dataTransfer?.items || []).some((item) => item.kind === 'file' && item.type.startsWith('image/'))) return;
+  event.preventDefault();
+  els.thumbRow.classList.add('drag-over');
+}
+
+function handleRefDragLeave(event) {
+  if (event.currentTarget.contains(event.relatedTarget)) return;
+  els.thumbRow.classList.remove('drag-over');
+}
+
+function handleRefDrop(event) {
+  event.preventDefault();
+  els.thumbRow.classList.remove('drag-over');
+  const files = Array.from(event.dataTransfer?.files || []).filter((file) => file.type.startsWith('image/'));
+  if (!files.length) return;
+  addRefFiles(files);
+  setStatus('done', `已拖拽添加 ${files.length} 张参考图.`);
 }
 
 function renderSeriesThumbnails() {
@@ -1489,12 +1539,8 @@ function renderGallery() {
 
 
 function syncFormatAndBackground() {
-  if (els.background.value === 'transparent' && els.outputFormat.value === 'jpeg') {
-    els.outputFormat.value = 'png';
-    setStatus('info', '已自动切换为 PNG, 因为 JPEG 不支持透明背景.');
-  }
-  const outputFormat = normalizeOutputFormat(els.outputFormat.value);
-  els.outputCompression.disabled = !shouldSendCompression(outputFormat);
+  els.outputFormat.value = 'auto';
+  els.outputCompression.value = '90';
 }
 
 
@@ -1587,8 +1633,9 @@ function resolveSeriesImageSpec() {
 }
 
 function getSeriesSharedConfig(prompt, total) {
-  const outputFormat = normalizeOutputFormat(els.seriesOutputFormat.value);
-  if (outputFormat === 'jpeg' && els.seriesBackground.value === 'transparent') throw new Error('JPEG 不支持透明背景, 请改用 PNG/WebP 或选择不透明背景');
+  const outputFormat = 'auto';
+  els.seriesOutputFormat.value = outputFormat;
+  els.seriesOutputCompression.value = '90';
   const base = getConfig({ promptOverride: prompt, imageCountOverride: total, refImagesOverride: seriesRefImages });
   const spec = resolveSeriesImageSpec();
   return {
@@ -1607,11 +1654,8 @@ function getSeriesSharedConfig(prompt, total) {
 
 
 function syncSeriesFormatAndBackground() {
-  if (els.seriesBackground.value === 'transparent' && els.seriesOutputFormat.value === 'jpeg') {
-    els.seriesOutputFormat.value = 'png';
-    setSeriesStatus('info', '已自动切换为 PNG, 因为 JPEG 不支持透明背景.');
-  }
-  els.seriesOutputCompression.disabled = !shouldSendCompression(normalizeOutputFormat(els.seriesOutputFormat.value));
+  els.seriesOutputFormat.value = 'auto';
+  els.seriesOutputCompression.value = '90';
 }
 
 function parseSeriesPages() {
@@ -1774,6 +1818,7 @@ async function optimizeSeriesStyle() {
 
 async function generateSeriesRecord(record, options = {}) {
   const config = { ...record.configSnapshot, prompt: record.prompt, imageCount: record.pageTotal || record.configSnapshot.imageCount || 1 };
+  if (options.excludeProviderId) config._excludeProviderId = options.excludeProviderId;
   const runIndex = Math.max(0, (record.pageIndex || 1) - 1);
   updateSeriesResult(record.id, { status: 'running', error: '', time: new Date().toLocaleString('zh-CN') });
   appendEvent('event', `${options.retry ? '重新生成' : '开始生成'}系列资产 ${record.pageIndex}/${record.pageTotal}: ${record.pageTitle}`);
@@ -1802,7 +1847,7 @@ async function retrySeriesRecord(recordId) {
   startProgress('重新生成单张系列图', `正在重试第 ${record.pageIndex} 张: ${record.pageTitle}.`, ['准备请求', '服务端生成', '接收图片', '保存结果']);
   setSeriesStatus('info', `正在重新生成第 ${record.pageIndex} 张: ${record.pageTitle}`);
   try {
-    await generateSeriesRecord(record, { retry: true });
+    await generateSeriesRecord(record, { retry: true, excludeProviderId: record.providerId || '' });
     setSeriesStatus('done', `第 ${record.pageIndex} 张已重新生成.`);
     finishProgress('done', '单张重试完成', `第 ${record.pageIndex} 张已重新生成.`);
   } catch (error) {
@@ -1954,6 +1999,7 @@ async function submitQueuedImageRequest(config, upstreamEndpoint, makeRequestOpt
     if (!statusResponse.ok) throw new Error(`HTTP ${statusResponse.status}: ${await parseErrorResponse(statusResponse)}`);
     job = await statusResponse.json();
   }
+  if (job.providerId) config._lastProviderId = job.providerId;
   if (job.status === 'failed') {
     const resultResponse = await fetch(`${config.baseUrl}/jobs/${job.id}/result`);
     throw new Error(`HTTP ${resultResponse.status}: ${await parseErrorResponse(resultResponse)}`);
@@ -2019,6 +2065,7 @@ async function buildGeneratedRecord(rawDataUrl, config, index, options = {}) {
     filename: downloadFilename(actualFormat, index + 1),
     bytes: blob.size,
     time: new Date().toLocaleString('zh-CN'),
+    providerId: config._lastProviderId || '',
   };
 }
 
@@ -2091,6 +2138,7 @@ async function generateOne(config, runIndex) {
 
 async function generateSingleRecord(record, options = {}) {
   const config = { ...record.configSnapshot, prompt: record.prompt, imageCount: record.pageTotal || record.configSnapshot.imageCount || 1 };
+  if (options.excludeProviderId) config._excludeProviderId = options.excludeProviderId;
   const runIndex = Math.max(0, (record.pageIndex || 1) - 1);
   updateCurrentResult(record.id, { status: 'running', error: '', time: new Date().toLocaleString('zh-CN') });
   appendEvent('event', `${options.retry ? '重新生成' : '开始生成'}单图 ${record.pageIndex}/${record.pageTotal}`);
@@ -2113,7 +2161,7 @@ async function retrySingleRecord(recordId) {
   startProgress('重新生成单张图片', `正在重试第 ${record.pageIndex} 张.`, ['准备请求', '服务端生成', '接收图片', '保存结果']);
   setStatus('info', `正在重新生成第 ${record.pageIndex} 张图片...`);
   try {
-    await generateSingleRecord(record, { retry: true });
+    await generateSingleRecord(record, { retry: true, excludeProviderId: record.providerId || '' });
     setStatus('done', `第 ${record.pageIndex} 张已重新生成.`);
     finishProgress('done', '单张重试完成', `第 ${record.pageIndex} 张已重新生成.`);
   } catch (error) {
@@ -2521,11 +2569,14 @@ function bindEvents() {
   els.thumbAdd.addEventListener('click', () => els.imageFile.click());
   els.imageFile.addEventListener('change', () => addRefFiles(els.imageFile.files));
   els.clearRefsBtn.addEventListener('click', clearRefImages);
+  document.addEventListener('paste', handlePasteImages);
+  els.thumbRow.addEventListener('dragover', handleRefDragOver);
+  els.thumbRow.addEventListener('dragleave', handleRefDragLeave);
+  els.thumbRow.addEventListener('drop', handleRefDrop);
   els.seriesThumbAdd.addEventListener('click', () => els.seriesImageFile.click());
   els.seriesImageFile.addEventListener('change', () => addSeriesRefFiles(els.seriesImageFile.files));
   els.seriesClearRefsBtn.addEventListener('click', clearSeriesRefImages);
   els.background.addEventListener('change', syncFormatAndBackground);
-  els.outputFormat.addEventListener('change', syncFormatAndBackground);
   els.form.addEventListener('submit', generate);
   els.seriesForm.addEventListener('submit', generateSeries);
   els.seriesPlanBtn.addEventListener('click', generateSeriesPlan);
@@ -2540,7 +2591,6 @@ function bindEvents() {
   els.seriesPagePlan.addEventListener('input', updateSeriesCountHint);
   els.seriesType.addEventListener('change', applySeriesPreset);
   els.seriesBackground.addEventListener('change', syncSeriesFormatAndBackground);
-  els.seriesOutputFormat.addEventListener('change', syncSeriesFormatAndBackground);
   if (els.splitUploadBtn) els.splitUploadBtn.addEventListener('click', () => els.splitFile.click());
   if (els.splitGalleryBtn) els.splitGalleryBtn.addEventListener('click', () => {
     renderSplitGalleryPicker();

@@ -10,7 +10,16 @@ const __dirname = path.dirname(__filename);
 const ROOT = __dirname;
 const LOCAL_CONFIG_PATH = path.join(ROOT, 'config', 'local.config.json');
 const DEFAULT_MAX_REQUEST_BYTES = 80 * 1024 * 1024;
+const TEXT_UPSTREAM_TIMEOUT_MS = 120_000;
+const IMAGE_UPSTREAM_TIMEOUT_MS = 600_000;
 const authSessions = new Map();
+
+function timeoutSignal(ms) {
+  const ac = new AbortController();
+  const timer = setTimeout(() => ac.abort(), ms);
+  timer.unref?.();
+  return ac.signal;
+}
 let shuttingDown = false;
 
 const MIME_TYPES = new Map([
@@ -462,6 +471,7 @@ async function callJsonUpstream(config, upstreamPath, payload) {
     method: 'POST',
     headers: upstreamHeaders(config, 'application/json'),
     body: JSON.stringify(payload),
+    signal: timeoutSignal(TEXT_UPSTREAM_TIMEOUT_MS),
   });
   if (!upstream.ok) throw new Error(await readUpstreamError(upstream));
   return upstream.json();
@@ -530,6 +540,7 @@ async function proxyRequest(req, res, upstreamPath) {
       method: req.method,
       headers: upstreamHeaders(config, contentType),
       body,
+      signal: timeoutSignal(TEXT_UPSTREAM_TIMEOUT_MS),
     });
     await pipeUpstream(res, upstream);
   } catch (error) {
@@ -633,8 +644,10 @@ function compatibleProviders(config, upstreamPath, contentType) {
   return candidates.length ? candidates : [config];
 }
 
-function rankedImageProviders(config, upstreamPath, contentType) {
-  const candidates = compatibleProviders(config, upstreamPath, contentType);
+function rankedImageProviders(config, upstreamPath, contentType, excludeId) {
+  let candidates = compatibleProviders(config, upstreamPath, contentType);
+  if (excludeId) candidates = candidates.filter((p) => p.id !== excludeId);
+  if (!candidates.length) candidates = compatibleProviders(config, upstreamPath, contentType);
   providerPickSeq += 1;
   return candidates
     .map((provider, index) => ({ provider, load: providerLoad(provider.id), order: (index + providerPickSeq) % candidates.length }))
@@ -642,8 +655,8 @@ function rankedImageProviders(config, upstreamPath, contentType) {
     .map((item) => item.provider);
 }
 
-function chooseImageProvider(config, upstreamPath, contentType) {
-  return rankedImageProviders(config, upstreamPath, contentType)[0];
+function chooseImageProvider(config, upstreamPath, contentType, excludeId) {
+  return rankedImageProviders(config, upstreamPath, contentType, excludeId)[0];
 }
 
 function rewriteImageJobBody(provider, body, contentType) {
@@ -733,6 +746,7 @@ async function processResponsesBackedImagesJob(job, config) {
     method: job.method,
     headers: upstreamHeaders(config, 'application/json'),
     body: Buffer.from(JSON.stringify(responsesPayload)),
+    signal: timeoutSignal(IMAGE_UPSTREAM_TIMEOUT_MS),
   });
   const upstreamBody = Buffer.from(await upstream.arrayBuffer());
   if (!upstream.ok) {
@@ -794,17 +808,12 @@ async function executeImageJobWithProvider(job, config) {
   if (job.upstreamPath === '/v1/images/generations' && config.generationMode === 'responses' && String(job.contentType || '').includes('application/json')) {
     return processResponsesBackedImagesJob(job, config);
   }
-  let upstream;
-  for (let attempt = 0; attempt < 2; attempt += 1) {
-    upstream = await fetch(`${config.baseUrl}${job.upstreamPath}`, {
-      method: job.method,
-      headers: upstreamHeaders(config, job.contentType),
-      body: job.body,
-    });
-    if (upstream.ok || !isRetryableUpstreamStatus(upstream.status) || attempt === 1) break;
-    await upstream.arrayBuffer().catch(() => null);
-    await wait(1200);
-  }
+  const upstream = await fetch(`${config.baseUrl}${job.upstreamPath}`, {
+    method: job.method,
+    headers: upstreamHeaders(config, job.contentType),
+    body: job.body,
+    signal: timeoutSignal(IMAGE_UPSTREAM_TIMEOUT_MS),
+  });
   const body = Buffer.from(await upstream.arrayBuffer());
   return {
     status: upstream.status,
@@ -821,7 +830,7 @@ async function processImageJob(job) {
   try {
     const initialConfig = await readLocalConfig(job.providerId);
     maxImageConcurrency = initialConfig.imageConcurrency;
-    const providers = job.autoProviderRouting ? rankedImageProviders(initialConfig, job.upstreamPath, job.contentType) : [initialConfig];
+    const providers = job.autoProviderRouting ? rankedImageProviders(initialConfig, job.upstreamPath, job.contentType, job.excludeProviderId) : [initialConfig];
     let jobResult = null;
     let lastConfig = initialConfig;
     for (let index = 0; index < providers.length; index += 1) {
@@ -887,7 +896,8 @@ async function handleQueuedImageJob(req, res, upstreamPath) {
   const contentType = req.headers['content-type'] || '';
   const rawBody = await readRequestBody(req);
   const autoProviderRouting = !providerIdFromRequest(req);
-  const selectedProvider = autoProviderRouting ? chooseImageProvider(config, upstreamPath, contentType) : config;
+  const excludeProviderId = String(req.headers['x-exclude-provider-id'] || '').trim();
+  const selectedProvider = autoProviderRouting ? chooseImageProvider(config, upstreamPath, contentType, excludeProviderId) : config;
   const body = rewriteImageJobBody(selectedProvider, rawBody, contentType);
   const job = {
     id: `img_${Date.now()}_${++imageJobSeq}`,
@@ -898,6 +908,7 @@ async function handleQueuedImageJob(req, res, upstreamPath) {
     body,
     originalBody: rawBody,
     autoProviderRouting,
+    excludeProviderId,
     queuedAt: Date.now(),
     startedAt: 0,
     finishedAt: 0,
