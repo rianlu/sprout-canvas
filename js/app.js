@@ -24,8 +24,6 @@ const els = {
   prompt: $('#prompt'),
   providerSelect: $('#providerSelect'),
   seriesProviderSelect: $('#seriesProviderSelect'),
-  optimizeBtn: $('#optimizeBtn'),
-  restorePromptBtn: $('#restorePromptBtn'),
   generationMode: $('#generationMode'),
   imageModel: $('#imageModel'),
   imageCount: $('#imageCount'),
@@ -129,7 +127,6 @@ let currentResults = [];
 let seriesResults = [];
 let splitSource = null;
 let splitSlices = [];
-let originalPrompt = '';
 let originalSeriesStyle = '';
 let eventCount = 0;
 let collectedText = [];
@@ -411,7 +408,7 @@ function applyProviderSelection(providerId, persist = true) {
     els.imageModel.value = provider?.imageModel || 'gpt-image-2';
     els.generationMode.value = provider?.generationMode || 'images';
     if (els.configStatus) els.configStatus.textContent = '后台自动调度已启用';
-    if (els.configSummary) els.configSummary.textContent = `生图会由服务端自动选择空闲上游, 提示词增强固定使用文本服务商 ${serverTextProviderName}. API Key 只保存在本地服务端配置文件中.`;
+    if (els.configSummary) els.configSummary.textContent = `生图会由服务端自动选择空闲上游, 系列文本优化固定使用文本服务商 ${serverTextProviderName}. API Key 只保存在本地服务端配置文件中.`;
     if (persist) saveSettings();
     return;
   }
@@ -426,7 +423,7 @@ function applyProviderSelection(providerId, persist = true) {
   els.imageModel.value = provider.imageModel || 'gpt-image-2';
   els.generationMode.value = provider.generationMode || 'images';
   if (els.configStatus) els.configStatus.textContent = '后台自动调度已启用';
-  if (els.configSummary) els.configSummary.textContent = `生图会由服务端自动选择空闲上游, 提示词增强固定使用文本服务商 ${serverTextProviderName}. API Key 只保存在本地服务端配置文件中.`;
+  if (els.configSummary) els.configSummary.textContent = `生图会由服务端自动选择空闲上游, 系列文本优化固定使用文本服务商 ${serverTextProviderName}. API Key 只保存在本地服务端配置文件中.`;
   if (persist) saveSettings();
 }
 
@@ -552,7 +549,7 @@ function getConfig(options = {}) {
 
   const prompt = String(options.promptOverride ?? els.prompt.value).trim();
   if (!prompt) throw new Error('请填写提示词');
-  if (requireTextModel && !textModel) throw new Error('请填写文本模型, 用于提示词增强和 Responses 工具模式');
+  if (requireTextModel && !textModel) throw new Error('请填写文本模型, 用于系列文本优化和 Responses 工具模式');
   if (generationMode === 'images' && !imageModel) throw new Error('请填写图片模型, 例如 gpt-image-2');
   if (generationMode === 'responses' && !imageModel) throw new Error('Responses 工具模式需要生图模型, 例如 gpt-5.3-codex');
   const outputFormat = 'auto';
@@ -645,37 +642,6 @@ function buildImagePayload(config, runIndex) {
   };
 }
 
-function buildOptimizePayload(config) {
-  return {
-    model: config.textModel,
-    input: [
-      {
-        role: 'system',
-        content: `You are a conservative prompt enhancer for image generation. Your job is to preserve the user's original intent and make only minimal useful improvements.
-
-CRITICAL: Output MUST be in the SAME language as the user input. Chinese input → Chinese output. English input → English output. Never switch languages.
-
-Core principles:
-- Preserve every named IP, brand, game, character, product, person, place, meme, and style keyword exactly as written. Do not replace, translate, generalize, or dilute them.
-- Do not invent specific characters, scenes, camera lenses, art styles, materials, slogans, logos, or story details unless the user already provided them.
-- For short conceptual prompts, keep the result short and close to the original. Add only broad visual guidance such as theme, composition clarity, color mood, atmosphere, and focal point.
-- For detailed prompts, lightly organize and clarify the existing information.
-- If the prompt is already strong, return a slightly polished version rather than a full rewrite.
-- For ad copy, convert it into a visual scene only when the user clearly asks for a visual/poster/image. Mark on-image text as "文字: ...".
-
-Output rules:
-- Output one natural-language prompt only. No explanation, no bullet points, no Markdown.
-- Keep short inputs concise: usually 1 sentence, at most 2 sentences.
-- Keep detailed inputs compact: usually 2-3 sentences.
-- Do NOT add vague praise words such as masterpiece, stunning, epic, ultra-detailed, 8K.
-- Prefer preserving keyword weight over adding decorative details.`
-      },
-      { role: 'user', content: config.prompt },
-    ],
-    stream: false,
-  };
-}
-
 function buildImagesPayload(config, count = config.imageCount, runIndex = 0) {
   const suffix = `${config.sizeHint || ''}${config.imageCount > 1 ? `\n这是第 ${runIndex + 1} 张, 请在构图和细节上做自然变化, 不要重复上一张。` : ''}`;
   const body = {
@@ -754,30 +720,6 @@ function extractText(data) {
   };
   visit(data.output || data);
   return chunks.join('').trim();
-}
-
-function cleanOptimizedPrompt(text) {
-  return String(text || '')
-    .replace(/^```[a-z]*\s*/i, '')
-    .replace(/```$/i, '')
-    .split('\n')
-    .map((line) => line.trim())
-    .filter((line) => line && !/^[-*]\s*如果你想/i.test(line) && !/^如果你想/i.test(line) && !/^我可以再/i.test(line))
-    .join('\n')
-    .replace(/^优化后的?提示词[:：]\s*/i, '')
-    .trim();
-}
-
-function validateOptimizedPrompt(text) {
-  const raw = String(text || '').trim();
-  if (/如果你想|我可以再帮你|三条|版本|社交媒体易传播|Could you provide|didn’t include/i.test(raw)) {
-    const cleaned = cleanOptimizedPrompt(raw);
-    if (cleaned && cleaned !== raw) return cleaned;
-    throw new Error('模型返回了对话式文案, 不是图片提示词. 请稍后重试或补充更明确的画面需求.');
-  }
-  const value = cleanOptimizedPrompt(raw);
-  if (!value) throw new Error('模型没有返回优化后的提示词');
-  return value;
 }
 
 function extractBase64AsDataUrl(dataObj, format) {
@@ -867,8 +809,6 @@ function setBusy(isBusy) {
     els.generationMode,
     els.imageModel,
     els.prompt,
-    els.optimizeBtn,
-    els.restorePromptBtn,
     els.imageCount,
     els.aspectRatio,
     els.imageQuality,
@@ -1760,7 +1700,7 @@ function ensureSeriesInputs(requireTextModel = false) {
   if (!brief) throw new Error('请填写主体简介与核心特征');
   if (!style) throw new Error('请填写统一设定');
   if (!pages.length) throw new Error('请填写页表 / 镜头清单, 每行一张图');
-  if (requireTextModel && !els.textModel.value.trim()) throw new Error('请填写文本模型, 用于系列提示词优化');
+  if (requireTextModel && !els.textModel.value.trim()) throw new Error('请填写文本模型, 用于系列文本优化');
   return { title, brief, style, pages };
 }
 
@@ -1971,52 +1911,6 @@ async function generateSeries(event) {
     abortController = null;
   }
 }
-
-async function optimizePrompt() {
-  let config;
-  try {
-    config = getConfig({ requireTextModel: true });
-  } catch (error) {
-    alert(error.message);
-    return;
-  }
-  originalPrompt = els.prompt.value;
-  startTime = Date.now();
-  startProgress('正在轻微增强', '已发送到文本模型, 正在等待返回增强结果.', ['校验输入', '请求文本模型', '解析增强结果']);
-  updateProgress('正在轻微增强', `使用 ${config.textModel} 轻微增强当前提示词.`, 1);
-  markTaskActive(true);
-  els.optimizeBtn.disabled = true;
-  els.optimizeBtn.textContent = '增强中...';
-  clearStatus();
-  const stopFeedback = startTextWaitFeedback((message) => {
-    setStatus('info', message);
-    updateProgress('文本服务商响应较慢', message, 1);
-  });
-  try {
-    const response = await fetch(isProxyBaseUrl(config.baseUrl) ? '/api/text' : apiEndpoint(config, '/v1/responses'), {
-      method: 'POST',
-      headers: requestHeaders(config, false),
-      body: JSON.stringify(buildOptimizePayload(config)),
-    });
-    if (!response.ok) throw new Error(`HTTP ${response.status}: ${await parseErrorResponse(response)}`);
-    updateProgress('正在解析结果', '文本模型已返回, 正在提取增强后的提示词.', 2);
-    const data = await response.json();
-    const summary = textAttemptSummary(data.attempts);
-    const optimized = validateOptimizedPrompt(data.text || extractText(data));
-    els.prompt.value = optimized;
-    setStatus('done', `${summary ? `${summary} ` : ''}提示词已增强. 如果不满意, 可以点击恢复原提示词.`);
-    finishProgress('done', '提示词增强完成', `${summary ? `${summary} ` : ''}已替换为轻微增强后的提示词, 可继续编辑或直接生成.`);
-  } catch (error) {
-    setStatus('err', `提示词增强失败: ${error.message || error}`);
-    finishProgress('err', '提示词增强失败', error.message || String(error));
-  } finally {
-    stopFeedback();
-    markTaskActive(false);
-    els.optimizeBtn.disabled = false;
-    els.optimizeBtn.textContent = '轻微增强';
-  }
-}
-
 
 function formatDuration(ms) {
   const seconds = Math.max(0, Math.round(ms / 1000));
@@ -2594,7 +2488,7 @@ function bindEvents() {
   window.addEventListener('beforeunload', (event) => {
     if (!hasActiveTask()) return;
     event.preventDefault();
-    event.returnValue = '当前还有生成或优化任务正在进行. 刷新或关闭页面会丢失当前任务状态.';
+    event.returnValue = '当前还有生成或系列文本任务正在进行. 刷新或关闭页面会丢失当前任务状态.';
   });
   els.tabs.forEach((tab) => {
     tab.addEventListener('click', () => {
@@ -2654,10 +2548,6 @@ function bindEvents() {
   });
   if (els.splitDownloadAllBtn) els.splitDownloadAllBtn.addEventListener('click', downloadAllSplitSlices);
   if (els.splitClearBtn) els.splitClearBtn.addEventListener('click', clearSplitTool);
-  els.optimizeBtn.addEventListener('click', optimizePrompt);
-  els.restorePromptBtn.addEventListener('click', () => {
-    if (originalPrompt) els.prompt.value = originalPrompt;
-  });
   els.clearResultsBtn.addEventListener('click', () => {
     currentResults = [];
     renderResults();

@@ -227,29 +227,7 @@ elements.get('splitQuality').value = '88';
 console.log('split config tests passed');
 
 
-setBaseValues();
-elements.get('generationMode').value = 'responses';
-elements.get('textModel').value = 'gpt-5-mini';
-elements.get('imageModel').value = 'gpt-5.3-codex';
-{
-  const config = context.getConfig();
-  const imagePayload = context.buildImagePayload(config, 0);
-  const optimizePayload = context.buildOptimizePayload(config);
-  assert.equal(imagePayload.model, 'gpt-5.3-codex');
-  assert.equal(optimizePayload.model, 'gpt-5-mini');
-  assert.equal(optimizePayload.input[1].content, '测试图片');
-  assert.match(optimizePayload.input[0].content, /conservative prompt enhancer/);
-  assert.match(optimizePayload.input[0].content, /文字:/);
-  assert.equal(config.textModel, 'gpt-5-mini');
-}
-assert.equal(
-  context.cleanOptimizedPrompt('优化后的提示词: 海报主视觉, 画面文字: 疯狂星期四\n如果你想, 我可以再帮你写三条版本'),
-  '海报主视觉, 画面文字: 疯狂星期四'
-);
-assert.throws(
-  () => context.validateOptimizedPrompt('如果你想, 我可以再帮你写三条带梗版本'),
-  /不是图片提示词/
-);
+
 
 console.log('parameter smoke tests passed');
 
