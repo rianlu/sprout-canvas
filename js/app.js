@@ -91,6 +91,9 @@ const els = {
   seriesResultGrid: $('#seriesResultGrid'),
   seriesResultEmpty: $('#seriesResultEmpty'),
   seriesClearResultsBtn: $('#seriesClearResultsBtn'),
+  seriesFlowStep1: $('#seriesFlowStep1'),
+  seriesFlowStep2: $('#seriesFlowStep2'),
+  seriesFlowStep3: $('#seriesFlowStep3'),
   splitFile: $('#splitFile'),
   splitUploadBtn: $('#splitUploadBtn'),
   splitGalleryBtn: $('#splitGalleryBtn'),
@@ -348,7 +351,7 @@ function saveSettings() {
 }
 
 function selectedProviderId() {
-  return '';
+  return preferredProviderId;
 }
 
 function findServerProvider(providerId) {
@@ -1624,6 +1627,16 @@ function updateSeriesCountHint() {
   els.seriesCountHint.textContent = pages.length
     ? `当前 ${pages.length} 张图, 会共用系列母版和参考图逐张生成.`
     : '会按页表逐张生成, 每张完成后立即显示.';
+  if (pages.length) updateSeriesFlow(1);
+}
+
+function updateSeriesFlow(activeStep) {
+  const steps = [els.seriesFlowStep1, els.seriesFlowStep2, els.seriesFlowStep3];
+  steps.forEach((el, i) => {
+    if (!el) return;
+    el.classList.toggle('active', i === activeStep);
+    el.classList.toggle('done', i < activeStep);
+  });
 }
 
 function buildSeriesBasePrompt() {
@@ -1719,6 +1732,7 @@ async function generateSeriesPlan() {
     const text = await requestTextGeneration(buildSeriesPlanPayload);
     els.seriesPagePlan.value = text.trim();
     updateSeriesCountHint();
+    updateSeriesFlow(1);
     setSeriesStatus('done', '页表已规划完成, 可以继续手动微调后生成整套资产.');
   } catch (error) {
     setSeriesStatus('err', `页表规划失败: ${error.message || error}`);
@@ -1828,6 +1842,7 @@ async function generateSeries(event) {
   renderSeriesResults();
   startProgress('准备生成系列资产', `将生成 ${series.pages.length} 张系列图, 每张都会先显示占位状态.`, ['准备请求', '逐张生成', '接收图片', '保存结果']);
   updateProgress('准备请求', '已创建结果占位卡, 正在逐张生成.', 0);
+  updateSeriesFlow(2);
   setSeriesStatus('info', `开始生成系列资产包: ${series.title}`);
   let completedCount = 0;
   let failedCount = 0;
@@ -2341,13 +2356,14 @@ async function renderSplitSlices() {
       };
       const canvas = drawSliceToCanvas(image, crop);
       const dataUrl = canvas.toDataURL(splitMime(config.format), config.format === 'png' ? undefined : config.quality / 100);
-      const slice = { index, row: row + 1, col: col + 1, canvas, dataUrl, filename: `slice-${String(index).padStart(2, '0')}.${splitExt(config.format)}` };
+      const slice = { index, row: row + 1, col: col + 1, canvas, dataUrl, crop, filename: `slice-${String(index).padStart(2, '0')}.${splitExt(config.format)}` };
       splitSlices.push(slice);
       const card = document.createElement('article');
       card.className = 'split-slice-card';
       const preview = document.createElement('button');
       preview.type = 'button';
       preview.className = 'split-slice-preview';
+      preview.style.aspectRatio = `${crop.width} / ${crop.height}`;
       preview.addEventListener('click', () => openPreview(slice.dataUrl));
       const img = document.createElement('img');
       img.src = slice.dataUrl;
@@ -2509,6 +2525,8 @@ function bindEvents() {
     seriesResults = [];
     renderSeriesResults();
     els.seriesRunSummary.textContent = '系列资产结果已清空.';
+    const pages = parseSeriesPages();
+    updateSeriesFlow(pages.length ? 1 : 0);
   });
   els.seriesPagePlan.addEventListener('input', updateSeriesCountHint);
   els.seriesType.addEventListener('change', applySeriesPreset);
