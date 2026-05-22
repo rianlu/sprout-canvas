@@ -12,6 +12,7 @@ const LOCAL_CONFIG_PATH = path.join(ROOT, 'config', 'local.config.json');
 const DEFAULT_MAX_REQUEST_BYTES = 80 * 1024 * 1024;
 const TEXT_UPSTREAM_TIMEOUT_MS = 25_000;
 const IMAGE_UPSTREAM_TIMEOUT_MS = 180_000;
+const RESPONSES_IMAGE_UPSTREAM_TIMEOUT_MS = 420_000;
 const authSessions = new Map();
 
 function timeoutSignal(ms) {
@@ -772,7 +773,7 @@ async function processResponsesBackedImagesJob(job, config) {
     method: job.method,
     headers: upstreamHeaders(config, 'application/json'),
     body: Buffer.from(JSON.stringify(responsesPayload)),
-    signal: timeoutSignal(IMAGE_UPSTREAM_TIMEOUT_MS),
+    signal: timeoutSignal(RESPONSES_IMAGE_UPSTREAM_TIMEOUT_MS),
   });
   const upstreamBody = Buffer.from(await upstream.arrayBuffer());
   if (!upstream.ok) {
@@ -834,11 +835,12 @@ async function executeImageJobWithProvider(job, config) {
   if (job.upstreamPath === '/v1/images/generations' && config.generationMode === 'responses' && String(job.contentType || '').includes('application/json')) {
     return processResponsesBackedImagesJob(job, config);
   }
+  const timeoutMs = job.upstreamPath.startsWith('/v1/responses') ? RESPONSES_IMAGE_UPSTREAM_TIMEOUT_MS : IMAGE_UPSTREAM_TIMEOUT_MS;
   const upstream = await fetch(`${config.baseUrl}${job.upstreamPath}`, {
     method: job.method,
     headers: upstreamHeaders(config, job.contentType),
     body: job.body,
-    signal: timeoutSignal(IMAGE_UPSTREAM_TIMEOUT_MS),
+    signal: timeoutSignal(timeoutMs),
   });
   const body = Buffer.from(await upstream.arrayBuffer());
   return {

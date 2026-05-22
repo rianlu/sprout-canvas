@@ -406,7 +406,7 @@ function applyProviderSelection(providerId, persist = true) {
     els.apiKey.value = '__server__';
     els.textModel.value = provider?.textModel || 'gpt-5-mini';
     els.imageModel.value = provider?.imageModel || 'gpt-image-2';
-    els.generationMode.value = provider?.generationMode || 'images';
+    els.generationMode.value = 'images';
     if (els.configStatus) els.configStatus.textContent = '后台自动调度已启用';
     if (els.configSummary) els.configSummary.textContent = `生图会由服务端自动选择空闲上游, 系列文本优化固定使用文本服务商 ${serverTextProviderName}. API Key 只保存在本地服务端配置文件中.`;
     if (persist) saveSettings();
