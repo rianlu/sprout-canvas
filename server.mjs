@@ -4,6 +4,7 @@ import { existsSync } from 'node:fs';
 import { randomBytes, timingSafeEqual } from 'node:crypto';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import * as queue from './server/queue.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -179,22 +180,36 @@ function sessionTokenFromRequest(req) {
   return parseCookies(req).get('img_auth_max') || '';
 }
 
-function isAuthenticated(req) {
-  const token = sessionTokenFromRequest(req);
-  if (!token) return false;
-  const session = authSessions.get(token);
-  if (!session) return false;
-  if (session.expiresAt <= Date.now()) {
-    authSessions.delete(token);
-    return false;
-  }
-  return true;
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function isValidUserId(value) {
+  return typeof value === 'string' && UUID_RE.test(value);
 }
 
-function createAuthSession(config) {
+function sessionFromRequest(req) {
+  const token = sessionTokenFromRequest(req);
+  if (!token) return null;
+  const session = authSessions.get(token);
+  if (!session) return null;
+  if (session.expiresAt <= Date.now()) {
+    authSessions.delete(token);
+    return null;
+  }
+  return session;
+}
+
+function isAuthenticated(req) {
+  return sessionFromRequest(req) !== null;
+}
+
+function createAuthSession(config, userId) {
   const token = randomBytes(32).toString('base64url');
   const maxAgeSeconds = Math.round(config.authSessionDays * 24 * 60 * 60);
-  authSessions.set(token, { expiresAt: Date.now() + maxAgeSeconds * 1000 });
+  authSessions.set(token, {
+    userId: String(userId || ''),
+    createdAt: Date.now(),
+    expiresAt: Date.now() + maxAgeSeconds * 1000,
+  });
   return {
     token,
     cookie: authCookieOptions(config, maxAgeSeconds).replace('{{token}}', encodeURIComponent(token)),
@@ -209,9 +224,11 @@ function clearAuthSession(req, config) {
 
 async function handleAuthStatus(req, res) {
   const config = await readLocalConfig();
+  const session = sessionFromRequest(req);
   json(res, 200, {
     required: Boolean(config.accessPassword),
-    authenticated: !config.accessPassword || isAuthenticated(req),
+    authenticated: !config.accessPassword || session !== null,
+    userId: session?.userId || '',
   });
 }
 
@@ -236,10 +253,6 @@ async function handleHealth(req, res, detailed = false) {
 
 async function handleAuthLogin(req, res) {
   const config = await readLocalConfig();
-  if (!config.accessPassword) {
-    json(res, 200, { ok: true, required: false });
-    return;
-  }
   let payload = {};
   try {
     payload = JSON.parse((await readRequestBody(req)).toString('utf8') || '{}');
@@ -247,14 +260,24 @@ async function handleAuthLogin(req, res) {
     json(res, 400, { error: '请求体不是有效 JSON' });
     return;
   }
+  const userId = String(payload.userId || '').trim();
+  if (!isValidUserId(userId)) {
+    json(res, 400, { error: '缺少或无效的 userId (应为 UUID 形式)' });
+    return;
+  }
+  if (!config.accessPassword) {
+    const session = createAuthSession(config, userId);
+    json(res, 200, { ok: true, required: false, userId }, { 'Set-Cookie': session.cookie });
+    return;
+  }
   if (!safeEqualString(payload.password || '', config.accessPassword)) {
     logLine('WARN', `auth login failed from ${req.socket.remoteAddress || 'unknown'}`);
     json(res, 401, { error: '访问密码错误' });
     return;
   }
-  const session = createAuthSession(config);
-  logLine('INFO', `auth login success from ${req.socket.remoteAddress || 'unknown'}`);
-  json(res, 200, { ok: true, required: true }, { 'Set-Cookie': session.cookie });
+  const session = createAuthSession(config, userId);
+  logLine('INFO', `auth login success user=${userId} from ${req.socket.remoteAddress || 'unknown'}`);
+  json(res, 200, { ok: true, required: true, userId }, { 'Set-Cookie': session.cookie });
 }
 
 async function handleAuthLogout(req, res) {
@@ -263,9 +286,13 @@ async function handleAuthLogout(req, res) {
 }
 
 async function requireApiAuth(req, res) {
+  if (sessionFromRequest(req)) return true;
   const config = await readLocalConfig();
-  if (!config.accessPassword || isAuthenticated(req)) return true;
-  json(res, 401, { error: '请先输入访问密码', authRequired: true });
+  json(res, 401, {
+    error: '请先登录',
+    authRequired: true,
+    passwordRequired: Boolean(config.accessPassword),
+  });
   return false;
 }
 
@@ -355,6 +382,13 @@ function publicConfig(config) {
     autoProviderRouting: true,
     providerCount: config.imageProviders.length,
     imageProviderCount: config.imageProviders.length,
+    providers: config.imageProviders.map((provider) => ({
+      id: provider.id,
+      name: provider.name,
+      imageModel: provider.imageModel,
+      generationMode: provider.generationMode,
+      textModel: config.textModel,
+    })),
   };
 }
 
@@ -567,356 +601,36 @@ async function proxyRequest(req, res, upstreamPath) {
 }
 
 
-const imageQueue = [];
-const imageJobs = new Map();
-const recentImageDurations = [];
-let activeImageJobs = 0;
-let imageJobSeq = 0;
-let maxImageConcurrency = 2;
-let providerPickSeq = 0;
-const DEFAULT_IMAGE_DURATION_MS = 90000;
-const JOB_TTL_MS = 30 * 60 * 1000;
+queue.init({
+  readLocalConfig,
+  upstreamHeaders,
+  timeoutSignal,
+  stripHtml,
+  logLine,
+  IMAGE_UPSTREAM_TIMEOUT_MS,
+  RESPONSES_IMAGE_UPSTREAM_TIMEOUT_MS,
+});
 
-function averageImageDurationMs() {
-  if (!recentImageDurations.length) return DEFAULT_IMAGE_DURATION_MS;
-  return Math.round(recentImageDurations.reduce((sum, value) => sum + value, 0) / recentImageDurations.length);
-}
-
-function publicJob(job) {
-  const queuedIndex = imageQueue.findIndex((item) => item.id === job.id);
-  const position = job.status === 'queued' && queuedIndex >= 0 ? queuedIndex + 1 : 0;
-  const averageMs = averageImageDurationMs();
-  return {
-    id: job.id,
-    status: job.status,
-    position,
-    activeCount: activeImageJobs,
-    queuedCount: imageQueue.length,
-    maxConcurrency: maxImageConcurrency,
-    averageMs,
-    estimatedWaitMs: position ? Math.ceil(position / maxImageConcurrency) * averageMs : 0,
-    queuedAt: job.queuedAt,
-    startedAt: job.startedAt || 0,
-    finishedAt: job.finishedAt || 0,
-    elapsedMs: job.startedAt ? ((job.finishedAt || Date.now()) - job.startedAt) : 0,
-    error: job.error || '',
-    providerId: job.providerId || '',
-    providerName: job.providerName || '',
-  };
-}
-
-function cleanupJobLater(jobId) {
-  setTimeout(() => imageJobs.delete(jobId), JOB_TTL_MS).unref?.();
-}
-
-function isRetryableUpstreamStatus(status) {
-  return [408, 409, 425, 429, 500, 502, 503, 504, 524].includes(status);
-}
-
-function wait(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-function formatThrownError(error) {
-  const parts = [error?.message || String(error)];
-  if (error?.cause?.code) parts.push(error.cause.code);
-  if (error?.cause?.message && error.cause.message !== error.message) parts.push(error.cause.message);
-  return parts.filter(Boolean).join(' | ');
-}
-
-function failedImageJobResult(status, message) {
-  return {
-    status,
-    statusText: 'Upstream request failed',
-    contentType: 'application/json; charset=utf-8',
-    cacheControl: '',
-    body: Buffer.from(JSON.stringify({ error: message })),
-    ok: false,
-    error: message,
-  };
-}
-
-function modeForUpstreamPath(upstreamPath) {
-  if (upstreamPath.startsWith('/v1/responses')) return 'responses';
-  if (upstreamPath.startsWith('/v1/images/')) return 'images';
-  return '';
-}
-
-function providerLoad(providerId) {
-  let count = 0;
-  for (const job of imageJobs.values()) {
-    if (job.providerId === providerId && (job.status === 'queued' || job.status === 'running')) count += 1;
-  }
-  return count;
-}
-
-function compatibleProviders(config, upstreamPath, contentType) {
-  const mode = modeForUpstreamPath(upstreamPath);
-  let candidates = config.providers.filter((provider) => !mode || provider.generationMode === mode);
-  if (upstreamPath === '/v1/images/generations' && String(contentType || '').includes('application/json')) {
-    candidates = config.providers.filter((provider) => provider.generationMode === 'images' || provider.generationMode === 'responses');
-  }
-  if (upstreamPath === '/v1/images/edits' && !String(contentType || '').includes('application/json')) {
-    candidates = candidates.filter((provider) => provider.imageModel === config.imageModel);
-  }
-  return candidates.length ? candidates : [config];
-}
-
-function rankedImageProviders(config, upstreamPath, contentType, excludeId) {
-  let candidates = compatibleProviders(config, upstreamPath, contentType);
-  if (excludeId) candidates = candidates.filter((p) => p.id !== excludeId);
-  if (!candidates.length) candidates = compatibleProviders(config, upstreamPath, contentType);
-  providerPickSeq += 1;
-  return candidates
-    .map((provider, index) => ({ provider, load: providerLoad(provider.id), order: (index + providerPickSeq) % candidates.length }))
-    .sort((left, right) => left.load - right.load || left.order - right.order)
-    .map((item) => item.provider);
-}
-
-function providersForJob(job, config) {
-  if (!job.autoProviderRouting) return [config];
-  const providers = rankedImageProviders(config, job.upstreamPath, job.contentType, job.excludeProviderId);
-  const selectedIndex = providers.findIndex((provider) => provider.id === job.providerId);
-  if (selectedIndex <= 0) return providers;
-  const [selectedProvider] = providers.splice(selectedIndex, 1);
-  return [selectedProvider, ...providers];
-}
-
-function chooseImageProvider(config, upstreamPath, contentType, excludeId) {
-  return rankedImageProviders(config, upstreamPath, contentType, excludeId)[0];
-}
-
-function rewriteImageJobBody(provider, body, contentType) {
-  if (!String(contentType || '').includes('application/json')) return body;
+function decodeClientContextHeader(req) {
+  const raw = req.headers['x-client-context'];
+  if (!raw) return null;
   try {
-    const payload = JSON.parse(Buffer.from(body).toString('utf8') || '{}');
-    payload.model = provider.imageModel;
-    return Buffer.from(JSON.stringify(payload));
+    const decoded = Buffer.from(String(raw), 'base64').toString('utf8');
+    return decoded ? JSON.parse(decoded) : null;
   } catch {
-    return body;
+    return null;
   }
-}
-
-function applyJobProvider(job, provider) {
-  job.providerId = provider.id;
-  job.providerName = provider.name;
-  job.body = rewriteImageJobBody(provider, job.originalBody || job.body, job.contentType);
-}
-
-function buildResponsesPayloadFromImagesPayload(provider, imagesPayload) {
-  const prompt = String(imagesPayload?.prompt || '').trim();
-  const tool = { type: 'image_generation' };
-  if (imagesPayload?.output_format) tool.output_format = imagesPayload.output_format;
-  if (imagesPayload?.size) tool.size = imagesPayload.size;
-  if (imagesPayload?.quality) tool.quality = imagesPayload.quality;
-  if (imagesPayload?.background) tool.background = imagesPayload.background;
-  if (imagesPayload?.output_compression) tool.output_compression = imagesPayload.output_compression;
-  return {
-    model: provider.imageModel,
-    input: [
-      {
-        role: 'system',
-        content: '你是一个图片生成助手。用户要求你生成图片时, 必须调用 image_generation 工具来生成图片, 不要用文字描述图片内容。直接生成图片, 不要多说任何话。',
-      },
-      { role: 'user', content: `请生成以下描述的图片: ${prompt}` },
-    ],
-    tools: [tool],
-    stream: true,
-  };
-}
-
-function extractImageBase64(value) {
-  if (!value) return '';
-  if (Array.isArray(value)) {
-    for (const item of value) {
-      const found = extractImageBase64(item);
-      if (found) return found;
-    }
-    return '';
-  }
-  if (typeof value === 'object') {
-    for (const [key, child] of Object.entries(value)) {
-      if ((key === 'result' || key === 'image_base64' || key === 'b64_json') && typeof child === 'string' && child.length > 1000) return child;
-      const found = extractImageBase64(child);
-      if (found) return found;
-    }
-  }
-  return '';
-}
-
-function extractImageBase64FromResponsesBody(body) {
-  const raw = body.toString('utf8');
-  for (const line of raw.split('\n')) {
-    const trimmed = line.trim();
-    if (!trimmed.startsWith('data: ')) continue;
-    const dataText = trimmed.slice(6);
-    if (!dataText || dataText === '[DONE]') continue;
-    try {
-      const found = extractImageBase64(JSON.parse(dataText));
-      if (found) return found;
-    } catch {}
-  }
-  try {
-    return extractImageBase64(JSON.parse(raw));
-  } catch {
-    return '';
-  }
-}
-
-async function processResponsesBackedImagesJob(job, config) {
-  let imagesPayload = {};
-  try {
-    imagesPayload = JSON.parse(Buffer.from(job.body).toString('utf8') || '{}');
-  } catch {}
-  const responsesPayload = buildResponsesPayloadFromImagesPayload(config, imagesPayload);
-  const upstream = await fetch(`${config.baseUrl}/v1/responses`, {
-    method: job.method,
-    headers: upstreamHeaders(config, 'application/json'),
-    body: Buffer.from(JSON.stringify(responsesPayload)),
-    signal: timeoutSignal(RESPONSES_IMAGE_UPSTREAM_TIMEOUT_MS),
-  });
-  const upstreamBody = Buffer.from(await upstream.arrayBuffer());
-  if (!upstream.ok) {
-    return {
-      status: upstream.status,
-      statusText: upstream.statusText,
-      contentType: upstream.headers.get('content-type') || 'application/json; charset=utf-8',
-      cacheControl: upstream.headers.get('cache-control') || '',
-      body: upstreamBody,
-      ok: false,
-      error: await formatUpstreamErrorFromBody(upstream, upstreamBody),
-    };
-  }
-  const imageBase64 = extractImageBase64FromResponsesBody(upstreamBody);
-  if (!imageBase64) {
-    const error = 'Responses API 已返回, 但未找到图片数据';
-    return {
-      status: 502,
-      statusText: 'Image not found in responses stream',
-      contentType: 'application/json; charset=utf-8',
-      cacheControl: '',
-      body: Buffer.from(JSON.stringify({ error })),
-      ok: false,
-      error,
-    };
-  }
-  return {
-    status: 200,
-    statusText: 'OK',
-    contentType: 'application/json; charset=utf-8',
-    cacheControl: '',
-    body: Buffer.from(JSON.stringify({ data: [{ b64_json: imageBase64 }] })),
-    ok: true,
-    error: '',
-  };
-}
-
-function enqueueImageJob(job) {
-  imageJobs.set(job.id, job);
-  imageQueue.push(job);
-  runImageQueue();
-  return publicJob(job);
-}
-
-function runImageQueue() {
-  while (activeImageJobs < maxImageConcurrency && imageQueue.length) {
-    const job = imageQueue.shift();
-    activeImageJobs += 1;
-    job.status = 'running';
-    job.startedAt = Date.now();
-    processImageJob(job).finally(() => {
-      activeImageJobs = Math.max(0, activeImageJobs - 1);
-      runImageQueue();
-    });
-  }
-}
-
-async function executeImageJobWithProvider(job, config) {
-  if (job.upstreamPath === '/v1/images/generations' && config.generationMode === 'responses' && String(job.contentType || '').includes('application/json')) {
-    return processResponsesBackedImagesJob(job, config);
-  }
-  const timeoutMs = job.upstreamPath.startsWith('/v1/responses') ? RESPONSES_IMAGE_UPSTREAM_TIMEOUT_MS : IMAGE_UPSTREAM_TIMEOUT_MS;
-  const upstream = await fetch(`${config.baseUrl}${job.upstreamPath}`, {
-    method: job.method,
-    headers: upstreamHeaders(config, job.contentType),
-    body: job.body,
-    signal: timeoutSignal(timeoutMs),
-  });
-  const body = Buffer.from(await upstream.arrayBuffer());
-  return {
-    status: upstream.status,
-    statusText: upstream.statusText,
-    contentType: upstream.headers.get('content-type') || 'application/json; charset=utf-8',
-    cacheControl: upstream.headers.get('cache-control') || '',
-    body,
-    ok: upstream.ok,
-    error: upstream.ok ? '' : await formatUpstreamErrorFromBody(upstream, body),
-  };
-}
-
-async function processImageJob(job) {
-  try {
-    const initialConfig = await readLocalConfig(job.providerId);
-    maxImageConcurrency = initialConfig.imageConcurrency;
-    const providers = providersForJob(job, initialConfig);
-    let jobResult = null;
-    let lastConfig = initialConfig;
-    for (let index = 0; index < providers.length; index += 1) {
-      const provider = providers[index];
-      applyJobProvider(job, provider);
-      const config = await readLocalConfig(provider.id);
-      lastConfig = config;
-      logLine('INFO', `[image-job] start ${job.id} provider=${config.name} mode=${config.generationMode} path=${job.upstreamPath}${index ? ' fallback' : ''}`);
-      try {
-        jobResult = await executeImageJobWithProvider(job, config);
-      } catch (error) {
-        const message = `上游请求异常: ${formatThrownError(error)}`;
-        jobResult = failedImageJobResult(502, message);
-      }
-      if (jobResult.ok || !isRetryableUpstreamStatus(jobResult.status) || index === providers.length - 1) break;
-      logLine('WARN', `[image-job] retryable ${job.id} provider=${config.name} status=${jobResult.status} error=${jobResult.error}`);
-    }
-    job.finishedAt = Date.now();
-    job.result = jobResult;
-    job.status = jobResult.ok ? 'succeeded' : 'failed';
-    if (!jobResult.ok) {
-      job.error = jobResult.error;
-      logLine('WARN', `[image-job] failed ${job.id} provider=${lastConfig.name} status=${jobResult.status} error=${job.error}`);
-    }
-    if (jobResult.ok) {
-      logLine('INFO', `[image-job] done ${job.id} provider=${lastConfig.name} duration=${job.finishedAt - job.startedAt}ms`);
-      recentImageDurations.push(job.finishedAt - job.startedAt);
-      while (recentImageDurations.length > 30) recentImageDurations.shift();
-    }
-  } catch (error) {
-    logLine('ERROR', `[image-job] crashed ${job.id} provider=${job.providerName || job.providerId} error=${error.message || error}`);
-    job.finishedAt = Date.now();
-    job.status = 'failed';
-    job.error = error.message || String(error);
-    job.result = {
-      status: 502,
-      statusText: 'Queue job failed',
-      contentType: 'application/json; charset=utf-8',
-      cacheControl: '',
-      body: Buffer.from(JSON.stringify({ error: job.error })),
-    };
-  } finally {
-    cleanupJobLater(job.id);
-  }
-}
-
-async function formatUpstreamErrorFromBody(upstream, body) {
-  const contentType = upstream.headers.get('content-type') || '';
-  const raw = body.toString('utf8');
-  const cleaned = contentType.includes('html') || /^\s*</.test(raw) ? stripHtml(raw) : raw.trim();
-  return `上游 API 返回 HTTP ${upstream.status}: ${(cleaned || upstream.statusText || '无错误正文').slice(0, 360)}`;
 }
 
 async function handleQueuedImageJob(req, res, upstreamPath) {
+  const session = sessionFromRequest(req);
+  if (!session) {
+    json(res, 401, { error: '请先登录', authRequired: true });
+    return;
+  }
   let config;
   try {
     config = await readLocalConfig(providerIdFromRequest(req));
-    maxImageConcurrency = config.imageConcurrency;
   } catch (error) {
     json(res, 500, { error: error.message });
     return;
@@ -925,11 +639,15 @@ async function handleQueuedImageJob(req, res, upstreamPath) {
   const rawBody = await readRequestBody(req);
   const autoProviderRouting = !providerIdFromRequest(req);
   const excludeProviderId = String(req.headers['x-exclude-provider-id'] || '').trim();
-  const selectedProvider = autoProviderRouting ? chooseImageProvider(config, upstreamPath, contentType, excludeProviderId) : config;
-  const body = rewriteImageJobBody(selectedProvider, rawBody, contentType);
+  const clientContext = decodeClientContextHeader(req);
+  const selectedProvider = autoProviderRouting
+    ? queue.chooseImageProvider(config, upstreamPath, contentType, excludeProviderId)
+    : config;
+  const body = queue.rewriteImageJobBody(selectedProvider, rawBody, contentType);
   const job = {
-    id: `img_${Date.now()}_${++imageJobSeq}`,
-    status: 'queued',
+    id: queue.nextJobId(),
+    userId: session.userId,
+    status: 'pending',
     method: 'POST',
     upstreamPath,
     contentType,
@@ -937,6 +655,7 @@ async function handleQueuedImageJob(req, res, upstreamPath) {
     originalBody: rawBody,
     autoProviderRouting,
     excludeProviderId,
+    clientContext,
     queuedAt: Date.now(),
     startedAt: 0,
     finishedAt: 0,
@@ -945,38 +664,65 @@ async function handleQueuedImageJob(req, res, upstreamPath) {
     providerId: selectedProvider.id,
     providerName: selectedProvider.name,
   };
-  logLine('INFO', `[image-job] queued ${job.id} provider=${selectedProvider.name} mode=${selectedProvider.generationMode} path=${upstreamPath}`);
-  json(res, 202, enqueueImageJob(job));
+  json(res, 202, queue.enqueue(job));
 }
 
-function handleJobStatus(res, jobId) {
-  const job = imageJobs.get(jobId);
-  if (!job) {
+function handleJobStatus(req, res, jobId) {
+  const session = sessionFromRequest(req);
+  if (!session) {
+    json(res, 401, { error: '请先登录', authRequired: true });
+    return;
+  }
+  const status = queue.getJobStatus(jobId, session.userId);
+  if (!status) {
     json(res, 404, { error: '任务不存在或已过期' });
     return;
   }
-  json(res, 200, publicJob(job));
+  json(res, 200, status);
 }
 
-function handleJobResult(res, jobId) {
-  const job = imageJobs.get(jobId);
-  if (!job) {
+function handleJobResult(req, res, jobId) {
+  const session = sessionFromRequest(req);
+  if (!session) {
+    json(res, 401, { error: '请先登录', authRequired: true });
+    return;
+  }
+  const outcome = queue.getJobResult(jobId, session.userId);
+  if (outcome.kind === 'missing') {
     json(res, 404, { error: '任务不存在或已过期' });
     return;
   }
-  if (job.status === 'queued' || job.status === 'running') {
-    json(res, 202, publicJob(job));
+  if (outcome.kind === 'progress') {
+    json(res, 202, outcome.job);
     return;
   }
-  const result = job.result || {
-    status: 500,
-    contentType: 'application/json; charset=utf-8',
-    body: Buffer.from(JSON.stringify({ error: job.error || '任务失败' })),
-  };
-  const headers = { 'Content-Type': result.contentType };
-  if (result.cacheControl) headers['Cache-Control'] = result.cacheControl;
-  res.writeHead(result.status, headers);
-  res.end(result.body);
+  const headers = { 'Content-Type': outcome.contentType };
+  if (outcome.cacheControl) headers['Cache-Control'] = outcome.cacheControl;
+  res.writeHead(outcome.status, headers);
+  res.end(outcome.body);
+}
+
+function handleListMyJobs(req, res) {
+  const session = sessionFromRequest(req);
+  if (!session) {
+    json(res, 401, { error: '请先登录', authRequired: true });
+    return;
+  }
+  json(res, 200, queue.getJobsForUser(session.userId));
+}
+
+function handleCancelJob(req, res, jobId) {
+  const session = sessionFromRequest(req);
+  if (!session) {
+    json(res, 401, { error: '请先登录', authRequired: true });
+    return;
+  }
+  const result = queue.cancel(jobId, session.userId);
+  if (!result.ok) {
+    json(res, result.status || 400, { error: result.error });
+    return;
+  }
+  json(res, 200, { ok: true, job: result.job });
 }
 
 async function serveStatic(req, res, pathname) {
@@ -1030,10 +776,12 @@ const server = createServer(async (req, res) => {
     if (url.pathname === '/api/jobs/responses' && req.method === 'POST') return handleQueuedImageJob(req, res, '/v1/responses');
     if (url.pathname === '/api/jobs/images/generations' && req.method === 'POST') return handleQueuedImageJob(req, res, '/v1/images/generations');
     if (url.pathname === '/api/jobs/images/edits' && req.method === 'POST') return handleQueuedImageJob(req, res, '/v1/images/edits');
+    if (url.pathname === '/api/jobs/me' && req.method === 'GET') return handleListMyJobs(req, res);
     const jobStatusMatch = url.pathname.match(/^\/api\/jobs\/([^/]+)$/);
-    if (jobStatusMatch && req.method === 'GET') return handleJobStatus(res, jobStatusMatch[1]);
+    if (jobStatusMatch && req.method === 'GET') return handleJobStatus(req, res, jobStatusMatch[1]);
+    if (jobStatusMatch && req.method === 'DELETE') return handleCancelJob(req, res, jobStatusMatch[1]);
     const jobResultMatch = url.pathname.match(/^\/api\/jobs\/([^/]+)\/result$/);
-    if (jobResultMatch && req.method === 'GET') return handleJobResult(res, jobResultMatch[1]);
+    if (jobResultMatch && req.method === 'GET') return handleJobResult(req, res, jobResultMatch[1]);
     await serveStatic(req, res, url.pathname);
   } catch (error) {
     json(res, 500, { error: error.message || String(error) });
@@ -1049,11 +797,10 @@ const bootConfig = await readLocalConfig().catch((error) => {
 globalThis.__LOG_FILE__ = bootConfig.logFile;
 
 server.listen(bootConfig.port, bootConfig.host, () => {
-  maxImageConcurrency = bootConfig.imageConcurrency;
   logLine('INFO', `芽绘台 SproutCanvas 已启动: http://${bootConfig.host}:${bootConfig.port}`);
   logLine('INFO', `默认生图服务商: ${bootConfig.name} (${bootConfig.id}), 生图模型: ${bootConfig.imageModel}`);
   logLine('INFO', `文本服务商: ${bootConfig.textProviders.map((provider) => `${provider.name}(${provider.textModel})`).join(' -> ')}`);
-  logLine('INFO', `生图队列并发: ${bootConfig.imageConcurrency}`);
+  logLine('INFO', `生图队列: 单 worker 严格顺序, 按用户公平轮询`);
   logLine('INFO', `访问密码保护: ${bootConfig.accessPassword ? '已启用' : '未启用'}`);
   logLine('INFO', `日志文件: ${bootConfig.logFile}`);
 });

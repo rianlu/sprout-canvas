@@ -43,12 +43,6 @@ const els = {
   clearResultsBtn: $('#clearResultsBtn'),
   runSummary: $('#runSummary'),
   statusBar: $('#statusBar'),
-  progressPanel: $('#progressPanel'),
-  progressTitle: $('#progressTitle'),
-  progressDetail: $('#progressDetail'),
-  progressMeta: $('#progressMeta'),
-  progressFill: $('#progressFill'),
-  progressSteps: $('#progressSteps'),
   loadingMini: $('#loadingMini'),
   statEvents: $('#statEvents'),
   statTextLen: $('#statTextLen'),
@@ -60,21 +54,13 @@ const els = {
   galleryEmpty: $('#galleryEmpty'),
   clearGalleryBtn: $('#clearGalleryBtn'),
   seriesForm: $('#seriesForm'),
-  seriesType: $('#seriesType'),
+  seriesPresetChips: $('#seriesPresetChips'),
   seriesAspectRatio: $('#seriesAspectRatio'),
   seriesImageQuality: $('#seriesImageQuality'),
   seriesOutputFormat: $('#seriesOutputFormat'),
   seriesBackground: $('#seriesBackground'),
   seriesOutputCompression: $('#seriesOutputCompression'),
-  seriesBriefTitle: $('#seriesBriefTitle'),
-  seriesBriefHelp: $('#seriesBriefHelp'),
-  seriesAudienceLabel: $('#seriesAudienceLabel'),
-  seriesBriefLabel: $('#seriesBriefLabel'),
-  seriesPlanTitle: $('#seriesPlanTitle'),
-  seriesPlanHelp: $('#seriesPlanHelp'),
   seriesTitle: $('#seriesTitle'),
-  seriesAudience: $('#seriesAudience'),
-  seriesProductBrief: $('#seriesProductBrief'),
   seriesStylePrompt: $('#seriesStylePrompt'),
   seriesPagePlan: $('#seriesPagePlan'),
   seriesCountHint: $('#seriesCountHint'),
@@ -90,9 +76,6 @@ const els = {
   seriesResultGrid: $('#seriesResultGrid'),
   seriesResultEmpty: $('#seriesResultEmpty'),
   seriesClearResultsBtn: $('#seriesClearResultsBtn'),
-  seriesFlowStep1: $('#seriesFlowStep1'),
-  seriesFlowStep2: $('#seriesFlowStep2'),
-  seriesFlowStep3: $('#seriesFlowStep3'),
   splitFile: $('#splitFile'),
   splitUploadBtn: $('#splitUploadBtn'),
   splitGalleryBtn: $('#splitGalleryBtn'),
@@ -112,9 +95,23 @@ const els = {
   splitPreview: $('#splitPreview'),
   previewOverlay: $('#previewOverlay'),
   previewImg: $('#previewImg'),
+  previewPrev: $('#previewPrev'),
+  previewNext: $('#previewNext'),
+  queueStrip: $('#queueStrip'),
+  queueStripToggle: $('#queueStripToggle'),
+  queueDrawer: $('#queueDrawer'),
+  queueDrawerList: $('#queueDrawerList'),
+  queueStripIdle: $('#queueStripIdle'),
+  queueStripRunning: $('#queueStripRunning'),
+  queueStripPending: $('#queueStripPending'),
+  queueRunningCount: $('#queueRunningCount'),
+  queuePendingCount: $('#queuePendingCount'),
+  queueGlobalActive: $('#queueGlobalActive'),
+  queueGlobalQueued: $('#queueGlobalQueued'),
 };
 
 const SETTINGS_KEY = 'img_gen_studio_settings_v2';
+const STORAGE_USER_ID_KEY = 'sprout-canvas-uid';
 const DB_NAME = 'img-gen-gallery';
 const DB_VERSION = 2;
 const MAX_REF_SOURCE_SIZE = 50 * 1024 * 1024;
@@ -123,6 +120,33 @@ const MAX_REF_TOTAL_UPLOAD_SIZE = 5 * 1024 * 1024;
 const MAX_REF_DIMENSION = 1600;
 const REF_IMAGE_QUALITY = 0.86;
 const TEXT_FEEDBACK_MS = 8000;
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+let currentUserId = '';
+
+function generateUserId() {
+  if (typeof crypto?.randomUUID === 'function') return crypto.randomUUID();
+  const bytes = new Uint8Array(16);
+  crypto.getRandomValues(bytes);
+  bytes[6] = (bytes[6] & 0x0f) | 0x40;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  const hex = [...bytes].map((b) => b.toString(16).padStart(2, '0')).join('');
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
+
+function getOrCreateUserId() {
+  if (currentUserId) return currentUserId;
+  let stored = '';
+  try { stored = localStorage.getItem(STORAGE_USER_ID_KEY) || ''; } catch {}
+  if (UUID_RE.test(stored)) {
+    currentUserId = stored;
+    return stored;
+  }
+  const fresh = generateUserId();
+  try { localStorage.setItem(STORAGE_USER_ID_KEY, fresh); } catch {}
+  currentUserId = fresh;
+  return fresh;
+}
 
 let refImages = [];
 let seriesRefImages = [];
@@ -136,8 +160,6 @@ let eventCount = 0;
 let collectedText = [];
 let timerInterval = null;
 let startTime = 0;
-let progressInterval = null;
-let abortController = null;
 let activeTaskCount = 0;
 let serverProviders = [];
 let preferredProviderId = '';
@@ -147,6 +169,8 @@ let previewScale = 1;
 let panX = 0;
 let panY = 0;
 let isDragging = false;
+let previewList = [];
+let previewIndex = 0;
 let dragStartX = 0;
 let dragStartY = 0;
 let panStartX = 0;
@@ -592,29 +616,8 @@ async function parseErrorResponse(response) {
   return friendlyHttpError(response.status, body || response.statusText || '无错误正文');
 }
 
-function isRetryableHttpStatus(status) {
-  return [408, 409, 425, 429, 500, 502, 503, 504, 524].includes(status);
-}
-
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-async function fetchWithRetry(label, makeRequest, maxRetries = 1) {
-  let lastResponse = null;
-  for (let attempt = 0; attempt <= maxRetries; attempt += 1) {
-    const response = await makeRequest();
-    if (response.ok) return response;
-    lastResponse = response;
-    if (attempt < maxRetries && isRetryableHttpStatus(response.status)) {
-      appendEvent('event', `${label} 返回 HTTP ${response.status}, 等待后自动重试 ${attempt + 1}/${maxRetries}`);
-      updateProgress('上游响应较慢', `${label} 返回 HTTP ${response.status}, 正在自动重试.`, 1);
-      await sleep(1200 * (attempt + 1));
-      continue;
-    }
-    break;
-  }
-  throw new Error(`HTTP ${lastResponse.status}: ${await parseErrorResponse(lastResponse)}`);
 }
 
 function getConfig(options = {}) {
@@ -892,39 +895,6 @@ function hasActiveTask() {
   return activeTaskCount > 0;
 }
 
-function setBusy(isBusy) {
-  const controls = [
-    els.providerSelect,
-    els.seriesProviderSelect,
-    els.baseUrl,
-    els.apiKey,
-    els.textModel,
-    els.generationMode,
-    els.imageModel,
-    els.prompt,
-    els.imageCount,
-    els.aspectRatio,
-    els.imageQuality,
-    els.outputFormat,
-    els.background,
-    els.outputCompression,
-    els.thumbAdd,
-    els.clearRefsBtn,
-    els.seriesPlanBtn,
-    els.seriesOptimizeBtn,
-    els.seriesGenBtn,
-    els.seriesThumbAdd,
-    els.seriesClearRefsBtn,
-  ].filter(Boolean);
-  controls.forEach((control) => { control.disabled = isBusy; });
-  els.genBtn.disabled = isBusy;
-  els.genBtn.textContent = isBusy ? '生成中...' : '生成图片';
-  if (els.seriesGenBtn) {
-    els.seriesGenBtn.disabled = isBusy;
-    els.seriesGenBtn.textContent = isBusy ? '生成中...' : '生成序列图';
-  }
-}
-
 function setStatus(type, message) {
   els.statusBar.className = `status-bar ${type}`;
   els.statusBar.textContent = message;
@@ -960,20 +930,26 @@ async function checkAuthStatus() {
     const response = await fetch('/api/auth/status');
     if (!response.ok) return true;
     const status = await response.json();
-    if (status.required && !status.authenticated) {
-      // 尝试用保存的密码静默自动登录
-      const savedPwd = (() => { try { return localStorage.getItem('_auth_pwd') || ''; } catch { return ''; } })();
-      if (savedPwd) {
-        const ok = await attemptLogin(savedPwd, true);
-        if (ok) return true;
-        // 保存的密码失效，清除并弹出密码框
-        try { localStorage.removeItem('_auth_pwd'); } catch {}
-      }
-      showAuthOverlay('服务器已启用访问密码保护.');
+    if (status.authenticated) {
+      hideAuthOverlay();
+      return true;
+    }
+    if (!status.required) {
+      // 无密码模式: 仅用 userId 静默登录, 拿到 Session
+      const ok = await attemptLogin('', true);
+      if (ok) return true;
+      showAuthOverlay('登录失败, 请刷新重试.');
       return false;
     }
-    hideAuthOverlay();
-    return true;
+    // 需要密码: 尝试用保存的密码静默自动登录
+    const savedPwd = (() => { try { return localStorage.getItem('_auth_pwd') || ''; } catch { return ''; } })();
+    if (savedPwd) {
+      const ok = await attemptLogin(savedPwd, true);
+      if (ok) return true;
+      try { localStorage.removeItem('_auth_pwd'); } catch {}
+    }
+    showAuthOverlay('服务器已启用访问密码保护.');
+    return false;
   } catch {
     return true;
   }
@@ -981,17 +957,20 @@ async function checkAuthStatus() {
 
 async function attemptLogin(password, silent = false) {
   try {
+    const userId = getOrCreateUserId();
     const response = await fetch('/api/auth/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ password }),
+      body: JSON.stringify({ password, userId }),
     });
     const data = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(data.error || `HTTP ${response.status}`);
-    // 登录成功，保存密码到 localStorage 方便下次自动登录
-    try { localStorage.setItem('_auth_pwd', password); } catch {}
+    if (password) {
+      try { localStorage.setItem('_auth_pwd', password); } catch {}
+    }
     hideAuthOverlay();
     await loadServerConfig();
+    queueStart(true);
     return true;
   } catch (error) {
     if (!silent) {
@@ -1045,59 +1024,6 @@ function stopTimer() {
   if (startTime) els.statElapsed.textContent = `${((Date.now() - startTime) / 1000).toFixed(1)}s`;
 }
 
-function elapsedText() {
-  if (!startTime) return '0s';
-  return `${Math.floor((Date.now() - startTime) / 1000)}s`;
-}
-
-function startProgress(title, detail, steps = []) {
-  clearInterval(progressInterval);
-  els.progressPanel.classList.add('active', 'running');
-  els.progressPanel.classList.remove('done', 'err');
-  els.progressTitle.textContent = title;
-  els.progressDetail.textContent = detail;
-  els.progressMeta.textContent = '等待 0s';
-  els.progressFill.style.width = '';
-  els.progressSteps.innerHTML = steps.map((step, index) => `<span class="progress-step${index === 0 ? ' active' : ''}">${escapeHtml(step)}</span>`).join('');
-  progressInterval = setInterval(() => {
-    els.progressMeta.textContent = `等待 ${elapsedText()}`;
-  }, 500);
-}
-
-function updateProgress(title, detail, activeStep = -1) {
-  els.progressPanel.classList.add('active');
-  els.progressTitle.textContent = title;
-  els.progressDetail.textContent = detail;
-  els.progressMeta.textContent = `等待 ${elapsedText()}`;
-  if (activeStep >= 0) {
-    els.progressSteps.querySelectorAll('.progress-step').forEach((step, index) => {
-      step.classList.toggle('active', index === activeStep);
-      step.classList.toggle('done', index < activeStep);
-    });
-  }
-}
-
-function finishProgress(type, title, detail) {
-  clearInterval(progressInterval);
-  progressInterval = null;
-  els.progressPanel.classList.remove('running', 'done', 'err');
-  els.progressPanel.classList.add('active', type);
-  els.progressTitle.textContent = title;
-  els.progressDetail.textContent = detail;
-  els.progressMeta.textContent = `耗时 ${elapsedText()}`;
-  els.progressFill.style.width = type === 'done' ? '100%' : '100%';
-  els.progressSteps.querySelectorAll('.progress-step').forEach((step) => {
-    step.classList.remove('active');
-    if (type === 'done') step.classList.add('done');
-  });
-}
-
-function hideProgress() {
-  clearInterval(progressInterval);
-  progressInterval = null;
-  els.progressPanel.classList.remove('active', 'running', 'done', 'err');
-}
-
 function resetRunUi() {
   eventCount = 0;
   collectedText = [];
@@ -1143,7 +1069,7 @@ function renderThumbnails() {
     const image = document.createElement('img');
     image.src = ref.dataUrl;
     image.alt = `参考图 ${index + 1}`;
-    image.addEventListener('click', () => openPreview(ref.dataUrl));
+    image.addEventListener('click', () => openPreview(refImages.map((r) => r.dataUrl), index));
     const remove = document.createElement('button');
     remove.className = 'thumb-remove';
     remove.type = 'button';
@@ -1227,7 +1153,7 @@ function renderSeriesThumbnails() {
     const image = document.createElement('img');
     image.src = ref.dataUrl;
     image.alt = `系列参考图 ${index + 1}`;
-    image.addEventListener('click', () => openPreview(ref.dataUrl));
+    image.addEventListener('click', () => openPreview(seriesRefImages.map((r) => r.dataUrl), index));
     const remove = document.createElement('button');
     remove.className = 'thumb-remove';
     remove.type = 'button';
@@ -1402,7 +1328,12 @@ function createImageCard(record, index, isGallery) {
     image.src = record.dataUrl;
     image.alt = record.prompt;
     image.loading = 'lazy';
-    image.addEventListener('click', () => openPreview(record.dataUrl));
+    image.addEventListener('click', () => {
+      const list = isGallery ? gallery : (record.seriesId ? seriesResults : currentResults);
+      const items = list.filter((r) => r && r.dataUrl).map((r) => r.dataUrl);
+      const idx = items.indexOf(record.dataUrl);
+      openPreview(items, idx >= 0 ? idx : 0);
+    });
     applyCardAspectRatio(imageWrap, image, record);
     imageWrap.append(image, badge);
   }
@@ -1503,7 +1434,7 @@ async function copyRecordImage(record, button) {
   }
 
   // HTTP 环境下 Clipboard API 被浏览器禁用，打开全屏预览让用户右键复制
-  openPreview(record.dataUrl, '右键图片 → 复制图片');
+  openPreview([record.dataUrl], 0, '右键图片 → 复制图片');
 }
 
 function copyPrompt(prompt, button) {
@@ -1618,85 +1549,63 @@ function syncFormatAndBackground() {
 
 const SERIES_PRESETS = {
   ecommerce: {
-    briefTitle: '产品资料',
-    briefHelp: '填写产品是什么, 卖点是什么, 面向谁.',
-    audienceLabel: '目标人群',
-    briefLabel: '产品简介与核心卖点',
-    planTitle: '页面清单',
-    planHelp: '每行一张详情页模块. 建议写成“页面标题: 页面目标”.',
-    planSystem: '你是电商详情页策划。根据产品资料生成 5 到 8 张详情页模块清单。只输出多行文本, 每行格式为“页面标题: 页面目标”, 不要解释, 不要编号, 不要 Markdown。',
+    label: '电商详情',
+    planSystem: '你是电商详情页策划。根据共同风格生成 5 到 8 张详情页模块清单。只输出多行文本, 每行格式为“页面标题: 页面目标”, 不要解释, 不要编号, 不要 Markdown。',
     optimizeSystem: '你是电商视觉设定提示词优化器。请整理成稳定的一致性视觉规范。只输出优化后的统一设定, 不要解释, 不要编号, 不要 Markdown。必须包含色彩, 光影, 背景, 构图, 材质, 版式和一致性约束。',
     outputRule: '生成单张电商详情页视觉模块, 构图完整, 避免乱码文字, 如需文字仅保留短标题区域和信息占位感.',
   },
   sticker: {
-    briefTitle: 'IP 角色资料',
-    briefHelp: '填写角色外观, 性格, 标志物, 用于保持表情包一致.',
-    audienceLabel: '使用场景',
-    briefLabel: '角色设定与表情包需求',
-    planTitle: '表情包清单',
-    planHelp: '每行一个表情动作. 例如“开心挥手: 正面站姿, 双手挥舞”.',
-    planSystem: '你是 IP 表情包策划。根据角色设定生成 8 到 12 个表情包动作清单。只输出多行文本, 每行格式为“表情标题: 动作和表情描述”, 不要解释, 不要编号, 不要 Markdown。',
+    label: 'IP 表情',
+    planSystem: '你是 IP 表情包策划。根据共同风格生成 8 到 12 个表情包动作清单。只输出多行文本, 每行格式为“表情标题: 动作和表情描述”, 不要解释, 不要编号, 不要 Markdown。',
     optimizeSystem: '你是 IP 角色一致性提示词优化器。请整理成稳定的角色设定和表情包视觉规范。只输出优化后的统一设定, 不要解释, 不要编号, 不要 Markdown。必须包含角色外观, 服饰, 比例, 线条, 表情风格, 背景和一致性约束。',
     outputRule: '生成单张表情包贴纸图, 角色外观必须一致, 动作表情夸张清晰, 背景简洁或透明, 避免乱码文字.',
   },
   character_action: {
-    briefTitle: '角色资料',
-    briefHelp: '填写人物/角色外观, 服装, 比例, 动作序列用途.',
-    audienceLabel: '动作用途',
-    briefLabel: '角色设定与动作需求',
-    planTitle: '动作序列清单',
-    planHelp: '每行一个动作关键帧. 例如“起跳预备: 屈膝蓄力, 双臂后摆”.',
-    planSystem: '你是角色动作序列导演。根据角色设定生成 6 到 10 个动作关键帧清单。只输出多行文本, 每行格式为“关键帧标题: 姿态和动作描述”, 不要解释, 不要编号, 不要 Markdown。',
+    label: '角色动作',
+    planSystem: '你是角色动作序列导演。根据共同风格生成 6 到 10 个动作关键帧清单。只输出多行文本, 每行格式为“关键帧标题: 姿态和动作描述”, 不要解释, 不要编号, 不要 Markdown。',
     optimizeSystem: '你是角色动作一致性提示词优化器。请整理成稳定的角色外观和动作序列视觉规范。只输出优化后的统一设定, 不要解释, 不要编号, 不要 Markdown。必须包含角色外观, 服装, 比例, 镜头角度, 动作连贯性和一致性约束。',
     outputRule: '生成单张动作关键帧, 角色外观和服装保持一致, 姿态清晰, 动作连贯, 适合作为序列帧参考.',
   },
   storyboard: {
-    briefTitle: '故事/项目资料',
-    briefHelp: '填写故事背景, 角色, 场景, 情绪和镜头目标.',
-    audienceLabel: '镜头风格',
-    briefLabel: '故事设定与分镜需求',
-    planTitle: '分镜清单',
-    planHelp: '每行一个镜头. 例如“镜头 01: 远景, 主角站在雨夜街口”.',
-    planSystem: '你是影视分镜导演。根据故事资料生成 6 到 10 个分镜镜头清单。只输出多行文本, 每行格式为“镜头标题: 景别, 构图, 动作和情绪”, 不要解释, 不要编号, 不要 Markdown。',
+    label: '影视分镜',
+    planSystem: '你是影视分镜导演。根据共同风格生成 6 到 10 个分镜镜头清单。只输出多行文本, 每行格式为“镜头标题: 景别, 构图, 动作和情绪”, 不要解释, 不要编号, 不要 Markdown。',
     optimizeSystem: '你是分镜视觉一致性提示词优化器。请整理成稳定的镜头语言和视觉规范。只输出优化后的统一设定, 不要解释, 不要编号, 不要 Markdown。必须包含美术风格, 色彩, 光影, 镜头语言, 角色一致性和场景一致性约束。',
     outputRule: '生成单张分镜图, 强调景别, 构图, 情绪和镜头语言, 角色与场景设定保持一致.',
   },
   poster_campaign: {
-    briefTitle: '品牌活动资料',
-    briefHelp: '填写品牌, 活动主题, 目标受众和海报用途.',
-    audienceLabel: '投放场景',
-    briefLabel: '品牌活动与传播需求',
-    planTitle: '海报组清单',
-    planHelp: '每行一张海报. 例如“主视觉海报: 品牌主张和核心视觉”.',
-    planSystem: '你是品牌海报组策划。根据品牌活动资料生成 4 到 8 张海报组清单。只输出多行文本, 每行格式为“海报标题: 视觉目标和传播重点”, 不要解释, 不要编号, 不要 Markdown。',
+    label: '品牌海报',
+    planSystem: '你是品牌海报组策划。根据共同风格生成 4 到 8 张海报组清单。只输出多行文本, 每行格式为“海报标题: 视觉目标和传播重点”, 不要解释, 不要编号, 不要 Markdown。',
     optimizeSystem: '你是品牌海报视觉设定提示词优化器。请整理成稳定的品牌视觉规范。只输出优化后的统一设定, 不要解释, 不要编号, 不要 Markdown。必须包含品牌色, 版式, 材质, 光影, 构图, 字体氛围和一致性约束。',
     outputRule: '生成单张品牌海报视觉, 保持品牌色和版式系统一致, 避免乱码文字, 可保留标题和信息占位区域.',
   },
   custom: {
-    briefTitle: '序列主体资料',
-    briefHelp: '填写这组图共同的主体, 目标和一致性要求.',
-    audienceLabel: '使用场景',
-    briefLabel: '序列需求',
-    planTitle: '序列清单',
-    planHelp: '每行一张图. 建议写成“标题: 当前画面目标”.',
-    planSystem: '你是视觉序列策划。根据用户资料生成 5 到 8 张序列图片清单。只输出多行文本, 每行格式为“标题: 画面目标”, 不要解释, 不要编号, 不要 Markdown。',
+    label: '通用系列',
+    planSystem: '你是视觉序列策划。根据共同风格生成 5 到 8 张序列图片清单。只输出多行文本, 每行格式为“标题: 画面目标”, 不要解释, 不要编号, 不要 Markdown。',
     optimizeSystem: '你是视觉序列一致性提示词优化器。请整理成稳定的统一视觉设定。只输出优化后的统一设定, 不要解释, 不要编号, 不要 Markdown。必须包含主体一致性, 色彩, 光影, 构图, 风格和变化边界。',
     outputRule: '生成单张序列图片, 保持统一设定一致, 同时满足当前画面目标.',
   },
 };
 
+let activeSeriesPresetId = 'custom';
+
 function getSeriesPreset() {
-  return SERIES_PRESETS[els.seriesType.value] || SERIES_PRESETS.custom;
+  return SERIES_PRESETS[activeSeriesPresetId] || SERIES_PRESETS.custom;
 }
 
-function applySeriesPreset() {
-  const preset = getSeriesPreset();
-  els.seriesBriefTitle.textContent = preset.briefTitle;
-  els.seriesBriefHelp.textContent = preset.briefHelp;
-  els.seriesAudienceLabel.textContent = preset.audienceLabel;
-  els.seriesBriefLabel.textContent = preset.briefLabel;
-  els.seriesPlanTitle.textContent = preset.planTitle;
-  els.seriesPlanHelp.textContent = preset.planHelp;
+function selectSeriesPreset(presetId) {
+  if (!SERIES_PRESETS[presetId]) return;
+  activeSeriesPresetId = presetId;
+  if (!els.seriesPresetChips) return;
+  els.seriesPresetChips.querySelectorAll('[data-series-preset]').forEach((chip) => {
+    chip.classList.toggle('active', chip.getAttribute('data-series-preset') === presetId);
+  });
+}
+
+function renderSeriesPresetChips() {
+  if (!els.seriesPresetChips) return;
+  els.seriesPresetChips.innerHTML = Object.entries(SERIES_PRESETS).map(([id, preset]) => `
+    <button type="button" class="series-preset-chip${id === activeSeriesPresetId ? ' active' : ''}" data-series-preset="${id}">${escapeHtml(preset.label)}</button>
+  `).join('');
 }
 
 function resolveSeriesImageSpec() {
@@ -1707,7 +1616,8 @@ function getSeriesSharedConfig(prompt, total) {
   const outputFormat = 'auto';
   els.seriesOutputFormat.value = outputFormat;
   els.seriesOutputCompression.value = '90';
-  const base = getConfig({ promptOverride: prompt, imageCountOverride: total, refImagesOverride: seriesRefImages });
+  const effectivePrompt = prompt || buildSeriesBasePrompt() || '系列母版';
+  const base = getConfig({ promptOverride: effectivePrompt, imageCountOverride: total, refImagesOverride: seriesRefImages });
   const spec = resolveSeriesImageSpec();
   return {
     ...base,
@@ -1749,33 +1659,18 @@ function parseSeriesPages() {
 function updateSeriesCountHint() {
   const pages = parseSeriesPages();
   els.seriesCountHint.textContent = pages.length
-    ? `当前 ${pages.length} 张图, 会共用系列母版和参考图逐张生成.`
-    : '会按页表逐张生成, 每张完成后立即显示.';
-  if (pages.length) updateSeriesFlow(1);
-}
-
-function updateSeriesFlow(activeStep) {
-  const steps = [els.seriesFlowStep1, els.seriesFlowStep2, els.seriesFlowStep3];
-  steps.forEach((el, i) => {
-    if (!el) return;
-    el.classList.toggle('active', i === activeStep);
-    el.classList.toggle('done', i < activeStep);
-  });
+    ? `当前 ${pages.length} 张图, 会共用风格设定逐张生成.`
+    : '会按镜头清单逐张生成, 每张完成后即出现在右侧.';
 }
 
 function buildSeriesBasePrompt() {
-  const preset = getSeriesPreset();
   const title = els.seriesTitle.value.trim();
-  const audience = els.seriesAudience.value.trim();
-  const brief = els.seriesProductBrief.value.trim();
   const style = els.seriesStylePrompt.value.trim();
   return [
-    `序列类型: ${preset.briefTitle}`,
-    title ? `序列名称: ${title}` : '',
-    audience ? `${preset.audienceLabel}: ${audience}` : '',
-    brief ? `${preset.briefLabel}: ${brief}` : '',
-    style ? `统一设定: ${style}` : '',
-    '一致性要求: 所有图片必须共享同一系列母版, 包括主体身份, 核心外观, 色彩系统, 光影方向, 视觉风格和画面质感. 每张图只改变页表中指定的差异点, 不要无故改变主体设定或整体风格.',
+    `系列类型: ${getSeriesPreset().label}`,
+    title ? `系列名称: ${title}` : '',
+    style ? `共同风格: ${style}` : '',
+    '一致性要求: 所有图片必须共享同一系列母版, 包括主体身份, 核心外观, 色彩系统, 光影方向, 视觉风格和画面质感. 每张图只改变镜头清单中指定的差异点, 不要无故改变主体设定或整体风格.',
   ].filter(Boolean).join('\n');
 }
 
@@ -1785,29 +1680,23 @@ function buildSeriesImagePrompt(page, total) {
 
 function ensureSeriesInputs(requireTextModel = false) {
   const title = els.seriesTitle.value.trim();
-  const brief = els.seriesProductBrief.value.trim();
   const style = els.seriesStylePrompt.value.trim();
   const pages = parseSeriesPages();
   if (!title) throw new Error('请填写系列名称');
-  if (!brief) throw new Error('请填写主体简介与核心特征');
-  if (!style) throw new Error('请填写统一设定');
-  if (!pages.length) throw new Error('请填写页表 / 镜头清单, 每行一张图');
+  if (!style) throw new Error('请填写共同风格');
+  if (!pages.length) throw new Error('请填写镜头清单, 每行一张图');
   if (requireTextModel && !els.textModel.value.trim()) throw new Error('请填写文本模型, 用于系列文本优化');
-  return { title, brief, style, pages };
+  return { title, style, pages };
 }
 
 function buildSeriesPlanPayload(config) {
-  const preset = getSeriesPreset();
   return {
     model: config.textModel,
     input: [
-      {
-        role: 'system',
-        content: preset.planSystem,
-      },
+      { role: 'system', content: getSeriesPreset().planSystem },
       {
         role: 'user',
-        content: `系列名称: ${els.seriesTitle.value.trim()}\n${preset.audienceLabel}: ${els.seriesAudience.value.trim()}\n${preset.briefLabel}: ${els.seriesProductBrief.value.trim()}\n统一设定: ${els.seriesStylePrompt.value.trim()}`,
+        content: `系列名称: ${els.seriesTitle.value.trim()}\n共同风格: ${els.seriesStylePrompt.value.trim()}`,
       },
     ],
     stream: false,
@@ -1815,17 +1704,13 @@ function buildSeriesPlanPayload(config) {
 }
 
 function buildSeriesOptimizePayload(config) {
-  const preset = getSeriesPreset();
   return {
     model: config.textModel,
     input: [
-      {
-        role: 'system',
-        content: preset.optimizeSystem,
-      },
+      { role: 'system', content: getSeriesPreset().optimizeSystem },
       {
         role: 'user',
-        content: `系列名称: ${els.seriesTitle.value.trim()}\n${preset.audienceLabel}: ${els.seriesAudience.value.trim()}\n${preset.briefLabel}: ${els.seriesProductBrief.value.trim()}\n原统一设定: ${els.seriesStylePrompt.value.trim()}`,
+        content: `系列名称: ${els.seriesTitle.value.trim()}\n原共同风格: ${els.seriesStylePrompt.value.trim()}`,
       },
     ],
     stream: false,
@@ -1851,91 +1736,59 @@ async function requestTextGeneration(payload) {
 
 async function generateSeriesPlan() {
   try {
-    if (!els.seriesProductBrief.value.trim()) throw new Error('请先填写主体简介与核心特征');
+    if (!els.seriesStylePrompt.value.trim()) throw new Error('请先填写共同风格');
     markTaskActive(true);
     els.seriesPlanBtn.disabled = true;
-    els.seriesPlanBtn.textContent = '生成中...';
-    setSeriesStatus('info', '正在根据系列母版规划页表...');
+    els.seriesPlanBtn.textContent = '规划中...';
+    setSeriesStatus('info', '正在根据共同风格规划镜头清单...');
     const text = await requestTextGeneration(buildSeriesPlanPayload);
     els.seriesPagePlan.value = text.trim();
     updateSeriesCountHint();
-    updateSeriesFlow(1);
-    setSeriesStatus('done', '页表已规划完成, 可以继续手动微调后生成整套资产.');
+    setSeriesStatus('done', '镜头清单已规划, 可以继续手动微调后生成整套资产.');
   } catch (error) {
-    setSeriesStatus('err', `页表规划失败: ${error.message || error}`);
+    setSeriesStatus('err', `镜头规划失败: ${error.message || error}`);
   } finally {
     markTaskActive(false);
     els.seriesPlanBtn.disabled = false;
-    els.seriesPlanBtn.textContent = '规划页表';
+    els.seriesPlanBtn.textContent = '✨ 规划镜头';
   }
 }
 
 async function optimizeSeriesStyle() {
   try {
-    if (!els.seriesProductBrief.value.trim()) throw new Error('请先填写主体简介与核心特征');
+    if (!els.seriesStylePrompt.value.trim()) throw new Error('请先填写共同风格');
     originalSeriesStyle = els.seriesStylePrompt.value;
     markTaskActive(true);
     els.seriesOptimizeBtn.disabled = true;
-    els.seriesOptimizeBtn.textContent = '增强中...';
-    setSeriesStatus('info', '正在提炼系列母版...');
+    els.seriesOptimizeBtn.textContent = '提炼中...';
+    setSeriesStatus('info', '正在提炼共同风格...');
     const text = await requestTextGeneration(buildSeriesOptimizePayload);
     els.seriesStylePrompt.value = text.trim();
-    setSeriesStatus('done', '系列母版已提炼完成, 会作为每张图的一致性约束.');
+    setSeriesStatus('done', '共同风格已提炼, 会作为每张图的一致性约束.');
   } catch (error) {
-    setSeriesStatus('err', `母版提炼失败: ${error.message || error}`);
+    setSeriesStatus('err', `风格提炼失败: ${error.message || error}`);
   } finally {
     markTaskActive(false);
     els.seriesOptimizeBtn.disabled = false;
-    els.seriesOptimizeBtn.textContent = '提炼母版';
+    els.seriesOptimizeBtn.textContent = '✨ 提炼风格';
   }
-}
-
-async function generateSeriesRecord(record, options = {}) {
-  const config = { ...record.configSnapshot, prompt: record.prompt, imageCount: record.pageTotal || record.configSnapshot.imageCount || 1 };
-  if (options.excludeProviderId) config._excludeProviderId = options.excludeProviderId;
-  const runIndex = Math.max(0, (record.pageIndex || 1) - 1);
-  updateSeriesResult(record.id, { status: 'running', error: '', time: new Date().toLocaleString('zh-CN') });
-  appendEvent('event', `${options.retry ? '重新生成' : '开始生成'}系列资产 ${record.pageIndex}/${record.pageTotal}: ${record.pageTitle}`);
-  const dataUrl = config.generationMode === 'images'
-    ? await generateWithImagesApi(config, runIndex)
-    : await generateOne(config, runIndex);
-  const resultRecord = await buildGeneratedRecord(dataUrl, config, runIndex, {
-    target: 'series',
-    seriesId: record.seriesId,
-    seriesTitle: record.seriesTitle,
-    pageTitle: record.pageTitle,
-    pageIndex: record.pageIndex,
-  });
-  replaceSeriesResult(record.id, resultRecord);
-  await addToGallery(resultRecord);
-  appendEvent('done', `第 ${record.pageIndex} 张已生成, 大小 ${formatBytes(resultRecord.bytes)}`);
-  return resultRecord;
 }
 
 async function retrySeriesRecord(recordId) {
   const record = seriesResults.find((item) => item.id === recordId);
   if (!record || !record.configSnapshot) return;
-  setBusy(true);
-  markTaskActive(true);
-  abortController = new AbortController();
-  startProgress('重新生成单张系列图', `正在重试第 ${record.pageIndex} 张: ${record.pageTitle}.`, ['准备请求', '服务端生成', '接收图片', '保存结果']);
-  setSeriesStatus('info', `正在重新生成第 ${record.pageIndex} 张: ${record.pageTitle}`);
+  const snapshot = { ...record.configSnapshot };
+  if (record.providerId) snapshot._excludeProviderId = record.providerId;
+  updateSeriesResult(record.id, { status: 'pending', error: '', time: new Date().toLocaleString('zh-CN') });
+  appendEvent('event', `第 ${record.pageIndex} 张系列资产重新加入队列`);
   try {
-    await generateSeriesRecord(record, { retry: true, excludeProviderId: record.providerId || '' });
-    setSeriesStatus('done', `第 ${record.pageIndex} 张已重新生成.`);
-    finishProgress('done', '单张重试完成', `第 ${record.pageIndex} 张已重新生成.`);
+    await submitRecordToQueue({ ...record, configSnapshot: snapshot }, {
+      kind: 'series',
+      runIndex: Math.max(0, (record.pageIndex || 1) - 1),
+    });
   } catch (error) {
     const message = error.message || String(error);
     updateSeriesResult(record.id, { status: 'failed', error: message, time: new Date().toLocaleString('zh-CN') });
-    setSeriesStatus('err', `第 ${record.pageIndex} 张仍然失败: ${message}`);
-    finishProgress('err', '单张重试失败', message);
-  } finally {
-    stopTimer();
-    els.loadingMini.classList.remove('active');
-    markTaskActive(false);
-    setBusy(false);
-    syncSeriesFormatAndBackground();
-    abortController = null;
   }
 }
 
@@ -1951,11 +1804,15 @@ async function generateSeries(event) {
   saveSettings();
   resetRunUi();
   clearSeriesStatus();
-  setBusy(true);
-  markTaskActive(true);
-  abortController = new AbortController();
   const seriesId = `series-${Date.now()}`;
-  const baseConfig = getSeriesSharedConfig('', series.pages.length);
+  let baseConfig;
+  try {
+    baseConfig = getSeriesSharedConfig('', series.pages.length);
+  } catch (error) {
+    setSeriesStatus('err', `参数有误: ${error.message || error}`);
+    alert(error.message || String(error));
+    return;
+  }
   seriesResults = series.pages.map((page) => {
     const prompt = buildSeriesImagePrompt(page, series.pages.length);
     return createSeriesPlaceholder({
@@ -1968,40 +1825,20 @@ async function generateSeries(event) {
     });
   });
   renderSeriesResults();
-  startProgress('准备生成系列资产', `将生成 ${series.pages.length} 张系列图, 每张都会先显示占位状态.`, ['准备请求', '逐张生成', '接收图片', '保存结果']);
-  updateProgress('准备请求', '已创建结果占位卡, 正在逐张生成.', 0);
-  updateSeriesFlow(2);
-  setSeriesStatus('info', `开始生成系列资产包: ${series.title}`);
-  let completedCount = 0;
-  let failedCount = 0;
-  for (const record of [...seriesResults]) {
+  setSeriesStatus('info', `已加入队列: ${series.title}, ${series.pages.length} 张系列图. 完成后会自动出现.`);
+  appendEvent('event', `已加入队列: 系列 ${series.title} ${series.pages.length} 张`);
+  els.seriesRunSummary.textContent = `已加入队列 ${series.pages.length} 张系列图, 进度见顶部队列条.`;
+  for (let i = 0; i < seriesResults.length; i += 1) {
+    const record = seriesResults[i];
     try {
-      await generateSeriesRecord(record);
-      completedCount += 1;
+      await submitRecordToQueue(record, { kind: 'series', runIndex: i });
     } catch (error) {
-      failedCount += 1;
       const message = error.message || String(error);
       updateSeriesResult(record.id, { status: 'failed', error: message, time: new Date().toLocaleString('zh-CN') });
-      appendEvent('event', `第 ${record.pageIndex} 张失败: ${message}`);
+      appendEvent('event', `第 ${record.pageIndex} 张入队失败: ${message}`);
     }
   }
-  try {
-    if (failedCount) {
-      const detail = `系列生成完成 ${completedCount}/${series.pages.length} 张, ${failedCount} 张失败. 失败卡片可点击“重新生成”.`;
-      setSeriesStatus('err', detail);
-      finishProgress('err', '系列生成部分失败', detail);
-    } else {
-      setSeriesStatus('done', `系列资产生成完成: ${series.pages.length} 张.`);
-      finishProgress('done', '系列资产生成完成', `已生成 ${series.pages.length} 张系列图, 并保存到展馆.`);
-    }
-  } finally {
-    stopTimer();
-    els.loadingMini.classList.remove('active');
-    markTaskActive(false);
-    setBusy(false);
-    syncSeriesFormatAndBackground();
-    abortController = null;
-  }
+  syncSeriesFormatAndBackground();
 }
 
 function formatDuration(ms) {
@@ -2012,65 +1849,7 @@ function formatDuration(ms) {
   return rest ? `${minutes} 分 ${rest} 秒` : `${minutes} 分钟`;
 }
 
-function queuedEndpoint(config, upstreamEndpoint) {
-  if (!isProxyBaseUrl(config.baseUrl)) return apiEndpoint(config, upstreamEndpoint);
-  return `${config.baseUrl}/jobs${upstreamEndpoint.replace(/^\/v1/, '')}`;
-}
-
-async function submitQueuedImageRequest(config, upstreamEndpoint, makeRequestOptions, label) {
-  if (!isProxyBaseUrl(config.baseUrl)) return fetchWithRetry(label, () => fetch(apiEndpoint(config, upstreamEndpoint), makeRequestOptions()));
-  const submitResponse = await fetch(queuedEndpoint(config, upstreamEndpoint), makeRequestOptions());
-  if (!submitResponse.ok) throw new Error(`HTTP ${submitResponse.status}: ${await parseErrorResponse(submitResponse)}`);
-  let job = await submitResponse.json();
-  while (job.status === 'queued' || job.status === 'running') {
-    if (job.status === 'queued') {
-      updateProgress('排队等待生成', `当前排队第 ${job.position || 1} 位, 服务端并发 ${job.activeCount}/${job.maxConcurrency}, 预计等待约 ${formatDuration(job.estimatedWaitMs || 0)}.`, 0);
-    } else {
-      updateProgress('正在生成图片', `已开始生成, 当前耗时 ${formatDuration(job.elapsedMs || 0)}, 最近平均耗时约 ${formatDuration(job.averageMs || 0)}.`, 1);
-    }
-    await sleep(1200);
-    const statusResponse = await fetch(`${config.baseUrl}/jobs/${job.id}`);
-    if (!statusResponse.ok) throw new Error(`HTTP ${statusResponse.status}: ${await parseErrorResponse(statusResponse)}`);
-    job = await statusResponse.json();
-  }
-  if (job.providerId) config._lastProviderId = job.providerId;
-  if (job.status === 'failed') {
-    const resultResponse = await fetch(`${config.baseUrl}/jobs/${job.id}/result`);
-    throw new Error(`HTTP ${resultResponse.status}: ${await parseErrorResponse(resultResponse)}`);
-  }
-  const resultResponse = await fetch(`${config.baseUrl}/jobs/${job.id}/result`);
-  if (!resultResponse.ok) throw new Error(`HTTP ${resultResponse.status}: ${await parseErrorResponse(resultResponse)}`);
-  return resultResponse;
-}
-
-async function generateWithImagesApi(config, runIndex = 0) {
-  const refs = config.refImages || refImages;
-  appendEvent('event', refs.length ? `开始请求 POST /v1/images/edits (${runIndex + 1}/${config.imageCount})` : `开始请求 POST /v1/images/generations (${runIndex + 1}/${config.imageCount})`);
-  updateProgress('正在生成图片', `Images API 正在生成第 ${runIndex + 1}/${config.imageCount} 张.`, 1);
-  const endpoint = refs.length ? '/v1/images/edits' : '/v1/images/generations';
-  const response = await submitQueuedImageRequest(config, endpoint, () => (refs.length
-    ? {
-      method: 'POST',
-      headers: isProxyBaseUrl(config.baseUrl) ? providerHeader(config) : { Authorization: `Bearer ${config.apiKey}` },
-      body: buildImagesEditFormData(config, 1, runIndex),
-      signal: abortController?.signal,
-    }
-    : {
-      method: 'POST',
-      headers: requestHeaders(config, false),
-      body: JSON.stringify(buildImagesPayload(config, 1, runIndex)),
-      signal: abortController?.signal,
-    }), `第 ${runIndex + 1}/${config.imageCount} 张图片`);
-  updateProgress('正在接收图片', '服务器已返回响应, 正在解析图片数据.', 2);
-  const data = await response.json();
-  updateProgress('正在整理结果', '正在转换图片数据并写入结果区.', 3);
-  const dataUrls = await extractImagesApiResults(data, config.outputFormat);
-  if (!dataUrls.length) throw new Error('Images API 未返回图片数据');
-  return dataUrls[0];
-}
-
 async function buildGeneratedRecord(rawDataUrl, config, index, options = {}) {
-  updateProgress('正在保存结果', `正在保存第 ${index + 1}/${config.imageCount} 张图片到结果区和展馆.`, 3);
   const processed = await postProcessDataUrl(rawDataUrl, config);
   const dataUrl = processed.dataUrl;
   const actualFormat = dataUrlFormat(dataUrl);
@@ -2103,113 +1882,21 @@ async function buildGeneratedRecord(rawDataUrl, config, index, options = {}) {
   };
 }
 
-async function addGeneratedResult(rawDataUrl, config, index, options = {}) {
-  const isSeries = options.target === 'series';
-  const imageRecord = await buildGeneratedRecord(rawDataUrl, config, index, options);
-  if (isSeries) {
-    seriesResults.unshift(imageRecord);
-    renderSeriesResults();
-    els.seriesRunSummary.textContent = `已生成 ${index + 1}/${config.imageCount} 张系列资产.`;
-  } else {
-    currentResults.unshift(imageRecord);
-    renderResults();
-    els.runSummary.textContent = `已生成 ${index + 1}/${config.imageCount} 张.`;
-  }
-  await addToGallery(imageRecord);
-  appendEvent('done', `第 ${index + 1} 张已生成, 大小 ${formatBytes(imageRecord.bytes)}`);
-}
-
-async function generateOne(config, runIndex) {
-  appendEvent('event', `开始生成第 ${runIndex + 1}/${config.imageCount} 张`);
-  updateProgress('正在生成图片', `Responses 工具正在生成第 ${runIndex + 1}/${config.imageCount} 张.`, 1);
-  const response = await submitQueuedImageRequest(config, '/v1/responses', () => ({
-    method: 'POST',
-    headers: requestHeaders(config, true),
-    body: JSON.stringify(buildImagePayload(config, runIndex)),
-    signal: abortController?.signal,
-  }), `第 ${runIndex + 1}/${config.imageCount} 张图片`);
-  if (!response.body) throw new Error('浏览器没有收到流式响应体');
-  updateProgress('正在接收流式事件', `已连接服务器, 正在等待第 ${runIndex + 1} 张图片数据.`, 2);
-
-  const reader = response.body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = '';
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
-    const lines = buffer.split('\n');
-    buffer = lines.pop() || '';
-    for (const line of lines) {
-      const trimmed = line.trim();
-      if (!trimmed) continue;
-      if (trimmed.startsWith('event: ')) {
-        const eventName = trimmed.slice(7);
-        if (eventName !== 'response.output_text.delta') appendEvent('event', eventName);
-        continue;
-      }
-      if (!trimmed.startsWith('data: ')) continue;
-      const dataStr = trimmed.slice(6);
-      if (!dataStr || dataStr === '[DONE]') continue;
-      try {
-        const data = JSON.parse(dataStr);
-        const dataUrl = extractBase64AsDataUrl(data, config.outputFormat);
-        if (dataUrl) {
-          updateProgress('图片已返回', `第 ${runIndex + 1}/${config.imageCount} 张图片已返回, 正在处理.`, 3);
-          return dataUrl;
-        }
-        if (typeof data.delta === 'string' && data.delta) {
-          updateTextStream(data.delta);
-          if (collectedText.length % 5 === 1) appendEvent('text', `已接收 ${collectedText.length} 个 delta`);
-        } else if (eventCount % 4 === 0) {
-          appendEvent('data', Object.keys(data).slice(0, 3).join(', ') || typeof data);
-        }
-      } catch {}
-    }
-  }
-  throw new Error(collectedText.length ? `模型返回了文本, 但未返回图片: ${collectedText.join('').slice(0, 160)}` : '流结束但未找到图片');
-}
-
-async function generateSingleRecord(record, options = {}) {
-  const config = { ...record.configSnapshot, prompt: record.prompt, imageCount: record.pageTotal || record.configSnapshot.imageCount || 1 };
-  if (options.excludeProviderId) config._excludeProviderId = options.excludeProviderId;
-  const runIndex = Math.max(0, (record.pageIndex || 1) - 1);
-  updateCurrentResult(record.id, { status: 'running', error: '', time: new Date().toLocaleString('zh-CN') });
-  appendEvent('event', `${options.retry ? '重新生成' : '开始生成'}单图 ${record.pageIndex}/${record.pageTotal}`);
-  const dataUrl = config.generationMode === 'images'
-    ? await generateWithImagesApi(config, runIndex)
-    : await generateOne(config, runIndex);
-  const resultRecord = await buildGeneratedRecord(dataUrl, config, runIndex);
-  replaceCurrentResult(record.id, resultRecord);
-  await addToGallery(resultRecord);
-  appendEvent('done', `第 ${record.pageIndex} 张已生成, 大小 ${formatBytes(resultRecord.bytes)}`);
-  return resultRecord;
-}
-
 async function retrySingleRecord(recordId) {
   const record = currentResults.find((item) => item.id === recordId);
   if (!record || !record.configSnapshot) return;
-  setBusy(true);
-  markTaskActive(true);
-  abortController = new AbortController();
-  startProgress('重新生成单张图片', `正在重试第 ${record.pageIndex} 张.`, ['准备请求', '服务端生成', '接收图片', '保存结果']);
-  setStatus('info', `正在重新生成第 ${record.pageIndex} 张图片...`);
+  const snapshot = { ...record.configSnapshot };
+  if (record.providerId) snapshot._excludeProviderId = record.providerId;
+  updateCurrentResult(record.id, { status: 'pending', error: '', time: new Date().toLocaleString('zh-CN') });
+  appendEvent('event', `第 ${record.pageIndex} 张重新加入队列`);
   try {
-    await generateSingleRecord(record, { retry: true, excludeProviderId: record.providerId || '' });
-    setStatus('done', `第 ${record.pageIndex} 张已重新生成.`);
-    finishProgress('done', '单张重试完成', `第 ${record.pageIndex} 张已重新生成.`);
+    await submitRecordToQueue({ ...record, configSnapshot: snapshot }, {
+      kind: 'single',
+      runIndex: Math.max(0, (record.pageIndex || 1) - 1),
+    });
   } catch (error) {
     const message = error.message || String(error);
     updateCurrentResult(record.id, { status: 'failed', error: message, time: new Date().toLocaleString('zh-CN') });
-    setStatus('err', `第 ${record.pageIndex} 张仍然失败: ${message}`);
-    finishProgress('err', '单张重试失败', message);
-  } finally {
-    stopTimer();
-    els.loadingMini.classList.remove('active');
-    markTaskActive(false);
-    setBusy(false);
-    syncFormatAndBackground();
-    abortController = null;
   }
 }
 
@@ -2224,9 +1911,6 @@ async function generate(event) {
   }
   saveSettings();
   resetRunUi();
-  setBusy(true);
-  markTaskActive(true);
-  abortController = new AbortController();
   const runId = `single-${Date.now()}`;
   currentResults = Array.from({ length: config.imageCount }, (_, index) => createSinglePlaceholder({
     id: `${runId}-${index + 1}`,
@@ -2234,64 +1918,63 @@ async function generate(event) {
     index,
   }));
   renderResults();
-  setStatus('info', `准备生成 ${config.imageCount} 张图片...`);
-  startProgress('准备生成图片', `已创建 ${config.imageCount} 个占位卡, 将逐张生成并替换结果.`, ['准备请求', '服务端生成', '接收图片', '保存结果']);
-  updateProgress('准备请求', '正在组装参数和请求体.', 0);
-
-  let completedCount = 0;
-  let failedCount = 0;
-  for (const record of [...currentResults]) {
+  setStatus('info', `已加入队列: ${config.imageCount} 张图片. 你可以继续操作或切换页签, 完成后画廊自动出现新图.`);
+  appendEvent('event', `已加入队列: ${config.imageCount} 张图片`);
+  els.runSummary.textContent = `已加入队列 ${config.imageCount} 张, 进度见顶部队列条.`;
+  for (let i = 0; i < currentResults.length; i += 1) {
+    const record = currentResults[i];
     try {
-      await generateSingleRecord(record);
-      completedCount += 1;
+      await submitRecordToQueue(record, { kind: 'single', runIndex: i });
     } catch (error) {
-      failedCount += 1;
       const message = error.message || String(error);
       updateCurrentResult(record.id, { status: 'failed', error: message, time: new Date().toLocaleString('zh-CN') });
-      appendEvent('event', `第 ${record.pageIndex} 张失败: ${message}`);
+      appendEvent('event', `第 ${record.pageIndex} 张入队失败: ${message}`);
     }
   }
-
-  try {
-    if (failedCount) {
-      const detail = `生成完成 ${completedCount}/${config.imageCount} 张, ${failedCount} 张失败. 失败卡片可点击“重新生成”.`;
-      setStatus('err', detail);
-      els.runSummary.textContent = detail;
-      finishProgress('err', '图片生成部分失败', detail);
-    } else {
-      setStatus('done', `完成: 已生成 ${config.imageCount} 张图片, 并保存到展馆.`);
-      els.runSummary.textContent = `完成 ${config.imageCount} 张生成.`;
-      finishProgress('done', '图片生成完成', `已生成 ${config.imageCount} 张图片, 并保存到展馆.`);
-    }
-  } finally {
-    stopTimer();
-    els.loadingMini.classList.remove('active');
-    markTaskActive(false);
-    setBusy(false);
-    syncFormatAndBackground();
-    abortController = null;
-  }
+  syncFormatAndBackground();
 }
 
 function updatePreviewTransform() {
   els.previewImg.style.transform = `translate(${panX}px, ${panY}px) scale(${previewScale})`;
 }
 
-function openPreview(dataUrl, hint) {
+function openPreview(items, startIndex = 0, hint) {
+  const list = Array.isArray(items) ? items : [items];
+  previewList = list.filter(Boolean);
+  if (!previewList.length) return;
+  previewIndex = Math.max(0, Math.min(previewList.length - 1, startIndex));
+  els.previewOverlay.classList.add('open');
+  document.body.style.overflow = 'hidden';
+  showCurrentPreview(hint);
+}
+
+function showCurrentPreview(hint) {
   previewScale = 1;
   panX = 0;
   panY = 0;
-  els.previewImg.src = dataUrl;
+  els.previewImg.src = previewList[previewIndex] || '';
   updatePreviewTransform();
   const hintEl = $('#previewHint');
-  if (hintEl) hintEl.textContent = hint || '滚轮缩放 · 拖拽平移 · ESC 关闭';
-  els.previewOverlay.classList.add('open');
-  document.body.style.overflow = 'hidden';
+  if (hintEl) {
+    hintEl.textContent = previewList.length > 1
+      ? `${previewIndex + 1} / ${previewList.length} · ←→ 切换 · 滚轮缩放 · ESC 关闭`
+      : (hint || '滚轮缩放 · 拖拽平移 · ESC 关闭');
+  }
+  const multi = previewList.length > 1;
+  if (els.previewPrev) els.previewPrev.hidden = !multi;
+  if (els.previewNext) els.previewNext.hidden = !multi;
+}
+
+function navigatePreview(delta) {
+  if (previewList.length <= 1) return;
+  previewIndex = (previewIndex + delta + previewList.length) % previewList.length;
+  showCurrentPreview();
 }
 
 function closePreview() {
   els.previewOverlay.classList.remove('open');
   document.body.style.overflow = '';
+  previewList = [];
 }
 
 
@@ -2455,7 +2138,7 @@ async function renderSplitSlices() {
       preview.type = 'button';
       preview.className = 'split-slice-preview';
       preview.style.aspectRatio = `${crop.width} / ${crop.height}`;
-      preview.addEventListener('click', () => openPreview(slice.dataUrl));
+      preview.addEventListener('click', () => openPreview([slice.dataUrl], 0));
       const img = document.createElement('img');
       img.src = slice.dataUrl;
       img.alt = `切片 ${index}`;
@@ -2575,8 +2258,358 @@ async function loadModels() {
   renderModelPanel();
 }
 
+// ═══ Queue UI: poll /api/jobs/me + render strip & drawer + dispatch completion ═══
+
+const QUEUE_POLL_ACTIVE_MS = 1500;
+const QUEUE_POLL_IDLE_MS = 5000;
+const QUEUE_BADGE = {
+  pending: '🟡 排队中',
+  running: '🟢 生成中',
+  succeeded: '✅ 完成',
+  failed: '❌ 失败',
+  canceled: '⏸ 已取消',
+};
+let myJobs = [];
+let queueGlobalActive = 0;
+let queueGlobalQueued = 0;
+let queuePollTimer = null;
+let queueExpanded = false;
+const dispatchedJobs = new Set();
+const queueCompletionHandlers = new Map();
+
+function registerCompletionHandler(kind, fn) {
+  queueCompletionHandlers.set(kind, fn);
+}
+
+function encodeClientContext(ctx) {
+  if (!ctx) return '';
+  const json = JSON.stringify(ctx);
+  if (typeof TextEncoder === 'function') {
+    return btoa(String.fromCharCode(...new TextEncoder().encode(json)));
+  }
+  return btoa(unescape(encodeURIComponent(json)));
+}
+
+async function queueSubmit({ endpoint, body, contentType, clientContext, providerId, excludeProviderId }) {
+  const headers = {};
+  if (contentType) headers['Content-Type'] = contentType;
+  const provHdrs = providerHeader({
+    providerId: providerId || selectedProviderId(),
+    _excludeProviderId: excludeProviderId || '',
+  });
+  Object.assign(headers, provHdrs);
+  if (clientContext) {
+    headers['X-Client-Context'] = encodeClientContext(clientContext);
+  }
+  const url = `/api/jobs${endpoint.replace(/^\/v1/, '')}`;
+  const response = await fetch(url, { method: 'POST', headers, body, credentials: 'include' });
+  if (!response.ok) {
+    const data = await response.json().catch(() => ({}));
+    throw new Error(data.error || `HTTP ${response.status}`);
+  }
+  const job = await response.json();
+  myJobs = [job, ...myJobs.filter((j) => j.id !== job.id)];
+  renderQueueStrip();
+  queueStart(true);
+  return job;
+}
+
+function stripConfigForContext(snapshot) {
+  if (!snapshot) return {};
+  const { refImages, apiKey, ...rest } = snapshot;
+  rest.hasRefImages = Boolean(refImages && refImages.length);
+  return rest;
+}
+
+async function submitRecordToQueue(record, contextExtra = {}) {
+  const snapshot = record.configSnapshot || {};
+  const runIndex = contextExtra.runIndex ?? Math.max(0, (record.pageIndex || 1) - 1);
+  const { endpoint, body, contentType } = buildEndpointAndBody(snapshot, runIndex);
+  const clientContext = {
+    kind: contextExtra.kind,
+    placeholderId: record.id,
+    runIndex,
+    pageIndex: record.pageIndex || 1,
+    pageTotal: record.pageTotal || snapshot.imageCount || 1,
+    seriesId: record.seriesId || '',
+    seriesTitle: record.seriesTitle || '',
+    pageTitle: record.pageTitle || '',
+    configSnapshot: stripConfigForContext(snapshot),
+  };
+  return queueSubmit({
+    endpoint,
+    body,
+    contentType,
+    clientContext,
+    providerId: snapshot.providerId,
+    excludeProviderId: snapshot._excludeProviderId,
+  });
+}
+
+async function queueCancel(jobId) {
+  try {
+    const response = await fetch(`/api/jobs/${jobId}`, { method: 'DELETE', credentials: 'include' });
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      throw new Error(data.error || `HTTP ${response.status}`);
+    }
+    await queueTick();
+  } catch (error) {
+    setStatus('err', `取消失败: ${error.message || error}`);
+  }
+}
+
+async function queueTick() {
+  try {
+    const response = await fetch('/api/jobs/me', { credentials: 'include' });
+    if (!response.ok) {
+      if (response.status === 401) {
+        queueStop();
+        return;
+      }
+      scheduleQueuePoll();
+      return;
+    }
+    const data = await response.json();
+    myJobs = Array.isArray(data.jobs) ? data.jobs : [];
+    queueGlobalActive = data.globalActive || 0;
+    queueGlobalQueued = data.globalQueued || 0;
+    renderQueueStrip();
+    for (const job of myJobs) {
+      if ((job.status === 'succeeded' || job.status === 'failed') && !dispatchedJobs.has(job.id)) {
+        dispatchedJobs.add(job.id);
+        dispatchJobCompletion(job).catch(() => {});
+      }
+    }
+    const stillBusy = myJobs.some((j) => j.status === 'pending' || j.status === 'running');
+    if (!stillBusy && els.loadingMini.classList.contains('active')) {
+      stopTimer();
+      els.loadingMini.classList.remove('active');
+    }
+  } catch {
+    // network blip, retry on next schedule
+  }
+  scheduleQueuePoll();
+}
+
+function scheduleQueuePoll() {
+  if (queuePollTimer) clearTimeout(queuePollTimer);
+  if (document.hidden) {
+    queuePollTimer = null;
+    return;
+  }
+  const hasActive = myJobs.some((j) => j.status === 'pending' || j.status === 'running');
+  const interval = hasActive ? QUEUE_POLL_ACTIVE_MS : QUEUE_POLL_IDLE_MS;
+  queuePollTimer = setTimeout(() => queueTick(), interval);
+}
+
+function queueStart(force = false) {
+  if (typeof fetch !== 'function') return;
+  if (queuePollTimer && !force) return;
+  if (queuePollTimer) clearTimeout(queuePollTimer);
+  queuePollTimer = null;
+  queueTick();
+}
+
+function queueStop() {
+  if (queuePollTimer) clearTimeout(queuePollTimer);
+  queuePollTimer = null;
+}
+
+async function dispatchJobCompletion(job) {
+  const kind = job.clientContext?.kind;
+  const handler = queueCompletionHandlers.get(kind);
+  if (!handler) return;
+  if (job.status === 'failed') {
+    try { await handler({ job, result: null, error: job.error || '生成失败' }); } catch {}
+    return;
+  }
+  try {
+    const response = await fetch(`/api/jobs/${job.id}/result`, { credentials: 'include' });
+    if (!response.ok) {
+      await handler({ job, result: null, error: `HTTP ${response.status}` });
+      return;
+    }
+    const result = await response.json();
+    await handler({ job, result });
+  } catch (error) {
+    await handler({ job, result: null, error: error.message || String(error) });
+  }
+}
+
+function renderQueueStrip() {
+  if (!els.queueStrip) return;
+  const running = myJobs.filter((j) => j.status === 'running').length;
+  const pending = myJobs.filter((j) => j.status === 'pending').length;
+  const hasAny = myJobs.length > 0;
+  els.queueStrip.hidden = !hasAny;
+  if (!hasAny) {
+    queueExpanded = false;
+    if (els.queueDrawer) els.queueDrawer.hidden = true;
+    els.queueStrip.classList.remove('expanded');
+    return;
+  }
+  if (els.queueRunningCount) els.queueRunningCount.textContent = String(running);
+  if (els.queuePendingCount) els.queuePendingCount.textContent = String(pending);
+  if (els.queueStripRunning) els.queueStripRunning.hidden = running === 0;
+  if (els.queueStripPending) els.queueStripPending.hidden = pending === 0;
+  if (els.queueStripIdle) els.queueStripIdle.hidden = running > 0 || pending > 0;
+  if (els.queueGlobalActive) els.queueGlobalActive.textContent = String(queueGlobalActive);
+  if (els.queueGlobalQueued) els.queueGlobalQueued.textContent = String(queueGlobalQueued);
+
+  if (!els.queueDrawerList) return;
+  els.queueDrawerList.innerHTML = myJobs.map((job) => {
+    const status = job.status;
+    const ctx = job.clientContext || {};
+    const promptText = ctx.configSnapshot?.prompt || '';
+    const promptPreview = escapeHtml(String(promptText).slice(0, 60) || '(无 prompt)');
+    let meta = '';
+    if (status === 'running') {
+      meta = `${formatDuration(job.elapsedMs || 0)} 已用`;
+    } else if (status === 'pending') {
+      const ahead = Math.max(0, (job.yourPosition || 1) - 1);
+      meta = ahead === 0 ? '即将开始' : `你前面 ${ahead} 个`;
+    } else if (status === 'succeeded') {
+      meta = '已加入画廊';
+    } else if (status === 'failed') {
+      meta = `失败: ${escapeHtml(String(job.error || '').slice(0, 80))}`;
+    } else if (status === 'canceled') {
+      meta = '已取消';
+    }
+    const actionBtn = status === 'pending'
+      ? `<button class="queue-row-action-btn danger" data-cancel-job="${escapeHtml(job.id)}" type="button">取消</button>`
+      : '';
+    return `
+      <div class="queue-row status-${status}" data-job-id="${escapeHtml(job.id)}">
+        <span class="queue-row-badge">${QUEUE_BADGE[status] || status}</span>
+        <span class="queue-row-prompt" title="${promptPreview}">${promptPreview}</span>
+        <span class="queue-row-meta">${meta}</span>
+        <span class="queue-row-actions">${actionBtn}</span>
+      </div>
+    `;
+  }).join('');
+}
+
+function toggleQueueDrawer(force) {
+  if (!els.queueStrip || !els.queueDrawer) return;
+  queueExpanded = typeof force === 'boolean' ? force : !queueExpanded;
+  els.queueStrip.classList.toggle('expanded', queueExpanded);
+  els.queueDrawer.hidden = !queueExpanded;
+  if (els.queueStripToggle) els.queueStripToggle.setAttribute('aria-expanded', String(queueExpanded));
+}
+
+// ═══ Completion handlers wired by flows ═══
+
+async function dataUrlFromQueueResult(result, format) {
+  if (!result) return '';
+  const dataUrls = await extractImagesApiResults(result, format || 'auto');
+  if (dataUrls.length) return dataUrls[0];
+  const fallback = extractBase64AsDataUrl(result, format || 'auto');
+  return fallback || '';
+}
+
+function buildEndpointAndBody(snapshot, runIndex) {
+  const refs = snapshot.refImages || [];
+  if (snapshot.generationMode === 'images') {
+    if (refs.length > 0) {
+      return { endpoint: '/v1/images/edits', body: buildImagesEditFormData(snapshot, 1, runIndex), contentType: '' };
+    }
+    return { endpoint: '/v1/images/generations', body: JSON.stringify(buildImagesPayload(snapshot, 1, runIndex)), contentType: 'application/json' };
+  }
+  return { endpoint: '/v1/responses', body: JSON.stringify(buildImagePayload(snapshot, runIndex)), contentType: 'application/json' };
+}
+
+registerCompletionHandler('single', async ({ job, result, error }) => {
+  const ctx = job.clientContext || {};
+  const placeholderId = ctx.placeholderId;
+  if (!placeholderId) return;
+  const placeholder = currentResults.find((r) => r.id === placeholderId);
+  if (error || !result) {
+    updateCurrentResult(placeholderId, { status: 'failed', error: error || '生成失败', time: new Date().toLocaleString('zh-CN') });
+    return;
+  }
+  const snapshot = ctx.configSnapshot || {};
+  const dataUrl = await dataUrlFromQueueResult(result, snapshot.outputFormat || 'auto');
+  if (!dataUrl) {
+    updateCurrentResult(placeholderId, { status: 'failed', error: '生成结果未包含图片数据', time: new Date().toLocaleString('zh-CN') });
+    return;
+  }
+  const refDataUrls = placeholder?.refDataUrls || [];
+  const cfg = {
+    ...snapshot,
+    refImages: refDataUrls.map((url) => ({ dataUrl: url })),
+    imageCount: snapshot.imageCount || 1,
+    _lastProviderId: job.providerId || '',
+  };
+  try {
+    const record = await buildGeneratedRecord(dataUrl, cfg, ctx.runIndex || 0, { id: placeholderId });
+    replaceCurrentResult(placeholderId, record);
+    await addToGallery(record);
+    appendEvent('done', `第 ${ctx.pageIndex || 1} 张已生成, 大小 ${formatBytes(record.bytes)}`);
+  } catch (err) {
+    updateCurrentResult(placeholderId, { status: 'failed', error: err.message || String(err), time: new Date().toLocaleString('zh-CN') });
+  }
+});
+
+registerCompletionHandler('series', async ({ job, result, error }) => {
+  const ctx = job.clientContext || {};
+  const placeholderId = ctx.placeholderId;
+  if (!placeholderId) return;
+  const placeholder = seriesResults.find((r) => r.id === placeholderId);
+  if (error || !result) {
+    updateSeriesResult(placeholderId, { status: 'failed', error: error || '生成失败', time: new Date().toLocaleString('zh-CN') });
+    return;
+  }
+  const snapshot = ctx.configSnapshot || {};
+  const dataUrl = await dataUrlFromQueueResult(result, snapshot.outputFormat || 'auto');
+  if (!dataUrl) {
+    updateSeriesResult(placeholderId, { status: 'failed', error: '生成结果未包含图片数据', time: new Date().toLocaleString('zh-CN') });
+    return;
+  }
+  const refDataUrls = placeholder?.refDataUrls || [];
+  const cfg = {
+    ...snapshot,
+    refImages: refDataUrls.map((url) => ({ dataUrl: url })),
+    imageCount: ctx.pageTotal || 1,
+    _lastProviderId: job.providerId || '',
+  };
+  try {
+    const record = await buildGeneratedRecord(dataUrl, cfg, (ctx.pageIndex || 1) - 1, {
+      id: placeholderId,
+      seriesId: ctx.seriesId,
+      seriesTitle: ctx.seriesTitle,
+      pageTitle: ctx.pageTitle,
+      pageIndex: ctx.pageIndex,
+    });
+    record.pageTotal = ctx.pageTotal || 1;
+    replaceSeriesResult(placeholderId, record);
+    await addToGallery(record);
+    appendEvent('done', `第 ${ctx.pageIndex || 1} 张系列已生成, 大小 ${formatBytes(record.bytes)}`);
+  } catch (err) {
+    updateSeriesResult(placeholderId, { status: 'failed', error: err.message || String(err), time: new Date().toLocaleString('zh-CN') });
+  }
+});
+
 function bindEvents() {
   if (els.authForm) els.authForm.addEventListener('submit', loginWithPassword);
+  if (els.queueStripToggle) {
+    els.queueStripToggle.addEventListener('click', () => toggleQueueDrawer());
+  }
+  if (els.queueDrawerList) {
+    els.queueDrawerList.addEventListener('click', (event) => {
+      const button = event.target.closest('[data-cancel-job]');
+      if (!button) return;
+      const jobId = button.getAttribute('data-cancel-job');
+      if (jobId) queueCancel(jobId);
+    });
+  }
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) {
+      queueStop();
+    } else if (myJobs.length) {
+      queueStart(true);
+    }
+  });
   window.addEventListener('beforeunload', (event) => {
     if (!hasActiveTask()) return;
     event.preventDefault();
@@ -2619,11 +2652,14 @@ function bindEvents() {
     seriesResults = [];
     renderSeriesResults();
     els.seriesRunSummary.textContent = '系列资产结果已清空.';
-    const pages = parseSeriesPages();
-    updateSeriesFlow(pages.length ? 1 : 0);
   });
   els.seriesPagePlan.addEventListener('input', updateSeriesCountHint);
-  els.seriesType.addEventListener('change', applySeriesPreset);
+  if (els.seriesPresetChips) {
+    els.seriesPresetChips.addEventListener('click', (event) => {
+      const chip = event.target.closest('[data-series-preset]');
+      if (chip) selectSeriesPreset(chip.getAttribute('data-series-preset'));
+    });
+  }
   els.seriesBackground.addEventListener('change', syncSeriesFormatAndBackground);
   if (els.splitUploadBtn) els.splitUploadBtn.addEventListener('click', () => els.splitFile.click());
   if (els.splitGalleryBtn) els.splitGalleryBtn.addEventListener('click', () => {
@@ -2678,8 +2714,19 @@ function bindEvents() {
   els.previewOverlay.addEventListener('click', (event) => {
     if (event.target === els.previewOverlay || event.target.closest('.preview-close')) closePreview();
   });
+  if (els.previewPrev) els.previewPrev.addEventListener('click', (event) => {
+    event.stopPropagation();
+    navigatePreview(-1);
+  });
+  if (els.previewNext) els.previewNext.addEventListener('click', (event) => {
+    event.stopPropagation();
+    navigatePreview(1);
+  });
   document.addEventListener('keydown', (event) => {
-    if (event.key === 'Escape' && els.previewOverlay.classList.contains('open')) closePreview();
+    if (!els.previewOverlay.classList.contains('open')) return;
+    if (event.key === 'Escape') closePreview();
+    else if (event.key === 'ArrowLeft') { event.preventDefault(); navigatePreview(-1); }
+    else if (event.key === 'ArrowRight') { event.preventDefault(); navigatePreview(1); }
   });
   els.previewOverlay.addEventListener('wheel', (event) => {
     if (!els.previewOverlay.classList.contains('open')) return;
@@ -2717,16 +2764,20 @@ function bindEvents() {
 }
 
 async function initializeApp() {
+  getOrCreateUserId();
   readSettings();
   bindEvents();
   syncFormatAndBackground();
-  applySeriesPreset();
+  renderSeriesPresetChips();
   syncSeriesFormatAndBackground();
   updateSeriesCountHint();
   renderResults();
   renderSeriesResults();
   loadGallery();
-  if (await checkAuthStatus()) await loadServerConfig();
+  if (await checkAuthStatus()) {
+    await loadServerConfig();
+    queueStart(true);
+  }
 }
 
 initializeApp();

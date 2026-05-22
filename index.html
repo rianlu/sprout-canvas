@@ -54,6 +54,25 @@
     <!-- 移动端抽屉遮罩 -->
     <div id="mobileDrawerOverlay" class="mobile-drawer-overlay"></div>
 
+    <!-- ══ 顶部队列条 + 抽屉 (跨页常驻) ══════════════════ -->
+    <div id="queueStrip" class="queue-strip" hidden>
+      <button id="queueStripToggle" class="queue-strip-toggle" type="button" aria-expanded="false">
+        <span class="queue-strip-info">
+          <span id="queueStripIdle" class="queue-pill queue-pill-idle">队列空闲</span>
+          <span id="queueStripRunning" class="queue-pill queue-pill-running" hidden>🟢 <span id="queueRunningCount">0</span> 生成中</span>
+          <span id="queueStripPending" class="queue-pill queue-pill-pending" hidden>🟡 <span id="queuePendingCount">0</span> 排队中</span>
+          <span class="queue-strip-divider">·</span>
+          <span class="queue-global-note">全局 <span id="queueGlobalActive">0</span> 在跑 / <span id="queueGlobalQueued">0</span> 排队</span>
+        </span>
+        <svg class="queue-strip-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+      </button>
+      <div id="queueDrawer" class="queue-drawer" hidden>
+        <div id="queueDrawerList" class="queue-drawer-list">
+          <p class="queue-drawer-empty">还没有任务</p>
+        </div>
+      </div>
+    </div>
+
     <!-- ══ 单图创作 ══════════════════════════════════════ -->
     <main id="tabDraw" class="page active">
       <form id="controlForm" class="workbench-grid">
@@ -176,19 +195,6 @@
             <button id="clearResultsBtn" class="btn-ghost" type="button">清空画布</button>
           </div>
 
-          <div id="progressPanel" class="progress-card">
-            <p class="progress-guard-note">生成任务已提交后请勿刷新或关闭页面; 服务端会自动选择空闲上游, 如果进入队列, 页面会显示当前排队信息.</p>
-            <div class="progress-header">
-              <div>
-                <strong id="progressTitle">准备中</strong>
-                <p id="progressDetail">初始化...</p>
-              </div>
-              <span id="progressMeta" class="progress-meta">0s</span>
-            </div>
-            <div class="progress-track"><div id="progressFill" class="progress-fill"></div></div>
-            <div id="progressSteps" class="progress-steps"></div>
-          </div>
-
           <div id="statusBar" class="status-bar"></div>
           <div id="resultGrid" class="image-grid"></div>
           <div id="resultEmpty" class="canvas-empty-state">
@@ -223,74 +229,54 @@
           <div class="mobile-only-drag"></div>
           <div class="panel-scroll-content">
             <header class="panel-title-block series-title-block">
-              <span class="series-kicker">Series Kit</span>
               <h1>系列资产包</h1>
-              <p>先建立统一母版, 再拆成多张可控画面</p>
+              <p>定义共同风格, 列出每张镜头, 一次生成整套图.</p>
             </header>
 
-            <section class="series-brief-card series-how-card">
-              <div>
-                <span>怎么用</span>
-                <strong>先固定不变项, 再逐张写变化项, 最后生成整套图.</strong>
-              </div>
-              <ol class="series-mini-steps">
-                <li><b>1 定母版</b><span>选择类型, 填主体资料, 提炼统一设定.</span></li>
-                <li><b>2 编页表</b><span>每行一张图, 只写这一张要变化什么.</span></li>
-                <li><b>3 生成</b><span>系统会用“母版 + 当前行”逐张出图.</span></li>
-              </ol>
-            </section>
-
-            <section class="bento-card series-step-card series-card-accent">
-              <div class="series-step-label"><strong>1</strong><span>定母版</span></div>
-              <div class="bento-header">
-                <div><span class="bento-subtitle">Template</span><h2>选择系列类型</h2></div>
-              </div>
-              <label>
-                <span>创作场景</span>
-                <select id="seriesType">
-                  <option value="ecommerce">产品视觉展示</option>
-                  <option value="sticker">IP 角色表情包</option>
-                  <option value="character_action">人物动作序列</option>
-                  <option value="storyboard">分镜故事板</option>
-                  <option value="poster_campaign">视觉海报组</option>
-                  <option value="custom">自定义系列</option>
-                </select>
-              </label>
-            </section>
-
             <section class="bento-card series-step-card">
               <div class="bento-header">
-                <div><span class="bento-subtitle">Master</span><h2 id="seriesBriefTitle">主体资料</h2><p id="seriesBriefHelp" class="help-text">描述系列的核心物件或角色</p></div>
+                <div><h2>系列基本信息</h2></div>
               </div>
               <div class="param-grid">
-                <label><span>系列名称</span><input id="seriesTitle" placeholder="例如：春日绿植图鉴" /></label>
-                <label><span id="seriesAudienceLabel">受众群体</span><input id="seriesAudience" placeholder="例如：自然生活爱好者" /></label>
+                <label><span>系列名称</span><input id="seriesTitle" placeholder="例如: 春日绿植图鉴" /></label>
               </div>
-              <label><span id="seriesBriefLabel">核心特征描述</span><textarea id="seriesProductBrief" placeholder="写清主体, 不变元素, 目标用途. 例如：一个圆滚滚的原创熊猫 IP, 戴绿色围巾, 用于微信表情包..."></textarea></label>
+              <p class="help-text" style="margin: 10px 0 8px;">系列类型 (影响 AI 规划 / 提炼的风格)</p>
+              <div id="seriesPresetChips" class="series-preset-chips"></div>
             </section>
 
             <section class="bento-card series-step-card">
               <div class="bento-header">
-                <div><span class="bento-subtitle">Consistency</span><h2>统一设定</h2></div>
-                <button id="seriesOptimizeBtn" type="button" class="btn-ghost">✨ 提炼母版</button>
+                <div><h2>共同风格</h2><p class="help-text">全部图共享的部分: 主体设定, 色彩, 光影, 构图, 背景, 禁止变化项</p></div>
+                <button id="seriesOptimizeBtn" type="button" class="btn-ghost">✨ 提炼风格</button>
               </div>
-              <textarea id="seriesStylePrompt" placeholder="统一视觉规则: 角色/产品外观, 色彩, 光影, 构图, 背景, 禁止变化项..."></textarea>
-              <p class="help-text">这里决定每张图必须保持一致的部分. 如果不确定, 先填主体资料, 再点“提炼母版”.</p>
+              <textarea id="seriesStylePrompt" class="large-textarea" placeholder="主体设定: ...&#10;色彩: ...&#10;光影: ...&#10;构图与背景: ...&#10;禁止变化: ..."></textarea>
             </section>
 
             <section class="bento-card series-step-card">
               <div class="bento-header">
-                <div><span class="bento-subtitle">References</span><h2>参考图 <span class="optional-tag">可选</span></h2></div>
-                <button id="seriesClearRefsBtn" type="button" class="btn-ghost">清空</button>
+                <div><h2>镜头清单</h2><p class="help-text">一行一张图, 格式 "标题: 这一张的差异点"</p></div>
+                <button id="seriesPlanBtn" type="button" class="btn-ghost">✨ 规划镜头</button>
               </div>
+              <div class="series-example-card">
+                <strong>示例</strong>
+                <code>封面: 主体居中, 背景干净</code>
+                <code>细节: 镜头靠近材质或角色标志物</code>
+              </div>
+              <textarea id="seriesPagePlan" class="large-textarea series-plan-textarea" placeholder="封面: 主体居中, 建立第一印象, 背景干净&#10;细节: 突出材质或角色标志物, 保持统一光影&#10;场景: 展示使用场景或动作变化, 不改变主体设定"></textarea>
+              <p id="seriesCountHint" class="help-text" style="margin-top: 10px;">会按镜头清单逐张生成, 每张完成后即出现在右侧.</p>
+            </section>
+
+            <details class="bento-card series-step-card">
+              <summary><span><strong>参考图</strong> <span class="optional-tag">可选</span></span><span class="summary-icon">▼</span></summary>
               <div id="seriesThumbRow" class="thumb-row">
                 <input id="seriesImageFile" type="file" accept="image/*" multiple hidden />
                 <button id="seriesThumbAdd" type="button" class="thumb-add">
                   <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14m-7-7h14"/></svg>
                 </button>
+                <button id="seriesClearRefsBtn" type="button" class="btn-ghost" style="margin-left: 8px;">清空</button>
               </div>
-              <p class="help-text">建议放产品照, 角色设定图, 品牌风格图或满意的上一张结果. 上传前会自动压缩, 建议总量不超过 5MB.</p>
-            </section>
+              <p class="help-text">放产品照, 角色设定图或品牌风格图. 上传前会自动压缩, 建议总量不超过 5MB.</p>
+            </details>
 
             <details class="bento-card series-step-card">
               <summary><span><strong>出图参数</strong></span><span class="summary-icon">▼</span></summary>
@@ -301,67 +287,31 @@
                 <select id="seriesOutputFormat" style="display:none;"><option value="auto">自动</option></select>
                 <input id="seriesOutputCompression" type="hidden" value="90" />
               </div>
-              <p class="help-text spec-note">系列图会共用同一画面比例, 便于成套排版和保持视觉一致.</p>
+              <p class="help-text spec-note">系列图共用同一画面比例, 便于成套排版.</p>
             </details>
           </div>
 
           <div class="panel-footer series-panel-footer">
             <button id="seriesGenBtn" type="submit" class="btn-primary">生成整套资产</button>
-            <p>逐张返回结果, 中途失败也会保留已完成图片. 生成期间请勿刷新或关闭页面, 应用内切换 Tab 不影响任务.</p>
+            <p>提交后立即返回. 进度看顶部队列条, 完成的图会自动进入右侧画布和画廊.</p>
           </div>
         </aside>
 
         <section class="canvas-panel series-canvas-panel">
-          <button type="button" id="seriesMobileParamTrigger" class="mobile-param-trigger">⚙️ 调整母版</button>
+          <button type="button" id="seriesMobileParamTrigger" class="mobile-param-trigger">⚙️ 调整参数</button>
           <div class="series-hero">
             <div>
-              <span class="series-kicker">Asset Board</span>
-              <h2>系列编排台</h2>
-              <p id="seriesRunSummary" class="canvas-sub">先定母版, 再规划每张图的差异.</p>
+              <h2>系列画布</h2>
+              <p id="seriesRunSummary" class="canvas-sub">完善左侧参数后点击生成, 资产包会逐张出现在这里.</p>
             </div>
             <button id="seriesClearResultsBtn" class="btn-ghost" type="button">清空结果</button>
           </div>
 
-          <div class="series-flow">
-            <div id="seriesFlowStep1" class="series-flow-step active"><strong>1</strong><span>定母版</span><small>左侧完成</small></div>
-            <div id="seriesFlowStep2" class="series-flow-step"><strong>2</strong><span>编页表</span><small>这里填写</small></div>
-            <div id="seriesFlowStep3" class="series-flow-step"><strong>3</strong><span>生成结果</span><small>逐张返回</small></div>
-          </div>
-
-          <div class="series-board-grid series-board-single">
-            <section class="bento-card series-plan-card series-step-card">
-              <div class="series-step-label"><strong>2</strong><span>编页表</span></div>
-              <div class="bento-header">
-                <div><span class="bento-subtitle">Shot List</span><h2 id="seriesPlanTitle">页表 / 镜头清单</h2></div>
-                <button id="seriesPlanBtn" type="button" class="btn-ghost">✨ 规划页表</button>
-              </div>
-              <p id="seriesPlanHelp" class="help-text">每行就是一张图. 左边写标题, 右边只写这一张相对母版要变化的内容.</p>
-              <div class="series-example-card">
-                <strong>示例</strong>
-                <code>封面主视觉: 主体居中, 展示整体外观, 背景干净</code>
-                <code>细节特写: 镜头靠近材质或角色标志物, 保持统一光影</code>
-              </div>
-              <textarea id="seriesPagePlan" class="large-textarea series-plan-textarea" placeholder="封面主视觉: 主体居中, 建立第一印象, 背景干净&#10;细节特写: 突出材质或角色标志物, 保持统一光影&#10;场景延展: 展示使用场景或动作变化, 不改变主体设定"></textarea>
-              <div class="series-plan-footer">
-                <p id="seriesCountHint" class="help-text">准备规划资产...</p>
-                <span>生成时会按行逐张返回, 已完成图片会先保留.</span>
-              </div>
-            </section>
-          </div>
-
           <div id="seriesStatusBar" class="status-bar"></div>
-          <p class="help-text task-note series-task-note">系列生成会逐张排队执行. 刷新或关闭页面会丢失当前前端状态, 已保存到画廊的图片仍会保留.</p>
-          <div class="series-results-header series-step-card">
-            <div class="series-step-label"><strong>3</strong><span>生成结果</span></div>
-            <div>
-              <span class="bento-subtitle">Output</span>
-              <h2>生成结果</h2>
-            </div>
-          </div>
           <div id="seriesResultGrid" class="image-grid"></div>
           <div id="seriesResultEmpty" class="canvas-empty-state series-empty-state">
             <div class="empty-icon">🪴</div>
-            <p>完善母版和页表后点击生成, 资产包会逐张出现在这里.</p>
+            <p>等待提交后逐张生成.</p>
           </div>
         </section>
       </form>
@@ -451,8 +401,14 @@
 
   <!-- 图片预览遮罩 -->
   <div id="previewOverlay" class="preview-overlay">
-    <button class="preview-close" type="button">
+    <button class="preview-close" type="button" aria-label="关闭">
       <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+    </button>
+    <button id="previewPrev" class="preview-nav preview-nav-prev" type="button" aria-label="上一张" hidden>
+      <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+    </button>
+    <button id="previewNext" class="preview-nav preview-nav-next" type="button" aria-label="下一张" hidden>
+      <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>
     </button>
     <img id="previewImg" alt="预览" draggable="false" />
     <span id="previewHint" class="preview-hint">滚轮缩放 · 拖拽平移 · ESC 关闭</span>
