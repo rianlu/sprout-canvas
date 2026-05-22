@@ -234,19 +234,77 @@ async function processImageJob(job) {
 
 // ----- Provider routing -----
 
-export function chooseImageProvider(config, upstreamPath, contentType, excludeId) {
-  return rankedImageProviders(config, upstreamPath, contentType, excludeId)[0];
+export function chooseImageProvider(config, upstreamPath, contentType, excludeId, body) {
+  const provider = rankedImageProviders(config, upstreamPath, contentType, excludeId, body)[0];
+  if (!provider) throw new Error(`没有兼容的生图服务商: ${requestKindLabel(upstreamPath, contentType)}`);
+  return provider;
+}
+
+export function providerSupportsRequest(provider, upstreamPath, contentType) {
+  return compatibleProviders({ providers: [provider] }, upstreamPath, contentType, null).length > 0;
 }
 
 export function rewriteImageJobBody(provider, body, contentType) {
-  if (!String(contentType || '').includes('application/json')) return body;
-  try {
-    const payload = JSON.parse(Buffer.from(body).toString('utf8') || '{}');
-    payload.model = provider.imageModel;
-    return Buffer.from(JSON.stringify(payload));
-  } catch {
-    return body;
+  if (String(contentType || '').includes('application/json')) {
+    try {
+      const payload = JSON.parse(Buffer.from(body).toString('utf8') || '{}');
+      payload.model = provider.imageModel;
+      return Buffer.from(JSON.stringify(payload));
+    } catch {
+      return body;
+    }
   }
+  if (isMultipartEdit(contentType)) return rewriteMultipartFormField(body, contentType, 'model', provider.imageModel);
+  return body;
+}
+
+function requestKindLabel(upstreamPath, contentType) {
+  if (upstreamPath === '/v1/images/generations') return 'Images 文生图';
+  if (upstreamPath === '/v1/images/edits' && isMultipartEdit(contentType)) return 'Images 图生图';
+  if (upstreamPath.startsWith('/v1/responses')) return 'Responses 生图';
+  return upstreamPath;
+}
+
+function isJsonContent(contentType) {
+  return String(contentType || '').includes('application/json');
+}
+
+function isMultipartEdit(contentType) {
+  return String(contentType || '').includes('multipart/form-data');
+}
+
+function parseJsonBody(body) {
+  try {
+    return JSON.parse(Buffer.from(body).toString('utf8') || '{}');
+  } catch {
+    return {};
+  }
+}
+
+function referenceImagesFromPayload(payload) {
+  const refs = Array.isArray(payload?.ref_images) ? payload.ref_images : Array.isArray(payload?.input_images) ? payload.input_images : [];
+  return refs
+    .map((ref, index) => ({
+      name: String(ref?.name || `reference-${index + 1}.jpg`),
+      imageUrl: String(ref?.image_url || ref?.dataUrl || ref?.data_url || ''),
+    }))
+    .filter((ref) => ref.imageUrl.startsWith('data:image/'));
+}
+
+function payloadHasReferenceImages(payload) {
+  return referenceImagesFromPayload(payload).length > 0;
+}
+
+function jobJsonPayload(job) {
+  return parseJsonBody(job.originalBody || job.body);
+}
+
+function isSemanticImageGeneration(job) {
+  return job.upstreamPath === '/v1/images/generations' && isJsonContent(job.contentType);
+}
+
+function isSemanticImageEdit(job) {
+  return isSemanticImageGeneration(job) && payloadHasReferenceImages(jobJsonPayload(job));
 }
 
 function modeForUpstreamPath(upstreamPath) {
@@ -264,24 +322,26 @@ function providerLoad(providerId) {
   return count;
 }
 
-function compatibleProviders(config, upstreamPath, contentType) {
+function compatibleProviders(config, upstreamPath, contentType, body) {
+  const providers = Array.isArray(config.providers) ? config.providers : [];
+  if (upstreamPath === '/v1/images/generations' && isJsonContent(contentType)) {
+    return providers.filter((provider) => provider.generationMode === 'images' || provider.generationMode === 'responses');
+  }
+  if (upstreamPath === '/v1/images/edits' && isMultipartEdit(contentType)) {
+    return providers.filter((provider) => provider.generationMode === 'images');
+  }
+  if (upstreamPath.startsWith('/v1/responses')) {
+    return providers.filter((provider) => provider.generationMode === 'responses');
+  }
   const mode = modeForUpstreamPath(upstreamPath);
-  let candidates = config.providers.filter((provider) => !mode || provider.generationMode === mode);
-  if (upstreamPath === '/v1/images/generations' && String(contentType || '').includes('application/json')) {
-    candidates = config.providers.filter((provider) => provider.generationMode === 'images' || provider.generationMode === 'responses');
-  }
-  if (upstreamPath === '/v1/images/edits' && !String(contentType || '').includes('application/json')) {
-    // Multipart edits: must be a true images provider with the same model.
-    // generationMode='responses' upstreams typically lack /v1/images/edits.
-    candidates = candidates.filter((provider) => provider.generationMode === 'images' && provider.imageModel === config.imageModel);
-  }
-  return candidates.length ? candidates : [config];
+  return providers.filter((provider) => !mode || provider.generationMode === mode);
 }
 
-function rankedImageProviders(config, upstreamPath, contentType, excludeId) {
-  let candidates = compatibleProviders(config, upstreamPath, contentType);
+function rankedImageProviders(config, upstreamPath, contentType, excludeId, body) {
+  let candidates = compatibleProviders(config, upstreamPath, contentType, body);
   if (excludeId) candidates = candidates.filter((p) => p.id !== excludeId);
-  if (!candidates.length) candidates = compatibleProviders(config, upstreamPath, contentType);
+  if (!candidates.length) candidates = compatibleProviders(config, upstreamPath, contentType, body);
+  if (!candidates.length) return [];
   providerPickSeq += 1;
   return candidates
     .map((provider, index) => ({ provider, load: providerLoad(provider.id), order: (index + providerPickSeq) % candidates.length }))
@@ -291,7 +351,7 @@ function rankedImageProviders(config, upstreamPath, contentType, excludeId) {
 
 function providersForJob(job, config) {
   if (!job.autoProviderRouting) return [config];
-  const providers = rankedImageProviders(config, job.upstreamPath, job.contentType, job.excludeProviderId);
+  const providers = rankedImageProviders(config, job.upstreamPath, job.contentType, job.excludeProviderId, job.originalBody || job.body);
   const selectedIndex = providers.findIndex((provider) => provider.id === job.providerId);
   if (selectedIndex <= 0) return providers;
   const [selectedProvider] = providers.splice(selectedIndex, 1);
@@ -304,11 +364,34 @@ function applyJobProvider(job, provider) {
   job.body = rewriteImageJobBody(provider, job.originalBody || job.body, job.contentType);
 }
 
+function multipartBoundary(contentType) {
+  const match = String(contentType || '').match(/boundary=(?:("[^"]+")|([^;]+))/i);
+  return (match?.[1] || match?.[2] || '').replace(/^"|"$/g, '').trim();
+}
+
+function rewriteMultipartFormField(body, contentType, fieldName, value) {
+  const boundary = multipartBoundary(contentType);
+  if (!boundary) return body;
+  const source = Buffer.from(body).toString('latin1');
+  const pattern = new RegExp('(Content-Disposition: form-data;[^\\r\\n]*name="' + fieldName + '"[^\\r\\n]*\\r?\\n(?:[^\\r\\n]+\\r?\\n)*\\r?\\n)([^\\r\\n]*)');
+  if (pattern.test(source)) {
+    return Buffer.from(source.replace(pattern, `$1${value}`), 'latin1');
+  }
+  const closing = `--${boundary}--`;
+  const fieldPart = `--${boundary}\r\nContent-Disposition: form-data; name="${fieldName}"\r\n\r\n${value}\r\n`;
+  if (source.includes(closing)) return Buffer.from(source.replace(closing, `${fieldPart}${closing}`), 'latin1');
+  return body;
+}
+
+
 // ----- Upstream execution -----
 
 async function executeImageJobWithProvider(job, config) {
-  if (job.upstreamPath === '/v1/images/generations' && config.generationMode === 'responses' && String(job.contentType || '').includes('application/json')) {
+  if (isSemanticImageGeneration(job) && config.generationMode === 'responses') {
     return processResponsesBackedImagesJob(job, config);
+  }
+  if (isSemanticImageEdit(job) && config.generationMode === 'images') {
+    return processImagesEditBackedGenerationJob(job, config);
   }
   if (job.upstreamPath === '/v1/responses') {
     return callResponsesAndExtractImage(job.body, config);
@@ -375,9 +458,69 @@ async function callResponsesAndExtractImage(payloadBuffer, config) {
   };
 }
 
+async function processImagesEditBackedGenerationJob(job, config) {
+  const imagesPayload = jobJsonPayload(job);
+  const { body, contentType } = buildImagesEditMultipartFromPayload(config, imagesPayload);
+  const upstream = await fetch(`${config.baseUrl}/v1/images/edits`, {
+    method: 'POST',
+    headers: upstreamHeaders(config, contentType),
+    body,
+    signal: timeoutSignal(IMAGE_UPSTREAM_TIMEOUT_MS),
+  });
+  const upstreamBody = Buffer.from(await upstream.arrayBuffer());
+  return {
+    status: upstream.status,
+    statusText: upstream.statusText,
+    contentType: upstream.headers.get('content-type') || 'application/json; charset=utf-8',
+    cacheControl: upstream.headers.get('cache-control') || '',
+    body: upstreamBody,
+    ok: upstream.ok,
+    error: upstream.ok ? '' : await formatUpstreamErrorFromBody(upstream, upstreamBody),
+  };
+}
+
+function dataUrlToImagePart(ref) {
+  const match = ref.imageUrl.match(/^data:([^;,]+)(;base64)?,(.*)$/s);
+  if (!match) return null;
+  const mime = match[1] || 'image/jpeg';
+  const raw = match[3] || '';
+  const buffer = match[2] ? Buffer.from(raw, 'base64') : Buffer.from(decodeURIComponent(raw));
+  return { name: ref.name, mime, buffer };
+}
+
+function appendMultipartField(parts, boundary, name, value) {
+  if (value === undefined || value === null || value === '' || value === 'auto') return;
+  parts.push(Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="${name}"\r\n\r\n${value}\r\n`));
+}
+
+function appendMultipartFile(parts, boundary, name, file) {
+  parts.push(Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="${name}"; filename="${file.name}"\r\nContent-Type: ${file.mime}\r\n\r\n`));
+  parts.push(file.buffer);
+  parts.push(Buffer.from('\r\n'));
+}
+
+
+function buildImagesEditMultipartFromPayload(provider, imagesPayload) {
+  const boundary = `----sprout-canvas-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  const parts = [];
+  appendMultipartField(parts, boundary, 'model', provider.imageModel);
+  appendMultipartField(parts, boundary, 'prompt', imagesPayload.prompt || '');
+  appendMultipartField(parts, boundary, 'n', imagesPayload.n || 1);
+  appendMultipartField(parts, boundary, 'size', imagesPayload.size);
+  appendMultipartField(parts, boundary, 'quality', imagesPayload.quality);
+  appendMultipartField(parts, boundary, 'background', imagesPayload.background);
+  appendMultipartField(parts, boundary, 'output_format', imagesPayload.output_format);
+  appendMultipartField(parts, boundary, 'output_compression', imagesPayload.output_compression);
+  for (const ref of referenceImagesFromPayload(imagesPayload)) {
+    const file = dataUrlToImagePart(ref);
+    if (file) appendMultipartFile(parts, boundary, 'image', file);
+  }
+  parts.push(Buffer.from(`--${boundary}--\r\n`));
+  return { body: Buffer.concat(parts), contentType: `multipart/form-data; boundary=${boundary}` };
+}
+
 async function processResponsesBackedImagesJob(job, config) {
-  let imagesPayload = {};
-  try { imagesPayload = JSON.parse(Buffer.from(job.body).toString('utf8') || '{}'); } catch {}
+  const imagesPayload = jobJsonPayload(job);
   const responsesPayload = buildResponsesPayloadFromImagesPayload(config, imagesPayload);
   return callResponsesAndExtractImage(Buffer.from(JSON.stringify(responsesPayload)), config);
 }
@@ -390,11 +533,18 @@ function buildResponsesPayloadFromImagesPayload(provider, imagesPayload) {
   if (imagesPayload?.quality) tool.quality = imagesPayload.quality;
   if (imagesPayload?.background) tool.background = imagesPayload.background;
   if (imagesPayload?.output_compression) tool.output_compression = imagesPayload.output_compression;
+  const refs = referenceImagesFromPayload(imagesPayload);
+  const userContent = refs.length
+    ? [
+      ...refs.map((ref) => ({ type: 'input_image', image_url: ref.imageUrl })),
+      { type: 'input_text', text: `请根据参考图片生成新图片。要求: ${prompt}` },
+    ]
+    : `请生成以下描述的图片: ${prompt}`;
   return {
     model: provider.imageModel,
     input: [
       { role: 'system', content: '你是一个图片生成助手。用户要求你生成图片时, 必须调用 image_generation 工具来生成图片, 不要用文字描述图片内容。直接生成图片, 不要多说任何话。' },
-      { role: 'user', content: `请生成以下描述的图片: ${prompt}` },
+      { role: 'user', content: userContent },
     ],
     tools: [tool],
     stream: true,

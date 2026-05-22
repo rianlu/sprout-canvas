@@ -640,9 +640,19 @@ async function handleQueuedImageJob(req, res, upstreamPath) {
   const autoProviderRouting = !providerIdFromRequest(req);
   const excludeProviderId = String(req.headers['x-exclude-provider-id'] || '').trim();
   const clientContext = decodeClientContextHeader(req);
-  const selectedProvider = autoProviderRouting
-    ? queue.chooseImageProvider(config, upstreamPath, contentType, excludeProviderId)
-    : config;
+  let selectedProvider;
+  try {
+    selectedProvider = autoProviderRouting
+      ? queue.chooseImageProvider(config, upstreamPath, contentType, excludeProviderId, rawBody)
+      : config;
+    if (!autoProviderRouting && !queue.providerSupportsRequest(selectedProvider, upstreamPath, contentType)) {
+      json(res, 400, { error: `服务商 ${selectedProvider.name} 不支持当前请求类型` });
+      return;
+    }
+  } catch (error) {
+    json(res, 400, { error: error.message || String(error) });
+    return;
+  }
   const body = queue.rewriteImageJobBody(selectedProvider, rawBody, contentType);
   const job = {
     id: queue.nextJobId(),
@@ -771,8 +781,8 @@ const server = createServer(async (req, res) => {
     if (url.pathname === '/api/models' && req.method === 'GET') return proxyRequest(req, res, '/v1/models');
     if (url.pathname === '/api/text' && req.method === 'POST') return handleTextGeneration(req, res);
     if (url.pathname === '/api/responses' && req.method === 'POST') return proxyRequest(req, res, '/v1/responses');
-    if (url.pathname === '/api/images/generations' && req.method === 'POST') return proxyRequest(req, res, '/v1/images/generations');
-    if (url.pathname === '/api/images/edits' && req.method === 'POST') return proxyRequest(req, res, '/v1/images/edits');
+    if (url.pathname === '/api/images/generations' && req.method === 'POST') return handleQueuedImageJob(req, res, '/v1/images/generations');
+    if (url.pathname === '/api/images/edits' && req.method === 'POST') return handleQueuedImageJob(req, res, '/v1/images/edits');
     if (url.pathname === '/api/jobs/responses' && req.method === 'POST') return handleQueuedImageJob(req, res, '/v1/responses');
     if (url.pathname === '/api/jobs/images/generations' && req.method === 'POST') return handleQueuedImageJob(req, res, '/v1/images/generations');
     if (url.pathname === '/api/jobs/images/edits' && req.method === 'POST') return handleQueuedImageJob(req, res, '/v1/images/edits');

@@ -631,17 +631,6 @@ function getConfig(options = {}) {
   let generationMode = els.generationMode.value;
   let imageModel = els.imageModel.value.trim();
 
-  // 图生图优先走 Images Edit 服务商, 避免把 multipart 参考图发到 Responses 源导致上游 413.
-  const refs = options.refImagesOverride || options.refImages || (typeof refImages !== 'undefined' ? refImages : []);
-  if (refs && refs.length > 0 && !providerId) {
-    const imageProvider = (typeof serverProviders !== 'undefined' ? serverProviders : []).find((provider) => provider.generationMode === 'images');
-    const responsesProvider = (typeof serverProviders !== 'undefined' ? serverProviders : []).find((provider) => provider.generationMode === 'responses');
-    const provider = imageProvider || responsesProvider;
-    if (provider) {
-      generationMode = provider.generationMode || generationMode;
-      imageModel = provider.imageModel || imageModel;
-    }
-  }
 
   const prompt = String(options.promptOverride ?? els.prompt.value).trim();
   if (!prompt) throw new Error('请填写提示词');
@@ -772,6 +761,19 @@ function buildImagesEditFormData(config, count = config.imageCount, runIndex = 0
   refs.forEach((ref) => formData.append('image', ref.file, ref.name));
   return formData;
 }
+
+function buildUnifiedImagesPayload(config, count = config.imageCount, runIndex = 0) {
+  const refs = config.refImages || refImages;
+  const body = buildImagesPayload(config, count, runIndex);
+  if (refs.length > 0) {
+    body.ref_images = refs.map((ref, index) => ({
+      name: ref.name || `reference-${index + 1}.jpg`,
+      image_url: ref.dataUrl,
+    }));
+  }
+  return body;
+}
+
 
 function extractImagesDataUrls(data, format) {
   if (!Array.isArray(data?.data)) return [];
@@ -2510,14 +2512,15 @@ async function dataUrlFromQueueResult(result, format) {
 
 function buildEndpointAndBody(snapshot, runIndex) {
   const refs = snapshot.refImages || [];
+  if (refs.length > 0) {
+    return { endpoint: '/v1/images/generations', body: JSON.stringify(buildUnifiedImagesPayload(snapshot, 1, runIndex)), contentType: 'application/json' };
+  }
   if (snapshot.generationMode === 'images') {
-    if (refs.length > 0) {
-      return { endpoint: '/v1/images/edits', body: buildImagesEditFormData(snapshot, 1, runIndex), contentType: '' };
-    }
     return { endpoint: '/v1/images/generations', body: JSON.stringify(buildImagesPayload(snapshot, 1, runIndex)), contentType: 'application/json' };
   }
   return { endpoint: '/v1/responses', body: JSON.stringify(buildImagePayload(snapshot, runIndex)), contentType: 'application/json' };
 }
+
 
 registerCompletionHandler('single', async ({ job, result, error }) => {
   const ctx = job.clientContext || {};
