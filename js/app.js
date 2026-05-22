@@ -117,7 +117,11 @@ const els = {
 const SETTINGS_KEY = 'img_gen_studio_settings_v2';
 const DB_NAME = 'img-gen-gallery';
 const DB_VERSION = 2;
-const MAX_REF_SIZE = 50 * 1024 * 1024;
+const MAX_REF_SOURCE_SIZE = 50 * 1024 * 1024;
+const MAX_REF_UPLOAD_SIZE = 2 * 1024 * 1024;
+const MAX_REF_TOTAL_UPLOAD_SIZE = 5 * 1024 * 1024;
+const MAX_REF_DIMENSION = 1600;
+const REF_IMAGE_QUALITY = 0.86;
 const TEXT_FEEDBACK_MS = 8000;
 
 let refImages = [];
@@ -247,6 +251,92 @@ function formatBytes(bytes) {
   return kb > 1024 ? `${(kb / 1024).toFixed(1)} MB` : `${kb.toFixed(1)} KB`;
 }
 
+function fileToDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(new Error('参考图读取失败'));
+    reader.readAsDataURL(file);
+  });
+}
+
+function canvasToBlob(canvas, mime, quality) {
+  return new Promise((resolve, reject) => {
+    canvas.toBlob((blob) => {
+      if (blob) resolve(blob);
+      else reject(new Error('参考图压缩失败'));
+    }, mime, quality);
+  });
+}
+
+function blobToFile(blob, name) {
+  const safeName = String(name || `ref-${Date.now()}.jpg`).replace(/\.[^.]+$/, '');
+  return new File([blob], `${safeName}.jpg`, { type: blob.type || 'image/jpeg' });
+}
+
+function totalRefBytes(refs) {
+  return refs.reduce((total, ref) => total + (ref?.file?.size || 0), 0);
+}
+
+function enforceRefTotalLimit(refs, nextFile) {
+  const total = totalRefBytes(refs) + (nextFile?.size || 0);
+  if (total <= MAX_REF_TOTAL_UPLOAD_SIZE) return true;
+  alert(`参考图总上传体积约 ${formatBytes(total)}, 已超过 ${formatBytes(MAX_REF_TOTAL_UPLOAD_SIZE)}. 请减少张数或使用更小的图片.`);
+  return false;
+}
+
+async function prepareReferenceFile(file) {
+  if (!file?.type?.startsWith('image/')) return null;
+  if (file.size > MAX_REF_SOURCE_SIZE) {
+    alert(`${file.name || '图片'} 超过 ${formatBytes(MAX_REF_SOURCE_SIZE)}, 已跳过`);
+    return null;
+  }
+
+  const sourceDataUrl = await fileToDataUrl(file);
+  let outputFile = file;
+  let outputDataUrl = sourceDataUrl;
+  let compressed = false;
+
+  try {
+    const image = await imageFromDataUrl(sourceDataUrl);
+    const largestSide = Math.max(image.naturalWidth || 0, image.naturalHeight || 0);
+    const scale = largestSide > MAX_REF_DIMENSION ? MAX_REF_DIMENSION / largestSide : 1;
+    const shouldCompress = file.size > MAX_REF_UPLOAD_SIZE || scale < 1 || file.type !== 'image/jpeg';
+    if (shouldCompress) {
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.max(1, Math.round((image.naturalWidth || 1) * scale));
+      canvas.height = Math.max(1, Math.round((image.naturalHeight || 1) * scale));
+      const context = canvas.getContext('2d');
+      context.fillStyle = '#fff';
+      context.fillRect(0, 0, canvas.width, canvas.height);
+      context.drawImage(image, 0, 0, canvas.width, canvas.height);
+      const blob = await canvasToBlob(canvas, 'image/jpeg', REF_IMAGE_QUALITY);
+      if (blob.size < file.size || file.size > MAX_REF_UPLOAD_SIZE || scale < 1) {
+        outputFile = blobToFile(blob, file.name);
+        outputDataUrl = await fileToDataUrl(outputFile);
+        compressed = outputFile.size < file.size;
+      }
+    }
+  } catch {
+    outputFile = file;
+    outputDataUrl = sourceDataUrl;
+  }
+
+  if (outputFile.size > MAX_REF_UPLOAD_SIZE) {
+    alert(`${file.name || '图片'} 处理后仍有 ${formatBytes(outputFile.size)}, 超过单张上传上限 ${formatBytes(MAX_REF_UPLOAD_SIZE)}, 已跳过`);
+    return null;
+  }
+
+  return {
+    name: outputFile.name || file.name || `pasted-${Date.now()}.jpg`,
+    file: outputFile,
+    dataUrl: outputDataUrl,
+    originalSize: file.size,
+    uploadSize: outputFile.size,
+    compressed,
+  };
+}
+
 const ASPECT_RATIOS = {
   '1:1': [1, 1],
   '16:9': [16, 9],
@@ -364,6 +454,7 @@ function readSettings() {
 
 function saveSettings() {
   localStorage.setItem(SETTINGS_KEY, JSON.stringify({
+    providerId: selectedProviderId(),
     imageCount: els.imageCount.value,
     aspectRatio: els.aspectRatio.value,
     imageQuality: els.imageQuality.value,
@@ -372,7 +463,7 @@ function saveSettings() {
 }
 
 function selectedProviderId() {
-  return '';
+  return (els.providerSelect?.value || preferredProviderId || '').trim();
 }
 
 function findServerProvider(providerId) {
@@ -537,13 +628,15 @@ function getConfig(options = {}) {
   let generationMode = els.generationMode.value;
   let imageModel = els.imageModel.value.trim();
 
-  // 自动处理图生图的 AnyRouter 路由：如果存在参考图，强制使用 responses 模式（前提是后台配了）
-  const refs = options.refImages || (typeof refImages !== 'undefined' ? refImages : []);
-  if (refs && refs.length > 0) {
-    const responsesProvider = (typeof serverProviders !== 'undefined' ? serverProviders : []).find(p => p.generationMode === 'responses');
-    if (responsesProvider) {
-      generationMode = 'responses';
-      imageModel = responsesProvider.imageModel || imageModel;
+  // 图生图优先走 Images Edit 服务商, 避免把 multipart 参考图发到 Responses 源导致上游 413.
+  const refs = options.refImagesOverride || options.refImages || (typeof refImages !== 'undefined' ? refImages : []);
+  if (refs && refs.length > 0 && !providerId) {
+    const imageProvider = (typeof serverProviders !== 'undefined' ? serverProviders : []).find((provider) => provider.generationMode === 'images');
+    const responsesProvider = (typeof serverProviders !== 'undefined' ? serverProviders : []).find((provider) => provider.generationMode === 'responses');
+    const provider = imageProvider || responsesProvider;
+    if (provider) {
+      generationMode = provider.generationMode || generationMode;
+      imageModel = provider.imageModel || imageModel;
     }
   }
 
@@ -1065,24 +1158,25 @@ function renderThumbnails() {
   });
 }
 
-function addRefFile(file) {
-  if (!file?.type?.startsWith('image/')) return false;
-  if (file.size > MAX_REF_SIZE) {
-    alert(`${file.name || '图片'} 超过 50MB, 已跳过`);
-    return false;
-  }
-  const reader = new FileReader();
-  reader.onload = () => {
-    refImages.push({ name: file.name || `pasted-${Date.now()}.png`, file, dataUrl: reader.result });
-    renderThumbnails();
-  };
-  reader.readAsDataURL(file);
+async function addRefFile(file) {
+  const ref = await prepareReferenceFile(file);
+  if (!ref) return false;
+  if (!enforceRefTotalLimit(refImages, ref.file)) return false;
+  refImages.push(ref);
+  renderThumbnails();
   return true;
 }
 
-function addRefFiles(files) {
-  Array.from(files || []).forEach(addRefFile);
+async function addRefFiles(files) {
+  let added = 0;
+  for (const file of Array.from(files || [])) {
+    if (await addRefFile(file)) added += 1;
+  }
   els.imageFile.value = '';
+  if (added > 0) {
+    const total = totalRefBytes(refImages);
+    setStatus('done', `已添加 ${added} 张参考图, 上传前会自动压缩. 当前参考图总量 ${formatBytes(total)}.`);
+  }
 }
 
 function clearRefImages() {
@@ -1098,13 +1192,12 @@ function clipboardImageFiles(event) {
     .filter(Boolean);
 }
 
-function handlePasteImages(event) {
+async function handlePasteImages(event) {
   if (!els.tabDraw.classList.contains('active')) return;
   const files = clipboardImageFiles(event);
   if (!files.length) return;
   event.preventDefault();
-  files.forEach(addRefFile);
-  setStatus('done', `已从剪贴板添加 ${files.length} 张参考图.`);
+  await addRefFiles(files);
 }
 
 function handleRefDragOver(event) {
@@ -1118,13 +1211,12 @@ function handleRefDragLeave(event) {
   els.thumbRow.classList.remove('drag-over');
 }
 
-function handleRefDrop(event) {
+async function handleRefDrop(event) {
   event.preventDefault();
   els.thumbRow.classList.remove('drag-over');
   const files = Array.from(event.dataTransfer?.files || []).filter((file) => file.type.startsWith('image/'));
   if (!files.length) return;
-  addRefFiles(files);
-  setStatus('done', `已拖拽添加 ${files.length} 张参考图.`);
+  await addRefFiles(files);
 }
 
 function renderSeriesThumbnails() {
@@ -1150,21 +1242,21 @@ function renderSeriesThumbnails() {
   });
 }
 
-function addSeriesRefFiles(files) {
-  Array.from(files).forEach((file) => {
-    if (!file.type.startsWith('image/')) return;
-    if (file.size > MAX_REF_SIZE) {
-      alert(`${file.name} 超过 50MB, 已跳过`);
-      return;
-    }
-    const reader = new FileReader();
-    reader.onload = () => {
-      seriesRefImages.push({ name: file.name, file, dataUrl: reader.result });
-      renderSeriesThumbnails();
-    };
-    reader.readAsDataURL(file);
-  });
+async function addSeriesRefFiles(files) {
+  let added = 0;
+  for (const file of Array.from(files || [])) {
+    const ref = await prepareReferenceFile(file);
+    if (!ref) continue;
+    if (!enforceRefTotalLimit(seriesRefImages, ref.file)) continue;
+    seriesRefImages.push(ref);
+    added += 1;
+  }
+  renderSeriesThumbnails();
   els.seriesImageFile.value = '';
+  if (added > 0) {
+    const total = totalRefBytes(seriesRefImages);
+    setSeriesStatus('done', `已添加 ${added} 张系列参考图, 上传前会自动压缩. 当前参考图总量 ${formatBytes(total)}.`);
+  }
 }
 
 function clearSeriesRefImages() {

@@ -285,6 +285,17 @@ async function testImagesApiSingleRequestPayload() {
   assert.equal(dataUrl, `data:image/png;base64,${Buffer.from('fake-image').toString('base64')}`);
 
   setBaseValues();
+  elements.get('providerSelect').value = 'anyrouter';
+  const selectedConfig = context.getConfig();
+  context.fetch = mockQueuedImageFetch({
+    body: { data: [{ b64_json: Buffer.from('provider-image').toString('base64') }] },
+    onSubmit(url, options) { captured = { url, options, body: JSON.parse(options.body) }; },
+  });
+  await context.generateWithImagesApi(selectedConfig, 0);
+  assert.equal(selectedConfig.providerId, 'anyrouter');
+  assert.equal(captured.options.headers['X-Provider-Id'], 'anyrouter');
+
+  setBaseValues();
   const autoConfig = context.getConfig();
   const pngBase64 = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3, 4]).toString('base64');
   context.fetch = mockQueuedImageFetch({
