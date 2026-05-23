@@ -5,6 +5,7 @@ import { ReferenceUploader } from '../components/studio/ReferenceUploader';
 import { ResultGrid } from '../components/studio/ResultGrid';
 import { buildGenerationPayload, resolveSize } from '../lib/api/generation';
 import { requestTextGeneration } from '../lib/api/text';
+import { randomId } from '../lib/random/id';
 import type { QueueSubmitInput } from '../lib/api/queue';
 import type { GenerationConfig, RefImage, ResultRecord } from '../types/generation';
 
@@ -187,7 +188,7 @@ export function SeriesStudio({ onSubmit, results }: SeriesStudioProps) {
           endpoint: '/v1/images/generations',
           body: JSON.stringify(payload),
           contentType: 'application/json',
-          clientContext: { kind: 'series', placeholderId: crypto.randomUUID(), prompt: page.title, mode: config.mode },
+          clientContext: { kind: 'series', placeholderId: randomId('series'), prompt: page.title, mode: config.mode },
         });
       }
       setToast({ type: 'success', message: `已提交 ${effectivePages.length} 个系列任务, 可在右下角队列查看进度.` });

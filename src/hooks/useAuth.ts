@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { authStatus, login } from '../lib/api/auth';
+import { randomId } from '../lib/random/id';
 
 const USER_KEY = 'sprout_canvas_user_id';
 
 function getUserId() {
   let id = localStorage.getItem(USER_KEY);
   if (!id) {
-    id = crypto.randomUUID();
+    id = randomId('user');
     localStorage.setItem(USER_KEY, id);
   }
   return id;

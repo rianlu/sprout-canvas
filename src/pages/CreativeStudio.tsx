@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import type { GenerationConfig, RefImage, ResultRecord } from '../types/generation';
 import { buildGenerationPayload, resolveSize } from '../lib/api/generation';
 import { createRectMaskDataUrl } from '../lib/editor/mask';
+import { randomId } from '../lib/random/id';
 import { ModeSwitcher } from '../components/studio/ModeSwitcher';
 import { PromptPanel } from '../components/studio/PromptPanel';
 import { ReferenceUploader } from '../components/studio/ReferenceUploader';
@@ -70,7 +71,7 @@ export function CreativeStudio({ onSubmit, onRetry, results, jobs }: CreativeStu
     const payload = await buildGenerationPayload(snapshot, snapshot.editSelection ? (imageDataUrl) => createRectMaskDataUrl(imageDataUrl, snapshot.editSelection!) : undefined);
     const nextIds: string[] = [];
     for (let index = 0; index < snapshot.imageCount; index += 1) {
-      const id = crypto.randomUUID();
+      const id = randomId('result');
       nextIds.push(id);
       setSubmittedIds((current) => [id, ...current.filter((item) => item !== id)].slice(0, 24));
       await onSubmit({
