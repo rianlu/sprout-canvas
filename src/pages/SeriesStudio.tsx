@@ -136,17 +136,24 @@ export function SeriesStudio({ onSubmit, results }: SeriesStudioProps) {
   const [refs, setRefs] = useState<RefImage[]>([]);
   const [busy, setBusy] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [recentlySubmitted, setRecentlySubmitted] = useState<number | null>(null);
   const [toast, setToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const pages = useMemo(() => parsePlan(plan), [plan]);
   const seriesResults = results.filter((record) => record.kind === 'series').slice(0, 16);
   const plannedCount = Math.min(MAX_SERIES_BATCH, pages.length || Math.max(1, count));
-  const canSubmit = Boolean(content.trim() || style.trim()) && !busy && !submitting;
+  const canSubmit = Boolean(content.trim() || style.trim()) && !busy && !submitting && recentlySubmitted === null;
 
   useEffect(() => {
     if (!toast) return undefined;
     const timer = window.setTimeout(() => setToast(null), 2800);
     return () => window.clearTimeout(timer);
   }, [toast]);
+
+  useEffect(() => {
+    if (recentlySubmitted === null) return undefined;
+    const timer = window.setTimeout(() => setRecentlySubmitted(null), 3200);
+    return () => window.clearTimeout(timer);
+  }, [recentlySubmitted]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => writeDraft('series_content', content), 400);
@@ -217,6 +224,7 @@ export function SeriesStudio({ onSubmit, results }: SeriesStudioProps) {
         });
       }
       setToast({ type: 'success', message: `已提交 ${effectivePages.length} 个系列任务, 可在右下角队列查看进度.` });
+      setRecentlySubmitted(effectivePages.length);
     } finally {
       setSubmitting(false);
     }
@@ -283,7 +291,7 @@ export function SeriesStudio({ onSubmit, results }: SeriesStudioProps) {
                 <article key={`${page.title}-${index}`} className="series-plan-item"><span>{index + 1}</span><div><strong>{page.title}</strong><p>{page.goal}</p></div></article>
               ))}
             </div>
-            <Button variant="primary" className="generate-button" disabled={!canSubmit} onClick={() => { void runAction(submitSeries); }}>{submitting ? '正在提交...' : `提交 ${plannedCount} 个系列任务`}</Button>
+            <Button variant="primary" className="generate-button" disabled={!canSubmit} onClick={() => { void runAction(submitSeries); }}>{submitting ? '正在提交...' : recentlySubmitted !== null ? `✓ 已提交 ${recentlySubmitted} 张, 队列处理中` : `提交 ${plannedCount} 个系列任务`}</Button>
             <p className="series-help-text">提交后不会阻塞页面, 任务会进入右下角队列自动排队生成.</p>
           </Card>
         </aside>

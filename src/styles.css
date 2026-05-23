@@ -95,8 +95,8 @@ button, input, textarea, select { font: inherit; }
 .studio-hero p { color: var(--muted); margin-top: 8px; }
 .provider-pill { min-width: 180px; border: 1px solid var(--line); border-radius: 18px; background: var(--surface-lift); padding: 12px 14px; }
 .provider-pill span { display: block; color: var(--muted); font-size: 12px; margin-bottom: 4px; }
-.studio-workbench { display: grid; gap: 18px; align-items: start; }
-.studio-composer, .page-stack { display: grid; gap: 16px; align-content: start; }
+.studio-workbench { display: grid; gap: 18px; align-items: start; grid-template-columns: minmax(0, 1fr) minmax(420px, 1.05fr); }
+.studio-composer, .page-stack { display: grid; gap: 16px; align-content: start; min-width: 0; }
 .studio-preview { min-width: 0; border: 1px solid var(--line); background: var(--panel-soft); box-shadow: var(--shadow); backdrop-filter: blur(18px); border-radius: 28px; padding: 18px; }
 .preview-heading { display: flex; justify-content: space-between; align-items: start; gap: 12px; margin-bottom: 14px; }
 .preview-heading > span { color: var(--muted); font-size: 12px; }
@@ -202,7 +202,7 @@ h2 { font-size: 16px; }
 .series-plan-item strong { display: block; margin-bottom: 4px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .series-results-section { min-width: 0; border: 1px solid var(--line); background: var(--panel-soft); box-shadow: var(--shadow); backdrop-filter: blur(18px); border-radius: 28px; padding: 18px; }
 .series-help-text { text-align: center; margin-top: -4px; }
-@media (max-width: 1180px) { .series-layout { grid-template-columns: 1fr; } .series-main { grid-template-columns: minmax(0, 1.1fr) minmax(300px, 0.9fr); } .sticky-card { position: static; } }
+@media (max-width: 1180px) { .series-layout { grid-template-columns: 1fr; } .series-main { grid-template-columns: minmax(0, 1.1fr) minmax(300px, 0.9fr); } .sticky-card { position: static; } .studio-workbench { grid-template-columns: 1fr; } }
 @media (max-width: 860px) { .series-main { grid-template-columns: 1fr; } }
 @media (max-width: 720px) { .series-page { gap: 14px; } .series-layout { gap: 14px; } .series-step-heading { grid-template-columns: 1fr; } .series-settings-grid { grid-template-columns: 1fr; } .series-results-section { padding: 12px; border-radius: 22px; } }
 
