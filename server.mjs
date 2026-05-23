@@ -358,7 +358,7 @@ async function readLocalConfig(providerId) {
     defaultImageProvider,
     host: String(process.env.HOST || fileConfig.host || '127.0.0.1').trim(),
     port: Number(process.env.PORT || fileConfig.port || 8787),
-    imageConcurrency: Math.max(1, Number(process.env.IMAGE_CONCURRENCY || fileConfig.imageConcurrency || 2)),
+    imageConcurrency: Math.max(1, Number(process.env.IMAGE_CONCURRENCY || fileConfig.imageConcurrency || 1)),
     accessPassword: String(process.env.ACCESS_PASSWORD || fileConfig.accessPassword || '').trim(),
     authSessionDays: Math.max(1, Number(process.env.AUTH_SESSION_DAYS || fileConfig.authSessionDays || 7)),
     secureCookies: process.env.SECURE_COOKIES === '1' || fileConfig.secureCookies === true,

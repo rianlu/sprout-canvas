@@ -25,7 +25,7 @@ cp config/local.config.example.json config/local.config.json
 | `imageProviders[]` | 是 | 生图服务商列表, 每项至少填 `id / name / baseUrl / apiKey / imageModel / generationMode` |
 | `defaultImageProvider` | 是 | 默认生图服务商 `id`, 必须能在 `imageProviders` 中匹配到 |
 | `accessPassword` | 是 (生产) | 网页登录密码, **必须改掉默认值** |
-| `imageConcurrency` | 否 | 同时进行的生图任务数, 建议 `3`-`4` |
+| `imageConcurrency` | 否 | 生图并发数, 当前要求固定为 `1`, 所有生图任务严格排队 |
 | `host` | 否 | 监听地址; 用 Nginx 反代时保持 `127.0.0.1`, 直接暴露端口才改 `0.0.0.0` |
 | `port` | 否 | 监听端口, 默认 `8787` |
 | `secureCookies` | 否 | HTTPS 部署下改为 `true` |
