@@ -8,9 +8,9 @@ const modes: Array<{ key: StudioMode; label: string; desc: string }> = [
 
 export function ModeSwitcher({ value, onChange }: { value: StudioMode; onChange: (mode: StudioMode) => void }) {
   return (
-    <div className="mode-switcher">
+    <div className="mode-switcher" role="group" aria-label="生成模式">
       {modes.map((mode) => (
-        <button key={mode.key} className={value === mode.key ? 'active' : ''} onClick={() => onChange(mode.key)}>
+        <button key={mode.key} className={value === mode.key ? 'active' : ''} aria-pressed={value === mode.key} onClick={() => onChange(mode.key)}>
           <strong>{mode.label}</strong>
           <span>{mode.desc}</span>
         </button>

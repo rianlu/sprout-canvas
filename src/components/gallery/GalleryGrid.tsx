@@ -1,6 +1,8 @@
 import { ChevronLeft, ChevronRight, Download, Trash2, X } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import type { ResultRecord } from '../../types/generation';
+import { buildDownloadName } from '../../lib/image/filename';
+import { useFocusTrap } from '../../hooks/useFocusTrap';
 import { Button } from '../ui/Button';
 
 function hasValidTimestamp(timestamp: number) {
@@ -51,6 +53,7 @@ export function GalleryGrid({ records, onClear, onDelete }: { records: ResultRec
   const activeIndex = useMemo(() => records.findIndex((record) => record.id === activeId), [activeId, records]);
   const activeRecord = activeIndex >= 0 ? records[activeIndex] : null;
   const groupedRecords = useMemo(() => groupRecordsByDate(records), [records]);
+  const viewerRef = useFocusTrap<HTMLDivElement>(Boolean(activeRecord));
 
   function open(record: ResultRecord) {
     setActiveId(record.id);
@@ -70,7 +73,7 @@ export function GalleryGrid({ records, onClear, onDelete }: { records: ResultRec
   function download(record: ResultRecord) {
     const anchor = document.createElement('a');
     anchor.href = record.dataUrl;
-    anchor.download = `${record.id}.png`;
+    anchor.download = buildDownloadName(record.prompt, record.createdAt);
     anchor.click();
   }
 
@@ -128,7 +131,7 @@ export function GalleryGrid({ records, onClear, onDelete }: { records: ResultRec
       {activeRecord && (
         <div className="gallery-viewer" role="dialog" aria-modal="true" aria-label="图片预览">
           <button className="gallery-viewer-backdrop" onClick={close} aria-label="关闭预览" />
-          <div className="gallery-viewer-panel">
+          <div ref={viewerRef} className="gallery-viewer-panel">
             <button className="viewer-close" onClick={close} aria-label="关闭"><X size={20} /></button>
             {records.length > 1 && <button className="viewer-nav prev" onClick={() => move(-1)} aria-label="上一张"><ChevronLeft size={24} /></button>}
             <img src={activeRecord.dataUrl} alt={activeRecord.prompt || '生成图片'} />

@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
 import { ReferenceUploader } from '../components/studio/ReferenceUploader';
@@ -6,6 +6,7 @@ import { ResultGrid } from '../components/studio/ResultGrid';
 import { buildGenerationPayload, resolveSize } from '../lib/api/generation';
 import { requestTextGeneration } from '../lib/api/text';
 import { randomId } from '../lib/random/id';
+import { readDraft, writeDraft } from '../lib/storage/drafts';
 import type { QueueSubmitInput } from '../lib/api/queue';
 import type { GenerationConfig, RefImage, ResultRecord } from '../types/generation';
 
@@ -115,6 +116,8 @@ const PRESETS = {
 
 type PresetKey = keyof typeof PRESETS;
 
+const MAX_SERIES_BATCH = 12;
+
 function parsePlan(plan: string) {
   return plan.split('\n').map((line) => line.trim()).filter(Boolean).map((line, index) => {
     const [title, ...rest] = line.replace(/^[-\d.\s]+/, '').split(/[:：]/);
@@ -124,9 +127,9 @@ function parsePlan(plan: string) {
 
 export function SeriesStudio({ onSubmit, results }: SeriesStudioProps) {
   const [preset, setPreset] = useState<PresetKey>('custom');
-  const [content, setContent] = useState('');
-  const [style, setStyle] = useState('');
-  const [plan, setPlan] = useState('');
+  const [content, setContent] = useState(() => readDraft('series_content'));
+  const [style, setStyle] = useState(() => readDraft('series_style'));
+  const [plan, setPlan] = useState(() => readDraft('series_plan'));
   const [count, setCount] = useState(4);
   const [aspectRatio, setAspectRatio] = useState<GenerationConfig['aspectRatio']>('1:1');
   const [quality, setQuality] = useState<GenerationConfig['quality']>('auto');
@@ -136,8 +139,29 @@ export function SeriesStudio({ onSubmit, results }: SeriesStudioProps) {
   const [toast, setToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const pages = useMemo(() => parsePlan(plan), [plan]);
   const seriesResults = results.filter((record) => record.kind === 'series').slice(0, 16);
-  const plannedCount = pages.length || count;
+  const plannedCount = Math.min(MAX_SERIES_BATCH, pages.length || Math.max(1, count));
   const canSubmit = Boolean(content.trim() || style.trim()) && !busy && !submitting;
+
+  useEffect(() => {
+    if (!toast) return undefined;
+    const timer = window.setTimeout(() => setToast(null), 2800);
+    return () => window.clearTimeout(timer);
+  }, [toast]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => writeDraft('series_content', content), 400);
+    return () => window.clearTimeout(timer);
+  }, [content]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => writeDraft('series_style', style), 400);
+    return () => window.clearTimeout(timer);
+  }, [style]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => writeDraft('series_plan', plan), 400);
+    return () => window.clearTimeout(timer);
+  }, [plan]);
 
   async function createPlan() {
     if (!content.trim() && !style.trim()) throw new Error('请先填写需要生成的内容');
@@ -162,7 +186,8 @@ export function SeriesStudio({ onSubmit, results }: SeriesStudioProps) {
     if (!content.trim() && !style.trim()) throw new Error('请填写需要生成的内容');
     setSubmitting(true);
     const size = resolveSize(aspectRatio);
-    const effectivePages = pages.length ? pages : Array.from({ length: count }, (_, index) => ({ title: `第 ${index + 1} 张`, goal: `系列第 ${index + 1}/${count} 张` }));
+    const fallbackCount = Math.max(1, Math.min(MAX_SERIES_BATCH, Math.round(count) || 1));
+    const effectivePages = (pages.length ? pages : Array.from({ length: fallbackCount }, (_, index) => ({ title: `第 ${index + 1} 张`, goal: `系列第 ${index + 1}/${fallbackCount} 张` }))).slice(0, MAX_SERIES_BATCH);
     try {
       for (let index = 0; index < effectivePages.length; index += 1) {
         const page = effectivePages[index];
@@ -196,7 +221,6 @@ export function SeriesStudio({ onSubmit, results }: SeriesStudioProps) {
       setSubmitting(false);
     }
   }
-
   async function runAction(action: () => Promise<void>) {
     try {
       setToast(null);
@@ -240,7 +264,7 @@ export function SeriesStudio({ onSubmit, results }: SeriesStudioProps) {
             </div>
             <ReferenceUploader images={refs} onChange={setRefs} />
             <div className="field-grid series-settings-grid">
-              <label className="field"><span>没有规划时生成张数</span><input type="number" min={1} max={12} value={count} onChange={(event) => setCount(Number(event.target.value) || 1)} /></label>
+              <label className="field"><span>没有规划时生成张数</span><input type="number" inputMode="numeric" min={1} max={MAX_SERIES_BATCH} value={count} onChange={(event) => { const n = Number(event.target.value); setCount(Number.isFinite(n) ? n : 1); }} onBlur={() => setCount((current) => Math.max(1, Math.min(MAX_SERIES_BATCH, Math.round(current) || 1)))} /></label>
               <label className="field"><span>比例</span><select value={aspectRatio} onChange={(event) => setAspectRatio(event.target.value as GenerationConfig['aspectRatio'])}><option>1:1</option><option>16:9</option><option>9:16</option><option>4:3</option><option>3:4</option><option>auto</option></select></label>
               <label className="field"><span>质量</span><select value={quality} onChange={(event) => setQuality(event.target.value as GenerationConfig['quality'])}><option>auto</option><option>low</option><option>medium</option><option>high</option></select></label>
             </div>
@@ -253,7 +277,7 @@ export function SeriesStudio({ onSubmit, results }: SeriesStudioProps) {
               <span className="step-badge">3</span>
               <div><span className="eyebrow">Shot List</span><h2>确认图片清单</h2><p>每行一张图, 固定风格锚点只写一次, 每张图只写变化目标.</p></div>
             </div>
-            <label className="field"><span>图片清单</span><textarea className="series-plan-input" value={plan} onChange={(event) => setPlan(event.target.value)} placeholder="例:\n封面主视觉: 产品居中, 展示整体氛围\n卖点细节: 放大材质和关键功能\n场景应用: 展示真实使用环境" /></label>
+            <label className="field"><span>图片清单</span><textarea className="series-plan-input" value={plan} onChange={(event) => setPlan(event.target.value)} placeholder={'例:\n封面主视觉: 产品居中, 展示整体氛围\n卖点细节: 放大材质和关键功能\n场景应用: 展示真实使用环境'} /></label>
             <div className="series-plan-preview">
               {pages.length === 0 ? <div className="empty-state">还没有图片清单. 可以点击左侧“拆分成图片清单”, 或直接按示例手写.</div> : pages.map((page, index) => (
                 <article key={`${page.title}-${index}`} className="series-plan-item"><span>{index + 1}</span><div><strong>{page.title}</strong><p>{page.goal}</p></div></article>

@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { X } from 'lucide-react';
 import { fileToDataUrl, imageFromDataUrl } from '../lib/image/data-url';
+import { useFocusTrap } from '../hooks/useFocusTrap';
 import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
 import type { ResultRecord } from '../types/generation';
@@ -8,6 +9,35 @@ import type { ResultRecord } from '../types/generation';
 interface SlicePreview { id: string; dataUrl: string; filename: string; width: number; height: number }
 interface SplitSource { name: string; dataUrl: string; image: HTMLImageElement }
 type SplitFormat = 'png' | 'jpeg' | 'webp';
+
+function clampInt(value: number, min: number, max: number, fallback: number) {
+  if (!Number.isFinite(value)) return fallback;
+  return Math.max(min, Math.min(max, Math.round(value)));
+}
+
+function clampNonNegative(value: number, fallback: number) {
+  if (!Number.isFinite(value)) return fallback;
+  return Math.max(0, Math.round(value));
+}
+
+function canvasToDataUrl(canvas: HTMLCanvasElement, mime: string, quality?: number): Promise<string> {
+  return new Promise((resolve, reject) => {
+    canvas.toBlob((blob) => {
+      if (!blob) return reject(new Error('图片编码失败'));
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result || ''));
+      reader.onerror = () => reject(reader.error || new Error('图片读取失败'));
+      reader.readAsDataURL(blob);
+    }, mime, quality);
+  });
+}
+
+async function downloadSequentially(items: SlicePreview[]) {
+  for (let i = 0; i < items.length; i += 1) {
+    download(items[i].dataUrl, items[i].filename);
+    if (i < items.length - 1) await new Promise((resolve) => window.setTimeout(resolve, 80));
+  }
+}
 
 function splitMime(format: SplitFormat) {
   if (format === 'jpeg') return 'image/jpeg';
@@ -46,8 +76,11 @@ export function SplitTool({ galleryRecords }: { galleryRecords: ResultRecord[] }
   const [source, setSource] = useState<SplitSource | null>(null);
   const [slices, setSlices] = useState<SlicePreview[]>([]);
   const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
   const [galleryOpen, setGalleryOpen] = useState(false);
   const [sourceFloatOpen, setSourceFloatOpen] = useState(false);
+  const renderIdRef = useRef(0);
+  const galleryDialogRef = useFocusTrap<HTMLDivElement>(galleryOpen);
 
   async function loadFile(file: File) {
     const dataUrl = await fileToDataUrl(file);
@@ -65,7 +98,7 @@ export function SplitTool({ galleryRecords }: { galleryRecords: ResultRecord[] }
     setGalleryOpen(false);
   }
 
-  function split(target = source) {
+  async function split(target = source) {
     if (!target) return;
     setError('');
     const safeRows = Math.max(1, Math.min(20, Math.round(rows)));
@@ -77,28 +110,50 @@ export function SplitTool({ galleryRecords }: { galleryRecords: ResultRecord[] }
       setError('边距或间距过大, 已超过原图尺寸.');
       return;
     }
+    const myRenderId = ++renderIdRef.current;
+    setBusy(true);
     const cellWidth = usableWidth / safeCols;
     const cellHeight = usableHeight / safeRows;
     const next: SlicePreview[] = [];
-    for (let row = 0; row < safeRows; row += 1) {
-      for (let col = 0; col < safeCols; col += 1) {
-        const canvas = document.createElement('canvas');
-        canvas.width = Math.max(1, Math.round(cellWidth));
-        canvas.height = Math.max(1, Math.round(cellHeight));
-        const context = canvas.getContext('2d');
-        if (!context) continue;
-        context.drawImage(target.image, marginX + col * (cellWidth + gapX), marginY + row * (cellHeight + gapY), cellWidth, cellHeight, 0, 0, canvas.width, canvas.height);
-        const index = row * safeCols + col + 1;
-        next.push({ id: `${row}-${col}`, dataUrl: canvas.toDataURL(splitMime(format), format === 'png' ? undefined : quality / 100), filename: `slice-${String(index).padStart(2, '0')}.${splitExt(format)}`, width: canvas.width, height: canvas.height });
+    try {
+      for (let row = 0; row < safeRows; row += 1) {
+        for (let col = 0; col < safeCols; col += 1) {
+          if (renderIdRef.current !== myRenderId) return;
+          const canvas = document.createElement('canvas');
+          canvas.width = Math.max(1, Math.round(cellWidth));
+          canvas.height = Math.max(1, Math.round(cellHeight));
+          const context = canvas.getContext('2d');
+          if (!context) continue;
+          context.drawImage(target.image, marginX + col * (cellWidth + gapX), marginY + row * (cellHeight + gapY), cellWidth, cellHeight, 0, 0, canvas.width, canvas.height);
+          const dataUrl = await canvasToDataUrl(canvas, splitMime(format), format === 'png' ? undefined : quality / 100);
+          if (renderIdRef.current !== myRenderId) return;
+          const index = row * safeCols + col + 1;
+          next.push({ id: `${row}-${col}`, dataUrl, filename: `slice-${String(index).padStart(2, '0')}.${splitExt(format)}`, width: canvas.width, height: canvas.height });
+        }
       }
+      if (renderIdRef.current !== myRenderId) return;
+      setSlices(next);
+    } catch (renderError) {
+      if (renderIdRef.current === myRenderId) setError(renderError instanceof Error ? renderError.message : '切图失败');
+    } finally {
+      if (renderIdRef.current === myRenderId) setBusy(false);
     }
-    setSlices(next);
   }
 
   useEffect(() => {
-    if (!source) return;
-    split(source);
+    if (!source) return undefined;
+    const timer = window.setTimeout(() => { void split(source); }, 200);
+    return () => window.clearTimeout(timer);
   }, [rows, cols, marginX, marginY, gapX, gapY, format, quality, source]);
+
+  useEffect(() => {
+    if (!galleryOpen) return undefined;
+    function handleKey(event: KeyboardEvent) {
+      if (event.key === 'Escape') setGalleryOpen(false);
+    }
+    window.addEventListener('keydown', handleKey);
+    return () => window.removeEventListener('keydown', handleKey);
+  }, [galleryOpen]);
 
   const previewCols = Math.max(1, Math.min(20, Math.round(cols)));
 
@@ -109,7 +164,7 @@ export function SplitTool({ galleryRecords }: { galleryRecords: ResultRecord[] }
           <span className="eyebrow">Split</span>
           <h1>切图</h1>
         </div>
-        <div className="split-summary">{source ? `${source.image.naturalWidth}×${source.image.naturalHeight} · ${slices.length} 张` : '选择图片后开始切图'}</div>
+        <div className="split-summary">{source ? (busy ? '切图中...' : `${source.image.naturalWidth}×${source.image.naturalHeight} · ${slices.length} 张`) : '选择图片后开始切图'}</div>
       </div>
 
       <div className="split-workbench">
@@ -121,14 +176,14 @@ export function SplitTool({ galleryRecords }: { galleryRecords: ResultRecord[] }
             </div>
           </div>
           <div className="split-control-group">
-            <label className="field"><span>行数</span><input type="number" min={1} max={20} value={rows} onChange={(event) => setRows(Number(event.target.value) || 1)} /></label>
-            <label className="field"><span>列数</span><input type="number" min={1} max={20} value={cols} onChange={(event) => setCols(Number(event.target.value) || 1)} /></label>
-            <label className="field"><span>横向边距</span><input type="number" min={0} value={marginX} onChange={(event) => setMarginX(Number(event.target.value) || 0)} /></label>
-            <label className="field"><span>纵向边距</span><input type="number" min={0} value={marginY} onChange={(event) => setMarginY(Number(event.target.value) || 0)} /></label>
-            <label className="field"><span>横向间距</span><input type="number" min={0} value={gapX} onChange={(event) => setGapX(Number(event.target.value) || 0)} /></label>
-            <label className="field"><span>纵向间距</span><input type="number" min={0} value={gapY} onChange={(event) => setGapY(Number(event.target.value) || 0)} /></label>
+            <label className="field"><span>行数</span><input type="number" inputMode="numeric" min={1} max={20} value={rows} onChange={(event) => { const n = Number(event.target.value); setRows(Number.isFinite(n) ? n : 1); }} onBlur={(event) => setRows(clampInt(Number(event.target.value), 1, 20, 1))} /></label>
+            <label className="field"><span>列数</span><input type="number" inputMode="numeric" min={1} max={20} value={cols} onChange={(event) => { const n = Number(event.target.value); setCols(Number.isFinite(n) ? n : 1); }} onBlur={(event) => setCols(clampInt(Number(event.target.value), 1, 20, 1))} /></label>
+            <label className="field"><span>横向边距</span><input type="number" inputMode="numeric" min={0} value={marginX} onChange={(event) => { const n = Number(event.target.value); setMarginX(Number.isFinite(n) ? n : 0); }} onBlur={(event) => setMarginX(clampNonNegative(Number(event.target.value), 0))} /></label>
+            <label className="field"><span>纵向边距</span><input type="number" inputMode="numeric" min={0} value={marginY} onChange={(event) => { const n = Number(event.target.value); setMarginY(Number.isFinite(n) ? n : 0); }} onBlur={(event) => setMarginY(clampNonNegative(Number(event.target.value), 0))} /></label>
+            <label className="field"><span>横向间距</span><input type="number" inputMode="numeric" min={0} value={gapX} onChange={(event) => { const n = Number(event.target.value); setGapX(Number.isFinite(n) ? n : 0); }} onBlur={(event) => setGapX(clampNonNegative(Number(event.target.value), 0))} /></label>
+            <label className="field"><span>纵向间距</span><input type="number" inputMode="numeric" min={0} value={gapY} onChange={(event) => { const n = Number(event.target.value); setGapY(Number.isFinite(n) ? n : 0); }} onBlur={(event) => setGapY(clampNonNegative(Number(event.target.value), 0))} /></label>
             <label className="field"><span>格式</span><select value={format} onChange={(event) => setFormat(event.target.value as SplitFormat)}><option>png</option><option>jpeg</option><option>webp</option></select></label>
-            <label className="field"><span>质量</span><input type="number" min={0} max={100} value={quality} onChange={(event) => setQuality(Number(event.target.value) || 92)} /></label>
+            <label className="field"><span>质量</span><input type="number" inputMode="numeric" min={0} max={100} value={quality} onChange={(event) => { const n = Number(event.target.value); setQuality(Number.isFinite(n) ? n : 92); }} onBlur={(event) => setQuality(clampInt(Number(event.target.value), 0, 100, 92))} /></label>
           </div>
           {error && <p className="error-text">{error}</p>}
         </Card>
@@ -166,7 +221,7 @@ export function SplitTool({ galleryRecords }: { galleryRecords: ResultRecord[] }
           </div>
           <div className="split-output-actions">
             <span>{slices.length} 张</span>
-            <Button onClick={() => slices.forEach((slice) => download(slice.dataUrl, slice.filename))} disabled={slices.length === 0}>下载全部</Button>
+            <Button onClick={() => { void downloadSequentially(slices); }} disabled={slices.length === 0}>下载全部</Button>
           </div>
         </div>
         {slices.length === 0 ? (
@@ -204,7 +259,7 @@ export function SplitTool({ galleryRecords }: { galleryRecords: ResultRecord[] }
       {galleryOpen && (
         <div className="split-gallery-modal" role="dialog" aria-modal="true" aria-label="从展馆选择图片">
           <button className="split-gallery-backdrop" onClick={() => setGalleryOpen(false)} aria-label="关闭展馆选择" />
-          <div className="split-gallery-dialog">
+          <div ref={galleryDialogRef} className="split-gallery-dialog">
             <div className="panel-heading">
               <div>
                 <span className="eyebrow">Gallery Source</span>

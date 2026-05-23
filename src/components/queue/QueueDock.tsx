@@ -9,9 +9,9 @@ export function QueueDock({ jobs, active, queued, onCancelJob, onRetryJob }: { j
   const hasJobs = jobs.length > 0;
 
   useEffect(() => {
-    if (jobs.length > previousJobCount.current || active > 0 || queued > 0) setExpanded(true);
+    if (jobs.length > previousJobCount.current) setExpanded(true);
     previousJobCount.current = jobs.length;
-  }, [active, jobs.length, queued]);
+  }, [jobs.length]);
 
   const hasWork = active > 0 || queued > 0;
 
