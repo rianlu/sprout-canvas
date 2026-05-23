@@ -238,6 +238,7 @@ h2 { font-size: 16px; }
 .viewer-meta { align-self: stretch; display: grid; align-content: end; gap: 12px; padding: 18px; border-left: 1px solid var(--line); }
 .viewer-meta strong { max-height: 42vh; overflow: auto; line-height: 1.5; }
 .viewer-meta span { color: var(--muted); font-size: 12px; }
+.viewer-hint { font-size: 11px; color: var(--muted); opacity: 0.75; letter-spacing: 0.4px; }
 @media (max-width: 920px) { .gallery-stream-card { grid-template-columns: 150px minmax(0, 1fr); } .gallery-viewer-panel { grid-template-columns: 1fr; overflow: auto; } .gallery-viewer-panel > img { max-height: 64vh; } .viewer-meta { border-left: 0; border-top: 1px solid var(--line); padding: 12px; } .viewer-nav.next { right: 18px; } }
 @media (max-width: 560px) { .gallery-stream-card { grid-template-columns: 1fr; } .stream-image-button { min-height: 220px; } .stream-card-body { padding: 12px; } .gallery-viewer { padding: 12px; } .gallery-viewer-panel { max-height: calc(100vh - 24px); padding: 10px; border-radius: 20px; } .viewer-nav { width: 40px; height: 52px; } }
 .split-page { max-width: 1480px; margin: 0 auto; padding-bottom: 88px; }
@@ -275,6 +276,10 @@ h2 { font-size: 16px; }
 .split-source-float-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
 .split-source-float-head strong { display: block; }
 .split-source-float-head button, .inline-close { border: 1px solid var(--line); border-radius: 999px; width: 34px; height: 34px; display: grid; place-items: center; cursor: pointer; color: var(--text); background: var(--surface-lift); }
+.split-source-float-actions { display: flex; gap: 6px; }
+.split-source-float.minimized { padding: 8px 12px; width: min(260px, calc(100vw - 36px)); }
+.split-source-float.minimized .split-source-float-head { margin-bottom: 0; }
+.split-source-float.minimized .split-source-float-head strong { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; max-width: 140px; }
 .split-source-float img { display: block; width: 100%; max-height: 360px; object-fit: contain; border-radius: 16px; background: var(--surface-deep); }
 .split-source-float-meta { display: grid; gap: 4px; margin-top: 10px; }
 .split-source-float-meta strong { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }

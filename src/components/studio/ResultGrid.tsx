@@ -7,6 +7,7 @@ import { Button } from '../ui/Button';
 interface ResultGridProps {
   records: ResultRecord[];
   jobs?: QueueJob[];
+  pendingIds?: string[];
   onDelete?: (id: string) => void;
   onRetry?: (jobId: string, placeholderId: string) => void;
   onDismiss?: (placeholderId: string) => void;
@@ -27,14 +28,27 @@ function statusLabel(job: QueueJob) {
   return '已完成';
 }
 
-export function ResultGrid({ records, jobs = [], onDelete, onRetry, onDismiss }: ResultGridProps) {
+export function ResultGrid({ records, jobs = [], pendingIds = [], onDelete, onRetry, onDismiss }: ResultGridProps) {
   const completedIds = new Set(records.map((record) => record.id));
   const visibleJobs = jobs.filter((job) => !completedIds.has(job.clientContext?.placeholderId || job.id) && job.status !== 'succeeded');
-  const hasItems = records.length > 0 || visibleJobs.length > 0;
+  const knownIds = new Set<string>();
+  records.forEach((record) => knownIds.add(record.id));
+  visibleJobs.forEach((job) => knownIds.add(job.clientContext?.placeholderId || job.id));
+  const pendingOnly = pendingIds.filter((id) => !knownIds.has(id));
+  const hasItems = records.length > 0 || visibleJobs.length > 0 || pendingOnly.length > 0;
 
   return (
     <section className="result-grid current-task-grid">
       {!hasItems && <div className="empty-state large">提交后会显示当前排队和生成结果.</div>}
+      {pendingOnly.map((id) => (
+        <article className="result-card task-card pending" key={id}>
+          <div className="task-placeholder">
+            <Loader2 className="spin" size={22} />
+            <strong>提交中</strong>
+            <span>正在加入队列...</span>
+          </div>
+        </article>
+      ))}
       {visibleJobs.map((job) => {
         const placeholderId = job.clientContext?.placeholderId || job.id;
         return (

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { X } from 'lucide-react';
+import { ChevronDown, ChevronUp, X } from 'lucide-react';
 import { fileToDataUrl, imageFromDataUrl } from '../lib/image/data-url';
 import { useFocusTrap } from '../hooks/useFocusTrap';
 import { Button } from '../components/ui/Button';
@@ -32,9 +32,10 @@ function canvasToDataUrl(canvas: HTMLCanvasElement, mime: string, quality?: numb
   });
 }
 
-async function downloadSequentially(items: SlicePreview[]) {
+async function downloadSequentially(items: SlicePreview[], onProgress?: (current: number, total: number) => void) {
   for (let i = 0; i < items.length; i += 1) {
     download(items[i].dataUrl, items[i].filename);
+    onProgress?.(i + 1, items.length);
     if (i < items.length - 1) await new Promise((resolve) => window.setTimeout(resolve, 80));
   }
 }
@@ -79,7 +80,11 @@ export function SplitTool({ galleryRecords }: { galleryRecords: ResultRecord[] }
   const [busy, setBusy] = useState(false);
   const [galleryOpen, setGalleryOpen] = useState(false);
   const [sourceFloatOpen, setSourceFloatOpen] = useState(false);
+  const [sourceFloatMinimized, setSourceFloatMinimized] = useState(false);
+  const [downloadProgress, setDownloadProgress] = useState<{ current: number; total: number } | null>(null);
+  const [toast, setToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const renderIdRef = useRef(0);
+  const previousBusyRef = useRef(false);
   const galleryDialogRef = useFocusTrap<HTMLDivElement>(galleryOpen);
 
   async function loadFile(file: File) {
@@ -88,6 +93,7 @@ export function SplitTool({ galleryRecords }: { galleryRecords: ResultRecord[] }
     const next = { name: file.name, dataUrl, image };
     setSource(next);
     setSourceFloatOpen(true);
+    setSourceFloatMinimized(false);
   }
 
   async function loadGallery(record: ResultRecord, index: number) {
@@ -95,7 +101,21 @@ export function SplitTool({ galleryRecords }: { galleryRecords: ResultRecord[] }
     const next = { name: gallerySourceName(record, index), dataUrl: record.dataUrl, image };
     setSource(next);
     setSourceFloatOpen(true);
+    setSourceFloatMinimized(false);
     setGalleryOpen(false);
+  }
+
+  async function handleDownloadAll() {
+    if (slices.length === 0 || downloadProgress) return;
+    setDownloadProgress({ current: 0, total: slices.length });
+    try {
+      await downloadSequentially(slices, (current, total) => setDownloadProgress({ current, total }));
+      setToast({ type: 'success', message: `已开始下载 ${slices.length} 张切图` });
+    } catch (downloadError) {
+      setToast({ type: 'error', message: downloadError instanceof Error ? downloadError.message : '下载失败' });
+    } finally {
+      setDownloadProgress(null);
+    }
   }
 
   async function split(target = source) {
@@ -154,6 +174,19 @@ export function SplitTool({ galleryRecords }: { galleryRecords: ResultRecord[] }
     window.addEventListener('keydown', handleKey);
     return () => window.removeEventListener('keydown', handleKey);
   }, [galleryOpen]);
+
+  useEffect(() => {
+    if (previousBusyRef.current && !busy && slices.length > 0 && !error) {
+      setToast({ type: 'success', message: `已生成 ${slices.length} 张切图` });
+    }
+    previousBusyRef.current = busy;
+  }, [busy, slices.length, error]);
+
+  useEffect(() => {
+    if (!toast) return undefined;
+    const timer = window.setTimeout(() => setToast(null), 2400);
+    return () => window.clearTimeout(timer);
+  }, [toast]);
 
   const previewCols = Math.max(1, Math.min(20, Math.round(cols)));
 
@@ -226,7 +259,7 @@ export function SplitTool({ galleryRecords }: { galleryRecords: ResultRecord[] }
           </div>
           <div className="split-output-actions">
             <span>{slices.length} 张</span>
-            <Button onClick={() => { void downloadSequentially(slices); }} disabled={slices.length === 0}>下载全部</Button>
+            <Button onClick={() => { void handleDownloadAll(); }} disabled={slices.length === 0 || downloadProgress !== null}>{downloadProgress ? `下载中 ${downloadProgress.current}/${downloadProgress.total}` : '下载全部'}</Button>
           </div>
         </div>
         {slices.length === 0 ? (
@@ -248,16 +281,25 @@ export function SplitTool({ galleryRecords }: { galleryRecords: ResultRecord[] }
 
 
       {source && sourceFloatOpen && (
-        <aside className="split-source-float" aria-label="原图浮窗">
+        <aside className={`split-source-float ${sourceFloatMinimized ? 'minimized' : ''}`} aria-label="原图浮窗">
           <div className="split-source-float-head">
             <div>
               <span className="eyebrow">Source</span>
-              <strong>原图对比</strong>
+              <strong>{sourceFloatMinimized ? source.name : '原图对比'}</strong>
             </div>
-            <button onClick={() => setSourceFloatOpen(false)} aria-label="隐藏原图浮窗"><X size={16} /></button>
+            <div className="split-source-float-actions">
+              <button onClick={() => setSourceFloatMinimized((value) => !value)} aria-label={sourceFloatMinimized ? '展开浮窗' : '收起浮窗'} title={sourceFloatMinimized ? '展开' : '收起'}>
+                {sourceFloatMinimized ? <ChevronDown size={16} /> : <ChevronUp size={16} />}
+              </button>
+              <button onClick={() => setSourceFloatOpen(false)} aria-label="隐藏原图浮窗"><X size={16} /></button>
+            </div>
           </div>
-          <img src={source.dataUrl} alt={source.name} />
-          <div className="split-source-float-meta"><strong>{source.name}</strong><span>{source.image.naturalWidth}×{source.image.naturalHeight}</span></div>
+          {!sourceFloatMinimized && (
+            <>
+              <img src={source.dataUrl} alt={source.name} />
+              <div className="split-source-float-meta"><strong>{source.name}</strong><span>{source.image.naturalWidth}×{source.image.naturalHeight}</span></div>
+            </>
+          )}
         </aside>
       )}
 
@@ -287,6 +329,7 @@ export function SplitTool({ galleryRecords }: { galleryRecords: ResultRecord[] }
           </div>
         </div>
       )}
+      {toast && <div className={`toast ${toast.type}`} role="status" aria-live="polite">{toast.message}</div>}
     </div>
   );
 }

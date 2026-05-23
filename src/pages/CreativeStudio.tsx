@@ -51,6 +51,11 @@ export function CreativeStudio({ onSubmit, onRetry, results, jobs }: CreativeStu
     if (!context || context.kind !== 'single') return false;
     return submittedIds.includes(context.placeholderId || job.id);
   }), [jobs, submittedIds]);
+  const pendingIds = useMemo(() => {
+    const resultIds = new Set(currentResults.map((record) => record.id));
+    const jobIds = new Set(currentJobs.map((job) => job.clientContext?.placeholderId || job.id));
+    return submittedIds.filter((id) => !resultIds.has(id) && !jobIds.has(id));
+  }, [submittedIds, currentResults, currentJobs]);
 
   useEffect(() => {
     if (!toast) return undefined;
@@ -158,7 +163,7 @@ export function CreativeStudio({ onSubmit, onRetry, results, jobs }: CreativeStu
               <span>{showEditEditor ? '矩形框选' : `${currentResults.length}/${submittedIds.length} 完成`}</span>
             </div>
           </div>
-          {showEditEditor ? <RegionEditor image={editImage} selection={config.editSelection || null} onSelectionChange={(editSelection) => patch({ editSelection })} /> : <ResultGrid records={currentResults} jobs={currentJobs} onRetry={(jobId, oldPlaceholder) => { void onRetry(jobId).then((job) => {
+          {showEditEditor ? <RegionEditor image={editImage} selection={config.editSelection || null} onSelectionChange={(editSelection) => patch({ editSelection })} /> : <ResultGrid records={currentResults} jobs={currentJobs} pendingIds={pendingIds} onRetry={(jobId, oldPlaceholder) => { void onRetry(jobId).then((job) => {
             const id = job.clientContext?.placeholderId || job.id;
             setSubmittedIds((current) => {
               const without = current.filter((item) => item !== id && item !== oldPlaceholder);

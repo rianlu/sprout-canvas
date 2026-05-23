@@ -138,9 +138,10 @@ export function GalleryGrid({ records, onClear, onDelete }: { records: ResultRec
             <div className="viewer-meta">
               <strong>{activeRecord.prompt || '无提示词'}</strong>
               <span>{activeIndex + 1} / {records.length} · {activeRecord.providerName || '自动调度'}</span>
+              <span className="viewer-hint">ESC 关闭 · ← → 切换</span>
               <div className="gallery-actions">
                 <Button variant="secondary" onClick={() => download(activeRecord)}><Download size={14} />下载</Button>
-                <Button variant="danger" onClick={() => { onDelete(activeRecord.id); close(); }}><Trash2 size={14} />删除</Button>
+                <Button variant="danger" onClick={() => { if (window.confirm('确认删除这张作品? 此操作无法撤销.')) { onDelete(activeRecord.id); close(); } }}><Trash2 size={14} />删除</Button>
               </div>
             </div>
           </div>

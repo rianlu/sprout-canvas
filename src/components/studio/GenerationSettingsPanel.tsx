@@ -1,3 +1,4 @@
+import { Loader2 } from 'lucide-react';
 import type { GenerationConfig } from '../../types/generation';
 import { Button } from '../ui/Button';
 
@@ -34,7 +35,7 @@ export function GenerationSettingsPanel({ config, onChange, onSubmit, submitting
           <span>当前模式</span>
           <strong>{config.mode === 'text' ? '文生图' : config.mode === 'reference' ? '参考生成' : '局部编辑'}</strong>
         </div>
-        <Button variant="primary" className="generate-button" onClick={onSubmit} disabled={submitting}>{submitting ? '正在提交...' : '提交生成任务'}</Button>
+        <Button variant="primary" className="generate-button" onClick={onSubmit} disabled={submitting}>{submitting ? (<><Loader2 className="spin" size={16} />正在提交...</>) : '提交生成任务'}</Button>
       </div>
     </div>
   );
