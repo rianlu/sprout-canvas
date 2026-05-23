@@ -1,8 +1,9 @@
 import type { PropsWithChildren } from 'react';
-import { Images, LayoutDashboard, Scissors, Sparkles } from 'lucide-react';
+import { Images, LayoutDashboard, Moon, Scissors, Sparkles, Sun } from 'lucide-react';
 import type { PageKey } from '../../app/App';
 import { QueueDock } from '../queue/QueueDock';
 import type { QueueJob } from '../../types/queue';
+import type { Theme } from '../../hooks/useTheme';
 
 interface AppShellProps {
   page: PageKey;
@@ -12,6 +13,8 @@ interface AppShellProps {
   queued: number;
   onCancelJob: (jobId: string) => void;
   onRetryJob: (jobId: string) => void;
+  theme: Theme;
+  onToggleTheme: () => void;
 }
 
 const nav = [
@@ -21,7 +24,8 @@ const nav = [
   { key: 'gallery' as const, label: '展馆', icon: Images },
 ];
 
-export function AppShell({ page, onPageChange, jobs, active, queued, onCancelJob, onRetryJob, children }: PropsWithChildren<AppShellProps>) {
+export function AppShell({ page, onPageChange, jobs, active, queued, onCancelJob, onRetryJob, theme, onToggleTheme, children }: PropsWithChildren<AppShellProps>) {
+  const nextThemeLabel = theme === 'dark' ? '切换浅色' : '切换深色';
   return (
     <div className="app-shell">
       <aside className="sidebar">
@@ -43,6 +47,11 @@ export function AppShell({ page, onPageChange, jobs, active, queued, onCancelJob
             );
           })}
         </nav>
+        <div className="sidebar-footer">
+          <button className="theme-toggle" onClick={onToggleTheme} title={nextThemeLabel} aria-label={nextThemeLabel}>
+            {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
+          </button>
+        </div>
       </aside>
       <main className="workspace">{children}</main>
       <QueueDock jobs={jobs} active={active} queued={queued} onCancelJob={onCancelJob} onRetryJob={onRetryJob} />

@@ -7,6 +7,7 @@ import { SplitTool } from '../pages/SplitTool';
 import { useAuth } from '../hooks/useAuth';
 import { useGallery } from '../hooks/useGallery';
 import { useQueue } from '../hooks/useQueue';
+import { useTheme } from '../hooks/useTheme';
 import { Button } from '../components/ui/Button';
 
 export type PageKey = 'studio' | 'series' | 'split' | 'gallery';
@@ -31,12 +32,13 @@ export function App() {
   const gallery = useGallery();
   const handleResult = useCallback(gallery.add, [gallery.add]);
   const queue = useQueue(handleResult);
+  const { theme, toggle: toggleTheme } = useTheme();
 
   if (auth.loading) return <main className="login-screen"><div className="empty-state">正在加载...</div></main>;
   if (auth.required && !auth.authenticated) return <LoginScreen loading={auth.loading} onLogin={auth.signIn} />;
 
   return (
-    <AppShell page={page} onPageChange={setPage} jobs={queue.jobs} active={queue.globalActive} queued={queue.globalQueued} onCancelJob={(jobId) => { void queue.cancel(jobId); }} onRetryJob={(jobId) => { void queue.retry(jobId); }}>
+    <AppShell page={page} onPageChange={setPage} jobs={queue.jobs} active={queue.globalActive} queued={queue.globalQueued} onCancelJob={(jobId) => { void queue.cancel(jobId); }} onRetryJob={(jobId) => { void queue.retry(jobId); }} theme={theme} onToggleTheme={toggleTheme}>
       {page === 'studio' && <CreativeStudio onSubmit={queue.submit} onRetry={queue.retry} results={gallery.records} jobs={queue.jobs} />}
       {page === 'series' && <SeriesStudio onSubmit={queue.submit} results={gallery.records} />}
       {page === 'split' && <SplitTool galleryRecords={gallery.records} />}
