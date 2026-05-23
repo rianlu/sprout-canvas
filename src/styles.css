@@ -245,6 +245,12 @@ h2 { font-size: 16px; }
 .split-workbench { display: grid; grid-template-columns: minmax(340px, 460px) minmax(0, 1fr); gap: 18px; align-items: start; }
 .split-settings-card, .split-source-card { min-width: 0; }
 .split-control-group { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.split-advanced { margin-top: 10px; border: 1px solid var(--line); border-radius: 16px; background: var(--surface-lift); padding: 10px 12px; }
+.split-advanced > summary { cursor: pointer; color: var(--muted); font-size: 13px; font-weight: 700; list-style: none; }
+.split-advanced > summary::-webkit-details-marker { display: none; }
+.split-advanced > summary::before { content: '▸'; display: inline-block; margin-right: 6px; transition: transform 0.15s ease; }
+.split-advanced[open] > summary::before { transform: rotate(90deg); }
+.split-advanced[open] > summary { margin-bottom: 10px; }
 .split-actions { margin-bottom: 0; }
 .split-dropzone { min-height: 112px; }
 .split-source-preview { margin-top: 14px; display: grid; grid-template-columns: minmax(0, 180px) 1fr; gap: 14px; align-items: end; border: 1px solid var(--line); border-radius: 18px; padding: 10px; background: var(--surface-lift); }

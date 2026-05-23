@@ -178,13 +178,18 @@ export function SplitTool({ galleryRecords }: { galleryRecords: ResultRecord[] }
           <div className="split-control-group">
             <label className="field"><span>行数</span><input type="number" inputMode="numeric" min={1} max={20} value={rows} onChange={(event) => { const n = Number(event.target.value); setRows(Number.isFinite(n) ? n : 1); }} onBlur={(event) => setRows(clampInt(Number(event.target.value), 1, 20, 1))} /></label>
             <label className="field"><span>列数</span><input type="number" inputMode="numeric" min={1} max={20} value={cols} onChange={(event) => { const n = Number(event.target.value); setCols(Number.isFinite(n) ? n : 1); }} onBlur={(event) => setCols(clampInt(Number(event.target.value), 1, 20, 1))} /></label>
-            <label className="field"><span>横向边距</span><input type="number" inputMode="numeric" min={0} value={marginX} onChange={(event) => { const n = Number(event.target.value); setMarginX(Number.isFinite(n) ? n : 0); }} onBlur={(event) => setMarginX(clampNonNegative(Number(event.target.value), 0))} /></label>
-            <label className="field"><span>纵向边距</span><input type="number" inputMode="numeric" min={0} value={marginY} onChange={(event) => { const n = Number(event.target.value); setMarginY(Number.isFinite(n) ? n : 0); }} onBlur={(event) => setMarginY(clampNonNegative(Number(event.target.value), 0))} /></label>
-            <label className="field"><span>横向间距</span><input type="number" inputMode="numeric" min={0} value={gapX} onChange={(event) => { const n = Number(event.target.value); setGapX(Number.isFinite(n) ? n : 0); }} onBlur={(event) => setGapX(clampNonNegative(Number(event.target.value), 0))} /></label>
-            <label className="field"><span>纵向间距</span><input type="number" inputMode="numeric" min={0} value={gapY} onChange={(event) => { const n = Number(event.target.value); setGapY(Number.isFinite(n) ? n : 0); }} onBlur={(event) => setGapY(clampNonNegative(Number(event.target.value), 0))} /></label>
             <label className="field"><span>格式</span><select value={format} onChange={(event) => setFormat(event.target.value as SplitFormat)}><option>png</option><option>jpeg</option><option>webp</option></select></label>
-            <label className="field"><span>质量</span><input type="number" inputMode="numeric" min={0} max={100} value={quality} onChange={(event) => { const n = Number(event.target.value); setQuality(Number.isFinite(n) ? n : 92); }} onBlur={(event) => setQuality(clampInt(Number(event.target.value), 0, 100, 92))} /></label>
+            <label className="field"><span>质量</span><input type="number" inputMode="numeric" min={0} max={100} value={quality} disabled={format === 'png'} onChange={(event) => { const n = Number(event.target.value); setQuality(Number.isFinite(n) ? n : 92); }} onBlur={(event) => setQuality(clampInt(Number(event.target.value), 0, 100, 92))} /></label>
           </div>
+          <details className="split-advanced">
+            <summary>边距与间距 (可选)</summary>
+            <div className="split-control-group">
+              <label className="field"><span>横向边距</span><input type="number" inputMode="numeric" min={0} value={marginX} onChange={(event) => { const n = Number(event.target.value); setMarginX(Number.isFinite(n) ? n : 0); }} onBlur={(event) => setMarginX(clampNonNegative(Number(event.target.value), 0))} /></label>
+              <label className="field"><span>纵向边距</span><input type="number" inputMode="numeric" min={0} value={marginY} onChange={(event) => { const n = Number(event.target.value); setMarginY(Number.isFinite(n) ? n : 0); }} onBlur={(event) => setMarginY(clampNonNegative(Number(event.target.value), 0))} /></label>
+              <label className="field"><span>横向间距</span><input type="number" inputMode="numeric" min={0} value={gapX} onChange={(event) => { const n = Number(event.target.value); setGapX(Number.isFinite(n) ? n : 0); }} onBlur={(event) => setGapX(clampNonNegative(Number(event.target.value), 0))} /></label>
+              <label className="field"><span>纵向间距</span><input type="number" inputMode="numeric" min={0} value={gapY} onChange={(event) => { const n = Number(event.target.value); setGapY(Number.isFinite(n) ? n : 0); }} onBlur={(event) => setGapY(clampNonNegative(Number(event.target.value), 0))} /></label>
+            </div>
+          </details>
           {error && <p className="error-text">{error}</p>}
         </Card>
 

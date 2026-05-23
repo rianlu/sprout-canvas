@@ -132,10 +132,6 @@ export function CreativeStudio({ onSubmit, onRetry, results, jobs }: CreativeStu
           <h1>创作台</h1>
           <p>专注描述, 参考和局部编辑, 队列会在右下角统一处理.</p>
         </div>
-        <div className="provider-pill">
-          <span>当前调度</span>
-          <strong>后台自动调度</strong>
-        </div>
       </header>
 
       <ModeSwitcher value={config.mode} onChange={(mode) => patch({ mode })} />

@@ -95,7 +95,7 @@ export function GalleryGrid({ records, onClear, onDelete }: { records: ResultRec
           <span className="eyebrow">Gallery</span>
           <h1>展馆</h1>
         </div>
-        <Button variant="ghost" onClick={onClear}>清空</Button>
+        <Button variant="ghost" disabled={records.length === 0} onClick={() => { if (records.length > 0 && window.confirm(`确认清空全部 ${records.length} 张展馆作品? 此操作无法撤销.`)) onClear(); }}>清空</Button>
       </div>
 
       {records.length === 0 ? (
@@ -115,7 +115,6 @@ export function GalleryGrid({ records, onClear, onDelete }: { records: ResultRec
                       <div className="stream-meta"><span>{formatDateTime(record.createdAt)}</span><span>{modeLabel(record.mode)}</span><span>{record.providerName || '自动调度'}</span></div>
                       <strong className="gallery-prompt" title={record.prompt || '无提示词'}>{record.prompt || '无提示词'}</strong>
                       <div className="gallery-actions">
-                        <Button variant="ghost" onClick={() => open(record)}>查看大图</Button>
                         <Button variant="ghost" onClick={() => download(record)}><Download size={14} />下载</Button>
                         <Button variant="ghost" onClick={() => onDelete(record.id)}><Trash2 size={14} />删除</Button>
                       </div>

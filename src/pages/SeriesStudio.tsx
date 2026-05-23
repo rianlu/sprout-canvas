@@ -254,7 +254,7 @@ export function SeriesStudio({ onSubmit, results }: SeriesStudioProps) {
             <label className="field"><span>设计主题</span><select value={preset} onChange={(event) => setPreset(event.target.value as PresetKey)}>{Object.entries(PRESETS).map(([key, item]) => <option key={key} value={key}>{item.label}</option>)}</select><small>{PRESETS[preset].hint}</small></label>
             <label className="field"><span>需要生成的内容</span><textarea className="series-content-input" value={content} onChange={(event) => setContent(event.target.value)} placeholder={PRESETS[preset].example} /></label>
             <label className="field"><span>风格锚点 (可选)</span><textarea className="series-style-input" value={style} onChange={(event) => setStyle(event.target.value)} placeholder="不知道风格可以留空, AI 会根据内容自动补齐。也可以写: 可爱风, 粉嫩马卡龙配色, 圆润贴纸造型, 奶油白背景, 柔光..." /></label>
-            <div className="button-row"><Button disabled={busy || (!style.trim() && !content.trim())} onClick={() => { void runAction(optimizeStyle); }}>{busy ? '处理中...' : '生成风格锚点'}</Button><Button disabled={busy || (!style.trim() && !content.trim())} onClick={() => { void runAction(createPlan); }}>拆分成图片清单</Button></div>
+            <div className="button-row"><Button disabled={busy || !content.trim()} onClick={() => { void runAction(optimizeStyle); }}>{busy ? '处理中...' : '生成风格锚点'}</Button><Button disabled={busy || (!style.trim() && !content.trim())} onClick={() => { void runAction(createPlan); }}>拆分成图片清单</Button></div>
           </Card>
 
           <Card className="series-step-card series-reference-card">
