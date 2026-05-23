@@ -6,3 +6,4 @@ logs/
 output/
 scratch/
 ecosystem.local.cjs
+dist/

@@ -20,6 +20,9 @@ let lastServedUserId = '';
 let imageJobSeq = 0;
 let providerPickSeq = 0;
 const DEFAULT_IMAGE_DURATION_MS = 90_000;
+const PROVIDER_FAILURE_THRESHOLD = 3;
+const PROVIDER_CIRCUIT_OPEN_MS = 30 * 60 * 1000;
+const providerCircuitState = new Map();
 
 export function init(deps) {
   readLocalConfig = deps.readLocalConfig;
@@ -44,6 +47,32 @@ export function enqueue(job) {
   logLine('INFO', `[image-job] queued ${job.id} user=${job.userId} provider=${job.providerName || job.providerId || 'auto'} path=${job.upstreamPath}`);
   runWorker();
   return publicJob(job, job.userId);
+}
+
+export function retryFailedJob(jobId, viewerUserId) {
+  const source = imageJobs.get(jobId);
+  if (!source || source.userId !== viewerUserId) return { ok: false, status: 404, error: '任务不存在或已过期' };
+  if (source.status !== 'failed') return { ok: false, status: 400, error: '只有失败任务可以重试' };
+  const retryJob = {
+    ...source,
+    id: nextJobId(),
+    status: 'pending',
+    body: source.originalBody || source.body,
+    originalBody: source.originalBody || source.body,
+    autoProviderRouting: true,
+    excludeProviderId: retryExcludeProviderIds(source),
+    queuedAt: Date.now(),
+    startedAt: 0,
+    finishedAt: 0,
+    error: '',
+    result: null,
+    attemptedProviderIds: [],
+    retryOf: source.id,
+    providerId: '',
+    providerName: '自动调度',
+    clientContext: source.clientContext ? { ...source.clientContext, placeholderId: nextJobId() } : source.clientContext,
+  };
+  return { ok: true, job: enqueue(retryJob) };
 }
 
 export function cancel(jobId, viewerUserId) {
@@ -125,6 +154,8 @@ function publicJob(job, viewerUserId) {
     error: job.error || '',
     providerId: job.providerId || '',
     providerName: job.providerName || '',
+    retryOf: job.retryOf || '',
+    canRetry: job.status === 'failed' && Boolean(job.originalBody?.length),
     clientContext: job.clientContext || null,
     yourPosition,
     yourQueued: userQueue.length,
@@ -189,9 +220,13 @@ async function processImageJob(job) {
     const providers = providersForJob(job, initialConfig);
     let jobResult = null;
     let lastConfig = initialConfig;
+    if (!providers.length) {
+      jobResult = failedImageJobResult(503, `没有健康的生图服务商: ${requestKindLabel(job.upstreamPath, job.contentType)}`);
+    }
     for (let index = 0; index < providers.length; index += 1) {
       const provider = providers[index];
       applyJobProvider(job, provider);
+      markAttemptedProvider(job, provider.id);
       const config = await readLocalConfig(provider.id);
       lastConfig = config;
       logLine('INFO', `[image-job] start ${job.id} user=${job.userId} provider=${config.name} mode=${config.generationMode} path=${job.upstreamPath}${index ? ' fallback' : ''}`);
@@ -201,7 +236,12 @@ async function processImageJob(job) {
         const message = `上游请求异常: ${formatThrownError(error)}`;
         jobResult = failedImageJobResult(502, message);
       }
-      if (jobResult.ok || !isRetryableJobResult(jobResult) || index === providers.length - 1) break;
+      if (jobResult.ok) {
+        recordProviderSuccess(config.id);
+        break;
+      }
+      recordProviderFailure(config.id, jobResult.error);
+      if (!isRetryableJobResult(jobResult) || index === providers.length - 1) break;
       logLine('WARN', `[image-job] retryable ${job.id} provider=${config.name} status=${jobResult.status} error=${jobResult.error}`);
     }
     job.finishedAt = Date.now();
@@ -240,8 +280,8 @@ export function chooseImageProvider(config, upstreamPath, contentType, excludeId
   return provider;
 }
 
-export function providerSupportsRequest(provider, upstreamPath, contentType) {
-  return compatibleProviders({ providers: [provider] }, upstreamPath, contentType, null).length > 0;
+export function providerSupportsRequest(provider, upstreamPath, contentType, body) {
+  return compatibleProviders({ providers: [provider] }, upstreamPath, contentType, body).length > 0;
 }
 
 export function rewriteImageJobBody(provider, body, contentType) {
@@ -287,12 +327,17 @@ function referenceImagesFromPayload(payload) {
     .map((ref, index) => ({
       name: String(ref?.name || `reference-${index + 1}.jpg`),
       imageUrl: String(ref?.image_url || ref?.dataUrl || ref?.data_url || ''),
+      maskUrl: String(ref?.mask_url || ref?.maskDataUrl || ref?.mask_data_url || ''),
     }))
     .filter((ref) => ref.imageUrl.startsWith('data:image/'));
 }
 
 function payloadHasReferenceImages(payload) {
   return referenceImagesFromPayload(payload).length > 0;
+}
+
+function payloadHasReferenceMask(payload) {
+  return referenceImagesFromPayload(payload).some((ref) => ref.maskUrl.startsWith('data:image/'));
 }
 
 function jobJsonPayload(job) {
@@ -337,16 +382,62 @@ function compatibleProviders(config, upstreamPath, contentType, body) {
   return providers.filter((provider) => !mode || provider.generationMode === mode);
 }
 
+
+function parseExcludedProviderIds(excludeId) {
+  return new Set(String(excludeId || '').split(',').map((id) => id.trim()).filter(Boolean));
+}
+
+function markAttemptedProvider(job, providerId) {
+  if (!providerId) return;
+  const ids = Array.isArray(job.attemptedProviderIds) ? job.attemptedProviderIds : [];
+  if (!ids.includes(providerId)) ids.push(providerId);
+  job.attemptedProviderIds = ids;
+}
+
+function retryExcludeProviderIds(job) {
+  const ids = Array.isArray(job.attemptedProviderIds) ? [...job.attemptedProviderIds] : [];
+  if (job.providerId && !ids.includes(job.providerId)) ids.push(job.providerId);
+  if (job.excludeProviderId) {
+    for (const id of parseExcludedProviderIds(job.excludeProviderId)) if (!ids.includes(id)) ids.push(id);
+  }
+  return ids.join(',');
+}
+
 function rankedImageProviders(config, upstreamPath, contentType, excludeId, body) {
   let candidates = compatibleProviders(config, upstreamPath, contentType, body);
-  if (excludeId) candidates = candidates.filter((p) => p.id !== excludeId);
+  const excludedIds = parseExcludedProviderIds(excludeId);
+  if (excludedIds.size) candidates = candidates.filter((p) => !excludedIds.has(p.id));
   if (!candidates.length) candidates = compatibleProviders(config, upstreamPath, contentType, body);
   if (!candidates.length) return [];
   providerPickSeq += 1;
-  return candidates
-    .map((provider, index) => ({ provider, load: providerLoad(provider.id), order: (index + providerPickSeq) % candidates.length }))
+  const pool = candidates.filter((provider) => !isProviderCircuitOpen(provider.id));
+  if (!pool.length) return [];
+  return pool
+    .map((provider, index) => ({ provider, load: providerLoad(provider.id), order: (index + providerPickSeq) % pool.length }))
     .sort((left, right) => left.load - right.load || left.order - right.order)
     .map((item) => item.provider);
+}
+
+function isProviderCircuitOpen(providerId) {
+  const state = providerCircuitState.get(providerId);
+  if (!state?.openUntil) return false;
+  if (state.openUntil > Date.now()) return true;
+  providerCircuitState.set(providerId, { ...state, openUntil: 0, failures: 0 });
+  return false;
+}
+
+function recordProviderSuccess(providerId) {
+  if (!providerId) return;
+  providerCircuitState.set(providerId, { failures: 0, openUntil: 0, lastError: '' });
+}
+
+function recordProviderFailure(providerId, error) {
+  if (!providerId) return;
+  const previous = providerCircuitState.get(providerId) || { failures: 0, openUntil: 0, lastError: '' };
+  const failures = previous.failures + 1;
+  const openUntil = failures >= PROVIDER_FAILURE_THRESHOLD ? Date.now() + PROVIDER_CIRCUIT_OPEN_MS : previous.openUntil || 0;
+  providerCircuitState.set(providerId, { failures, openUntil, lastError: String(error || '') });
+  if (openUntil) logLine('WARN', `[image-provider] circuit-open provider=${providerId} failures=${failures} cooldownMs=${PROVIDER_CIRCUIT_OPEN_MS}`);
 }
 
 function providersForJob(job, config) {
@@ -514,6 +605,10 @@ function buildImagesEditMultipartFromPayload(provider, imagesPayload) {
   for (const ref of referenceImagesFromPayload(imagesPayload)) {
     const file = dataUrlToImagePart(ref);
     if (file) appendMultipartFile(parts, boundary, 'image', file);
+    if (ref.maskUrl?.startsWith('data:image/')) {
+      const mask = dataUrlToImagePart({ name: `mask-${file?.name || ref.name}`, imageUrl: ref.maskUrl });
+      if (mask) appendMultipartFile(parts, boundary, 'mask', mask);
+    }
   }
   parts.push(Buffer.from(`--${boundary}--\r\n`));
   return { body: Buffer.concat(parts), contentType: `multipart/form-data; boundary=${boundary}` };
@@ -527,17 +622,26 @@ async function processResponsesBackedImagesJob(job, config) {
 
 function buildResponsesPayloadFromImagesPayload(provider, imagesPayload) {
   const prompt = String(imagesPayload?.prompt || '').trim();
+  const refs = referenceImagesFromPayload(imagesPayload);
+  const firstMaskRef = refs.find((ref) => ref.maskUrl?.startsWith('data:image/'));
   const tool = { type: 'image_generation' };
+  if (firstMaskRef) {
+    tool.action = 'edit';
+    tool.input_image_mask = { image_url: firstMaskRef.maskUrl };
+  }
   if (imagesPayload?.output_format) tool.output_format = imagesPayload.output_format;
   if (imagesPayload?.size) tool.size = imagesPayload.size;
   if (imagesPayload?.quality) tool.quality = imagesPayload.quality;
   if (imagesPayload?.background) tool.background = imagesPayload.background;
   if (imagesPayload?.output_compression) tool.output_compression = imagesPayload.output_compression;
-  const refs = referenceImagesFromPayload(imagesPayload);
+  const contentParts = refs.map((ref) => ({ type: 'input_image', image_url: ref.imageUrl }));
+  const instruction = firstMaskRef
+    ? `请只编辑蒙版透明区域。保持未透明区域尽量不变。编辑要求: ${prompt}`
+    : `请根据参考图片生成新图片。要求: ${prompt}`;
   const userContent = refs.length
     ? [
-      ...refs.map((ref) => ({ type: 'input_image', image_url: ref.imageUrl })),
-      { type: 'input_text', text: `请根据参考图片生成新图片。要求: ${prompt}` },
+      { type: 'input_text', text: instruction },
+      ...contentParts,
     ]
     : `请生成以下描述的图片: ${prompt}`;
   return {

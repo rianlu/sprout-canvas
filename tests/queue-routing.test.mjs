@@ -59,12 +59,14 @@ const semanticEditBody = Buffer.from(JSON.stringify({
   size: '1024x1024',
   quality: 'low',
   background: 'opaque',
-  ref_images: [{ name: 'ref.png', image_url: 'data:image/png;base64,ZmFrZS1pbWFnZQ==' }],
+  ref_images: [{ name: 'ref.png', image_url: 'data:image/png;base64,ZmFrZS1pbWFnZQ==', mask_url: 'data:image/png;base64,bWFzaw==' }],
 }));
 
 {
-  assert.equal(queue.providerSupportsRequest(providers[0], '/v1/images/generations', 'application/json'), true);
-  assert.equal(queue.providerSupportsRequest(providers[1], '/v1/images/generations', 'application/json'), true);
+  assert.equal(queue.providerSupportsRequest(providers[0], '/v1/images/generations', 'application/json', Buffer.from(JSON.stringify({ prompt: 'text only' }))), true);
+  assert.equal(queue.providerSupportsRequest(providers[1], '/v1/images/generations', 'application/json', Buffer.from(JSON.stringify({ prompt: 'text only' }))), true);
+  assert.equal(queue.providerSupportsRequest(providers[0], '/v1/images/generations', 'application/json', semanticEditBody), true);
+  assert.equal(queue.providerSupportsRequest(providers[1], '/v1/images/generations', 'application/json', semanticEditBody), true);
 }
 
 async function waitForJob(jobId) {
@@ -133,13 +135,106 @@ await runProviderConversionJob(providers[1], 'https://miaomiao.test/v1/images/ed
   const body = Buffer.from(call.options.body).toString('latin1');
   assert.match(body, /name="model"\r\n\r\ngpt-image-2\r\n/);
   assert.match(body, /name="image"; filename="ref.png"/);
+  assert.match(body, /name="mask"; filename="mask-ref.png"/);
 });
 
 await runProviderConversionJob(providers[0], 'https://anyrouter.test/v1/responses', (call) => {
   const payload = JSON.parse(Buffer.from(call.options.body).toString('utf8'));
   assert.equal(payload.model, 'gpt-5.3-codex');
-  assert.equal(payload.input[1].content[0].type, 'input_image');
-  assert.equal(payload.input[1].content[1].type, 'input_text');
+  assert.equal(payload.tools[0].type, 'image_generation');
+  assert.equal(payload.tools[0].action, 'edit');
+  assert.equal(payload.tools[0].input_image_mask.image_url, 'data:image/png;base64,bWFzaw==');
+  assert.equal(payload.input[1].content[0].type, 'input_text');
+  assert.match(payload.input[1].content[0].text, /蒙版透明区域/);
+  assert.equal(payload.input[1].content[1].type, 'input_image');
 });
 
 console.log('queue provider conversion tests passed');
+
+
+async function runForcedJob(provider, rawBody, fetchImpl) {
+  globalThis.fetch = fetchImpl;
+  queue.init({
+    readLocalConfig: async (providerId = '') => {
+      const selected = providers.find((item) => item.id === providerId) || provider;
+      return { ...selected, providers };
+    },
+    upstreamHeaders: (cfg, contentType) => ({ Authorization: `Bearer test-${cfg.id}`, 'Content-Type': contentType }),
+    timeoutSignal: () => undefined,
+    stripHtml: (value) => String(value),
+    logLine: () => {},
+  });
+  const job = {
+    id: queue.nextJobId(),
+    userId: 'user-1',
+    status: 'pending',
+    method: 'POST',
+    upstreamPath: '/v1/images/generations',
+    contentType: 'application/json',
+    body: queue.rewriteImageJobBody(provider, rawBody, 'application/json'),
+    originalBody: rawBody,
+    autoProviderRouting: false,
+    excludeProviderId: '',
+    clientContext: { kind: 'single', placeholderId: 'placeholder-original', prompt: 'test', mode: 'text' },
+    queuedAt: Date.now(),
+    startedAt: 0,
+    finishedAt: 0,
+    error: '',
+    result: null,
+    providerId: provider.id,
+    providerName: provider.name,
+  };
+  queue.enqueue(job);
+  const outcome = await waitForJob(job.id);
+  return { job, outcome };
+}
+
+{
+  const rawBody = Buffer.from(JSON.stringify({ model: 'client-model', prompt: 'circuit breaker test' }));
+  for (let index = 0; index < 3; index += 1) {
+    const { outcome } = await runForcedJob(providers[0], rawBody, async () => ({
+      ok: false,
+      status: 429,
+      statusText: 'Too Many Requests',
+      headers: { get: () => 'application/json' },
+      arrayBuffer: async () => Buffer.from(JSON.stringify({ error: { message: 'rate limit' } })),
+    }));
+    assert.equal(outcome.status, 429);
+  }
+  const selected = queue.chooseImageProvider(config, '/v1/images/generations', 'application/json', '', rawBody);
+  assert.equal(selected.id, 'default');
+}
+
+{
+  const rawBody = Buffer.from(JSON.stringify({ model: 'client-model', prompt: 'retry switches provider' }));
+  const { job, outcome } = await runForcedJob(providers[0], rawBody, async () => ({
+    ok: false,
+    status: 500,
+    statusText: 'Server Error',
+    headers: { get: () => 'application/json' },
+    arrayBuffer: async () => Buffer.from(JSON.stringify({ error: { message: 'server failed' } })),
+  }));
+  assert.equal(outcome.status, 500);
+
+  const fetchCalls = [];
+  globalThis.fetch = async (url, options = {}) => {
+    fetchCalls.push({ url, options });
+    return {
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      headers: { get: () => 'application/json' },
+      arrayBuffer: async () => Buffer.from(JSON.stringify({ data: [{ b64_json: 'c'.repeat(1200) }] })),
+    };
+  };
+  const retry = queue.retryFailedJob(job.id, 'user-1');
+  assert.equal(retry.ok, true);
+  assert.equal(retry.job.retryOf, job.id);
+  assert.notEqual(retry.job.clientContext.placeholderId, job.clientContext.placeholderId);
+  const retryOutcome = await waitForJob(retry.job.id);
+  assert.equal(retryOutcome.status, 200);
+  assert.equal(fetchCalls.length, 1);
+  assert.equal(fetchCalls[0].url, 'https://miaomiao.test/v1/images/generations');
+}
+
+console.log('queue circuit breaker and retry tests passed');

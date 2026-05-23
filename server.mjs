@@ -5,13 +5,14 @@ import { randomBytes, timingSafeEqual } from 'node:crypto';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import * as queue from './server/queue.mjs';
+import { rankedTextProviders, recordTextProviderFailure, recordTextProviderSuccess } from './server/text-routing.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const ROOT = __dirname;
 const LOCAL_CONFIG_PATH = path.join(ROOT, 'config', 'local.config.json');
 const DEFAULT_MAX_REQUEST_BYTES = 80 * 1024 * 1024;
-const TEXT_UPSTREAM_TIMEOUT_MS = 25_000;
+const TEXT_UPSTREAM_TIMEOUT_MS = 60_000;
 const IMAGE_UPSTREAM_TIMEOUT_MS = 180_000;
 const RESPONSES_IMAGE_UPSTREAM_TIMEOUT_MS = 420_000;
 const authSessions = new Map();
@@ -38,6 +39,7 @@ const MIME_TYPES = new Map([
   ['.jpg', 'image/jpeg'],
   ['.jpeg', 'image/jpeg'],
   ['.webp', 'image/webp'],
+  ['.ico', 'image/x-icon'],
 ]);
 
 function json(res, status, data, extraHeaders = {}) {
@@ -476,11 +478,18 @@ function extractResponsesText(data) {
   return '';
 }
 
+function sanitizeTextOutput(text) {
+  return String(text || '')
+    .replace(/<think>[\s\S]*?<\/think>/gi, '')
+    .replace(/<think>[\s\S]*$/gi, '')
+    .trim();
+}
+
 function extractChatText(data) {
   const content = data?.choices?.[0]?.message?.content;
-  if (typeof content === 'string') return content.trim();
+  if (typeof content === 'string') return sanitizeTextOutput(content);
   if (Array.isArray(content)) {
-    return content.map((item) => item?.text || '').join('').trim();
+    return sanitizeTextOutput(content.map((item) => item?.text || '').join(''));
   }
   return '';
 }
@@ -542,13 +551,19 @@ async function handleTextGeneration(req, res) {
   }
   const errors = [];
   const attempts = [];
-  for (const textProvider of config.textProviders) {
+  const textProviders = rankedTextProviders(config.textProviders);
+  if (!textProviders.length) {
+    json(res, 503, { error: '没有健康的文本服务商', attempts });
+    return;
+  }
+  for (const textProvider of textProviders) {
     const model = textProvider.textModel;
     try {
       const chatPayload = responsesPayloadToChatPayload({ ...payload, model }, textProvider);
       const data = await callJsonUpstream(textProvider, '/v1/chat/completions', chatPayload);
       const text = extractChatText(data);
       if (!text) throw new Error('Chat Completions API 未返回文本内容');
+      recordTextProviderSuccess(textProvider.id);
       if (errors.length) logLine('INFO', `[text-provider] fallback success provider=${textProvider.name} mode=chat_completions`);
       json(res, 200, { text, provider: 'chat_completions', providerName: textProvider.name, attempts });
       return;
@@ -557,21 +572,7 @@ async function handleTextGeneration(req, res) {
       errors.push(`${textProvider.name} Chat Completions: ${message}`);
       attempts.push({ providerName: textProvider.name, mode: 'chat_completions', timeout: Boolean(error.isTextTimeout), error: message.slice(0, 180) });
       logLine('WARN', `[text-provider] failed provider=${textProvider.name} mode=chat_completions error=${message.slice(0, 240)}`);
-      if (error.isTextTimeout) continue;
-    }
-    try {
-      const responsesPayload = { ...payload, model, stream: false };
-      const data = await callJsonUpstream(textProvider, '/v1/responses', responsesPayload);
-      const text = extractResponsesText(data);
-      if (!text) throw new Error('Responses API 未返回文本内容');
-      if (errors.length) logLine('INFO', `[text-provider] fallback success provider=${textProvider.name} mode=responses`);
-      json(res, 200, { text, provider: 'responses', providerName: textProvider.name, attempts });
-      return;
-    } catch (error) {
-      const message = error.message || String(error);
-      errors.push(`${textProvider.name} Responses: ${message}`);
-      attempts.push({ providerName: textProvider.name, mode: 'responses', timeout: Boolean(error.isTextTimeout), error: message.slice(0, 180) });
-      logLine('WARN', `[text-provider] failed provider=${textProvider.name} mode=responses error=${message.slice(0, 240)}`);
+      recordTextProviderFailure(textProvider.id, message, logLine);
     }
   }
   json(res, 502, { error: errors.join(' | '), attempts });
@@ -645,7 +646,7 @@ async function handleQueuedImageJob(req, res, upstreamPath) {
     selectedProvider = autoProviderRouting
       ? queue.chooseImageProvider(config, upstreamPath, contentType, excludeProviderId, rawBody)
       : config;
-    if (!autoProviderRouting && !queue.providerSupportsRequest(selectedProvider, upstreamPath, contentType)) {
+    if (!autoProviderRouting && !queue.providerSupportsRequest(selectedProvider, upstreamPath, contentType, rawBody)) {
       json(res, 400, { error: `服务商 ${selectedProvider.name} 不支持当前请求类型` });
       return;
     }
@@ -735,6 +736,20 @@ function handleCancelJob(req, res, jobId) {
   json(res, 200, { ok: true, job: result.job });
 }
 
+function handleRetryJob(req, res, jobId) {
+  const session = sessionFromRequest(req);
+  if (!session) {
+    json(res, 401, { error: '请先登录', authRequired: true });
+    return;
+  }
+  const result = queue.retryFailedJob(jobId, session.userId);
+  if (!result.ok) {
+    json(res, result.status || 400, { error: result.error });
+    return;
+  }
+  json(res, 202, { ok: true, job: result.job });
+}
+
 async function serveStatic(req, res, pathname) {
   const cleanPath = pathname === '/' ? '/index.html' : decodeURIComponent(pathname);
   if (cleanPath.startsWith('/config/') || cleanPath.includes('/.') || path.basename(cleanPath).startsWith('.')) {
@@ -742,8 +757,10 @@ async function serveStatic(req, res, pathname) {
     res.end('Not found');
     return;
   }
-  const filePath = path.resolve(ROOT, `.${cleanPath}`);
-  if (!filePath.startsWith(ROOT)) {
+  const distRoot = path.join(ROOT, 'dist');
+  const staticRoot = existsSync(path.join(distRoot, 'index.html')) ? distRoot : ROOT;
+  let filePath = path.resolve(staticRoot, `.${cleanPath}`);
+  if (!filePath.startsWith(staticRoot)) {
     res.writeHead(403);
     res.end('Forbidden');
     return;
@@ -753,6 +770,12 @@ async function serveStatic(req, res, pathname) {
     res.writeHead(200, { 'Content-Type': MIME_TYPES.get(path.extname(filePath)) || 'application/octet-stream' });
     res.end(data);
   } catch {
+    if (staticRoot === distRoot && !path.extname(cleanPath)) {
+      const data = await readFile(path.join(distRoot, 'index.html'));
+      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+      res.end(data);
+      return;
+    }
     res.writeHead(404);
     res.end('Not found');
   }
@@ -790,6 +813,8 @@ const server = createServer(async (req, res) => {
     const jobStatusMatch = url.pathname.match(/^\/api\/jobs\/([^/]+)$/);
     if (jobStatusMatch && req.method === 'GET') return handleJobStatus(req, res, jobStatusMatch[1]);
     if (jobStatusMatch && req.method === 'DELETE') return handleCancelJob(req, res, jobStatusMatch[1]);
+    const jobRetryMatch = url.pathname.match(/^\/api\/jobs\/([^/]+)\/retry$/);
+    if (jobRetryMatch && req.method === 'POST') return handleRetryJob(req, res, jobRetryMatch[1]);
     const jobResultMatch = url.pathname.match(/^\/api\/jobs\/([^/]+)\/result$/);
     if (jobResultMatch && req.method === 'GET') return handleJobResult(req, res, jobResultMatch[1]);
     await serveStatic(req, res, url.pathname);
