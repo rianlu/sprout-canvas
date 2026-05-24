@@ -10,7 +10,7 @@
   "imageProviders": [
     {
       "id": "default",
-      "name": "喵喵三号",
+      "name": "芽绘三号",
       "baseUrl": "https://api.openai.com",
       "apiKey": "sk-your-default-api-key",
       "imageModel": "gpt-image-2",
@@ -18,7 +18,7 @@
     },
     {
       "id": "anyrouter",
-      "name": "喵喵二号",
+      "name": "芽绘二号",
       "baseUrl": "https://a-ocnfniawgw.cn-shanghai.fcapp.run",
       "apiKey": "sk-your-anyrouter-api-key",
       "imageModel": "gpt-5.3-codex",
