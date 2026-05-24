@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { X } from 'lucide-react';
 import type { RefImage, ResultRecord } from '../../types/generation';
-import { prepareImageFile } from '../../lib/image/compress';
+import { prepareImageDataUrl, prepareImageFile } from '../../lib/image/compress';
 import { formatBytes } from '../../lib/image/format';
 import { randomId } from '../../lib/random/id';
 import { useFocusTrap } from '../../hooks/useFocusTrap';
@@ -17,8 +17,10 @@ function gallerySourceName(record: ResultRecord, index: number) {
   return `展馆作品 ${serial} · ${date}`;
 }
 
-function galleryRecordToRef(record: ResultRecord, index: number): RefImage {
-  return { id: `gallery-${record.id}-${Date.now()}`, name: `${gallerySourceName(record, index)}.png`, dataUrl: record.dataUrl, size: record.dataUrl.length };
+async function galleryRecordToRef(record: ResultRecord, index: number): Promise<RefImage> {
+  const name = `${gallerySourceName(record, index)}.png`;
+  const prepared = await prepareImageDataUrl(name, record.dataUrl);
+  return { id: `gallery-${record.id}-${Date.now()}`, ...prepared };
 }
 
 export function ReferenceUploader({ images, onChange, galleryRecords = [], title = '选择参考图', localHint = '支持多张参考图, 自动压缩', galleryHint, maxImages = DEFAULT_MAX_REFS }: { images: RefImage[]; onChange: (images: RefImage[]) => void; galleryRecords?: ResultRecord[]; title?: string; localHint?: string; galleryHint?: string; maxImages?: number }) {
@@ -57,14 +59,21 @@ export function ReferenceUploader({ images, onChange, galleryRecords = [], title
     onChange(next);
   }
 
-  function addGallery(record: ResultRecord, index: number) {
+  async function addGallery(record: ResultRecord, index: number) {
     if (atLimit) {
       setWarning(`最多 ${limit} 张参考图, 请先删除部分图`);
       setGalleryOpen(false);
       return;
     }
-    onChange(limit === 1 ? [galleryRecordToRef(record, index)] : [...images, galleryRecordToRef(record, index)]);
-    setGalleryOpen(false);
+    try {
+      setWarning('正在处理展馆图片...');
+      const ref = await galleryRecordToRef(record, index);
+      onChange(limit === 1 ? [ref] : [...images, ref]);
+      setGalleryOpen(false);
+      setWarning(null);
+    } catch (error) {
+      setWarning(error instanceof Error ? error.message : '展馆图片处理失败');
+    }
   }
 
   return (
@@ -112,7 +121,7 @@ export function ReferenceUploader({ images, onChange, galleryRecords = [], title
             ) : (
               <div className="split-gallery-modal-grid">
                 {galleryItems.map((record, index) => (
-                  <button key={record.id} className="gallery-source modal-gallery-source" onClick={() => addGallery(record, index)} title={record.prompt || '展馆作品'}>
+                  <button key={record.id} className="gallery-source modal-gallery-source" onClick={() => { void addGallery(record, index); }} title={record.prompt || '展馆作品'}>
                     <img src={record.dataUrl} alt="展馆作品" />
                     <span>{gallerySourceName(record, index)}</span>
                   </button>
