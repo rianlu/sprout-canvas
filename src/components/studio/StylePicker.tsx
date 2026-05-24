@@ -1,7 +1,7 @@
 import { Search, X } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { ADVANCED_IMAGE_STYLES, BASIC_IMAGE_STYLES, BASIC_STYLE_GROUPS, type AnyImageStylePreset, type ImageStylePreset } from '../../lib/styles/image-styles';
+import { ADVANCED_IMAGE_STYLES, BASIC_IMAGE_STYLES, BASIC_STYLE_GROUPS, type AdvancedImageStylePreset, type AnyImageStylePreset, type ImageStylePreset } from '../../lib/styles/image-styles';
 import { Button } from '../ui/Button';
 
 interface StylePickerProps {
@@ -19,6 +19,7 @@ export function StylePicker({ selected, onChange }: StylePickerProps) {
   const [open, setOpen] = useState(false);
   const [tab, setTab] = useState<'basic' | 'advanced'>('basic');
   const [query, setQuery] = useState('');
+  const [previewStyle, setPreviewStyle] = useState<AdvancedImageStylePreset | null>(null);
   const filtered = useMemo(() => BASIC_IMAGE_STYLES.filter((style) => matchesQuery(style, query)), [query]);
 
   function choose(style: AnyImageStylePreset) {
@@ -75,16 +76,35 @@ export function StylePicker({ selected, onChange }: StylePickerProps) {
         ) : (
           <div className="advanced-style-grid">
             {ADVANCED_IMAGE_STYLES.map((style) => (
-              <button key={style.id} className={`advanced-style-card ${selected?.id === style.id ? 'active' : ''}`} onClick={() => choose(style)}>
-                <span className="eyebrow">Advanced</span>
-                <strong>{style.name}</strong>
-                <p>{style.description}</p>
-                <small>{style.usage}</small>
-              </button>
+              <article key={style.id} className={`advanced-style-card ${selected?.id === style.id ? 'active' : ''}`}>
+                {style.exampleImage && <button className="advanced-style-thumb" onClick={() => setPreviewStyle(style)}><img src={style.exampleImage} alt={style.exampleAlt || style.name} /></button>}
+                <div className="advanced-style-content">
+                  <span className="eyebrow">Advanced</span>
+                  <strong>{style.name}</strong>
+                  <p>{style.description}</p>
+                  <small>{style.usage}</small>
+                </div>
+                <div className="advanced-style-actions">
+                  {style.exampleImage && <Button variant="ghost" onClick={() => setPreviewStyle(style)}>查看示例</Button>}
+                  <Button onClick={() => choose(style)}>{selected?.id === style.id ? '已选择' : '选择'}</Button>
+                </div>
+              </article>
             ))}
           </div>
         )}
       </div>
+      {previewStyle?.exampleImage && (
+        <div className="style-example-viewer" role="dialog" aria-modal="true" aria-label="高级风格示例图">
+          <button className="style-example-backdrop" aria-label="关闭示例图" onClick={() => setPreviewStyle(null)} />
+          <div className="style-example-panel">
+            <div className="style-example-heading">
+              <div><span className="eyebrow">Example</span><h2>{previewStyle.name}</h2></div>
+              <Button variant="ghost" onClick={() => setPreviewStyle(null)}><X size={16} />关闭</Button>
+            </div>
+            <img src={previewStyle.exampleImage} alt={previewStyle.exampleAlt || previewStyle.name} />
+          </div>
+        </div>
+      )}
     </div>,
     document.body,
   ) : null;

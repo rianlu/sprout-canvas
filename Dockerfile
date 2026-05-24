@@ -8,6 +8,7 @@ RUN npm ci
 COPY index.html ./
 COPY tsconfig*.json ./
 COPY vite.config.mts ./
+COPY public/ ./public/
 COPY src/ ./src/
 COPY js/ ./js/
 COPY css/ ./css/

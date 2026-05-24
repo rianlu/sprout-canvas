@@ -91,6 +91,8 @@ export interface AdvancedImageStylePreset {
   englishName: string;
   description: string;
   usage: string;
+  exampleImage?: string;
+  exampleAlt?: string;
   template: string;
 }
 
@@ -105,6 +107,8 @@ export const ADVANCED_IMAGE_STYLES: AdvancedImageStylePreset[] = [
     englishName: 'Atlas Breakdown',
     description: '根据主题生成中文拆解信息图, 包含结构标注, 材质工艺, 纹样寓意和核心总结',
     usage: '只需输入主题, 如: 明代马面裙, 宋代汝窑瓷器, 未来机甲少女',
+    exampleImage: '/assets/style-examples/atlas-breakdown.svg',
+    exampleAlt: '图鉴式拆解高级风格示例图',
     template: `请根据{主题}自动生成一张“博物馆图鉴式中文拆解信息图”。
 
 要求整张图兼具真实写实主视觉、结构拆解、中文标注、材质说明、纹样寓意、色彩含义和核心特征总结。你需要根据主题自动判断最合适的主体对象、服饰体系、器物结构、时代风格、关键部件、材质工艺、颜色方案与版式结构，用户无需再提供其他信息。
