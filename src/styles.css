@@ -367,3 +367,19 @@ h2 { font-size: 16px; }
 .style-example-heading { display: flex; justify-content: space-between; align-items: start; gap: 12px; margin-bottom: 12px; }
 .style-example-panel > img { width: 100%; height: auto; max-height: calc(100vh - 150px); object-fit: contain; display: block; border-radius: 18px; background: var(--surface-deep); }
 @media (max-width: 720px) { .advanced-style-actions { justify-content: stretch; } .advanced-style-actions .btn { flex: 1; } .style-example-viewer { padding: 10px; } .style-example-panel { width: 100%; max-height: calc(100vh - 20px); border-radius: 22px; padding: 12px; } .style-example-heading { display: grid; } }
+.batch-mode-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.batch-mode-card { min-width: 0; border: 1px solid var(--line); border-radius: 22px; background: var(--surface-lift); color: var(--text); padding: 16px; text-align: left; cursor: pointer; display: grid; gap: 8px; box-shadow: var(--shadow-soft); }
+.batch-mode-card:hover, .batch-mode-card.active { border-color: var(--accent-border-strong); background: var(--accent-tint-soft); }
+.batch-mode-card strong { font-size: 18px; }
+.batch-mode-card small { color: var(--muted); line-height: 1.55; }
+.batch-layout { grid-template-columns: minmax(0, 1.15fr) minmax(360px, 0.85fr); }
+.batch-main { grid-template-columns: minmax(0, 1fr); }
+.batch-input-card, .batch-style-card { align-content: start; }
+.batch-reference-stack { display: grid; gap: 10px; }
+.compact-row { margin: -2px 0 2px; }
+.gallery-pick-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(112px, 1fr)); gap: 10px; max-height: 280px; overflow: auto; padding: 2px; }
+.gallery-pick-card { min-width: 0; border: 1px solid var(--line); border-radius: 16px; background: var(--surface-lift); color: var(--text); padding: 7px; display: grid; gap: 6px; text-align: left; cursor: pointer; }
+.gallery-pick-card:hover { border-color: var(--accent-border-strong); background: var(--accent-tint-soft); }
+.gallery-pick-card img { width: 100%; aspect-ratio: 1 / 1; object-fit: cover; border-radius: 12px; background: var(--surface-deep); }
+.gallery-pick-card span { color: var(--muted); font-size: 11px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+@media (max-width: 980px) { .batch-mode-grid { grid-template-columns: 1fr; } .batch-layout { grid-template-columns: 1fr; } }

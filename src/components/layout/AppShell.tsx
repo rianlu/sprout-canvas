@@ -19,7 +19,7 @@ interface AppShellProps {
 
 const nav = [
   { key: 'studio' as const, label: '创作台', icon: Sparkles },
-  { key: 'series' as const, label: '系列生成', icon: LayoutDashboard },
+  { key: 'series' as const, label: '批量出图', icon: LayoutDashboard },
   { key: 'split' as const, label: '切图', icon: Scissors },
   { key: 'gallery' as const, label: '展馆', icon: Images },
 ];

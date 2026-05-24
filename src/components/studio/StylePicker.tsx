@@ -1,7 +1,7 @@
 import { Search, X } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { ADVANCED_IMAGE_STYLES, BASIC_IMAGE_STYLES, BASIC_STYLE_GROUPS, type AdvancedImageStylePreset, type AnyImageStylePreset, type ImageStylePreset } from '../../lib/styles/image-styles';
+import { ADVANCED_IMAGE_STYLES, ADVANCED_STYLE_GROUPS, BASIC_IMAGE_STYLES, BASIC_STYLE_GROUPS, type AdvancedImageStylePreset, type AnyImageStylePreset, type ImageStylePreset } from '../../lib/styles/image-styles';
 import { Button } from '../ui/Button';
 
 interface StylePickerProps {
@@ -15,12 +15,19 @@ function matchesQuery(style: ImageStylePreset, query: string) {
   return [style.name, style.englishName, style.description, style.group].some((item) => item.toLowerCase().includes(value));
 }
 
+function matchesAdvancedQuery(style: AdvancedImageStylePreset, query: string) {
+  if (!query.trim()) return true;
+  const value = query.trim().toLowerCase();
+  return [style.name, style.englishName, style.description, style.usage, style.group].some((item) => item.toLowerCase().includes(value));
+}
+
 export function StylePicker({ selected, onChange }: StylePickerProps) {
   const [open, setOpen] = useState(false);
   const [tab, setTab] = useState<'basic' | 'advanced'>('basic');
   const [query, setQuery] = useState('');
   const [previewStyle, setPreviewStyle] = useState<AdvancedImageStylePreset | null>(null);
   const filtered = useMemo(() => BASIC_IMAGE_STYLES.filter((style) => matchesQuery(style, query)), [query]);
+  const filteredAdvanced = useMemo(() => ADVANCED_IMAGE_STYLES.filter((style) => matchesAdvancedQuery(style, query)), [query]);
 
   function choose(style: AnyImageStylePreset) {
     onChange(style);
@@ -74,22 +81,38 @@ export function StylePicker({ selected, onChange }: StylePickerProps) {
             </div>
           </>
         ) : (
-          <div className="advanced-style-grid">
-            {ADVANCED_IMAGE_STYLES.map((style) => (
-              <article key={style.id} className={`advanced-style-card ${selected?.id === style.id ? 'active' : ''}`}>
-                {style.exampleImage && <button className="advanced-style-thumb" onClick={() => setPreviewStyle(style)}><img src={style.exampleImage} alt={style.exampleAlt || style.name} /></button>}
-                <div className="advanced-style-content">
-                  <span className="eyebrow">Advanced</span>
-                  <strong>{style.name}</strong>
-                  <p>{style.description}</p>
-                  <small>{style.usage}</small>
-                </div>
-                <div className="advanced-style-actions">
-                  {style.exampleImage && <Button variant="ghost" onClick={() => setPreviewStyle(style)}>查看示例</Button>}
-                  <Button onClick={() => choose(style)}>{selected?.id === style.id ? '已选择' : '选择'}</Button>
-                </div>
-              </article>
-            ))}
+          <div className="style-groups advanced-style-groups">
+            <label className="style-search">
+              <Search size={16} />
+              <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索: 人像, 香水, 电商, 角色..." autoFocus />
+            </label>
+            {ADVANCED_STYLE_GROUPS.map((group) => {
+              const styles = filteredAdvanced.filter((style) => style.group === group);
+              if (!styles.length) return null;
+              return (
+                <section className="style-group" key={group}>
+                  <h3>{group}</h3>
+                  <div className="advanced-style-grid">
+                    {styles.map((style) => (
+                      <article key={style.id} className={`advanced-style-card ${selected?.id === style.id ? 'active' : ''}`}>
+                        {style.exampleImage && <button className="advanced-style-thumb" onClick={() => setPreviewStyle(style)}><img src={style.exampleImage} alt={style.exampleAlt || style.name} /></button>}
+                        <div className="advanced-style-content">
+                          <span className="eyebrow">{style.group}{style.requiresReference ? ' · 需参考图' : ''}</span>
+                          <strong>{style.name}</strong>
+                          <p>{style.description}</p>
+                          <small>{style.usage}</small>
+                        </div>
+                        <div className="advanced-style-actions">
+                          {style.exampleImage && <Button variant="ghost" onClick={() => setPreviewStyle(style)}>查看示例</Button>}
+                          <Button onClick={() => choose(style)}>{selected?.id === style.id ? '已选择' : '选择'}</Button>
+                        </div>
+                      </article>
+                    ))}
+                  </div>
+                </section>
+              );
+            })}
+            {!filteredAdvanced.length && <div className="empty-state">没有匹配的高级风格.</div>}
           </div>
         )}
       </div>

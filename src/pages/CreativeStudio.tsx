@@ -21,8 +21,6 @@ interface CreativeStudioProps {
   jobs: QueueJob[];
 }
 
-const MAX_BATCH = 8;
-
 export function CreativeStudio({ onSubmit, onRetry, results, jobs }: CreativeStudioProps) {
   const [toast, setToast] = useState<{ type: 'info' | 'success' | 'error'; message: string } | null>(null);
   const [submittedIds, setSubmittedIds] = useState<string[]>([]);
@@ -94,21 +92,18 @@ export function CreativeStudio({ onSubmit, onRetry, results, jobs }: CreativeStu
     if (!snapshot.prompt.trim()) throw new Error('请填写提示词');
     if ((snapshot.mode === 'reference' || snapshot.mode === 'edit') && snapshot.refImages.length === 0) throw new Error('请先添加参考图');
     if (snapshot.mode === 'edit' && (!snapshot.editSelection || snapshot.editSelection.width < 0.01 || snapshot.editSelection.height < 0.01)) throw new Error('请先框选要修改的区域');
-    const batchCount = Math.max(1, Math.min(MAX_BATCH, Math.round(snapshot.imageCount) || 1));
-    const effectiveSnapshot = { ...snapshot, prompt: applyAnyImageStyleToPrompt(snapshot.prompt, selectedStyle) };
+    const effectiveSnapshot = { ...snapshot, imageCount: 1, prompt: applyAnyImageStyleToPrompt(snapshot.prompt, selectedStyle) };
     const payload = await buildGenerationPayload(effectiveSnapshot, snapshot.editSelection ? (imageDataUrl) => createRectMaskDataUrl(imageDataUrl, snapshot.editSelection!) : undefined);
     const nextIds: string[] = [];
-    for (let index = 0; index < batchCount; index += 1) {
-      const id = randomId('result');
-      nextIds.push(id);
-      setSubmittedIds((current) => [id, ...current.filter((item) => item !== id)].slice(0, 24));
-      await onSubmit({
-        endpoint: '/v1/images/generations',
-        body: JSON.stringify(payload),
-        contentType: 'application/json',
-        clientContext: { kind: 'single', placeholderId: id, prompt: snapshot.prompt, mode: snapshot.mode },
-      });
-    }
+    const id = randomId('result');
+    nextIds.push(id);
+    setSubmittedIds((current) => [id, ...current.filter((item) => item !== id)].slice(0, 24));
+    await onSubmit({
+      endpoint: '/v1/images/generations',
+      body: JSON.stringify(payload),
+      contentType: 'application/json',
+      clientContext: { kind: 'single', placeholderId: id, prompt: snapshot.prompt, mode: snapshot.mode },
+    });
     return nextIds;
   }
 
@@ -143,7 +138,7 @@ export function CreativeStudio({ onSubmit, onRetry, results, jobs }: CreativeStu
         <div>
           <span className="eyebrow">芽绘台</span>
           <h1>创作台</h1>
-          <p>专注描述, 参考和局部编辑, 队列会在右下角统一处理.</p>
+          <p>专注单张精修, 参考和局部编辑. 需要多张图时请使用批量出图.</p>
         </div>
       </header>
 
@@ -152,7 +147,7 @@ export function CreativeStudio({ onSubmit, onRetry, results, jobs }: CreativeStu
       <div className="studio-workbench">
         <section className="studio-composer">
           <PromptPanel config={config} onChange={patch} onSubmit={() => { void handleSubmit(); }} submitting={Boolean(toast && toast.type === 'info')} selectedStyle={selectedStyle} onStyleChange={(style) => setSelectedStyleId(style?.id || '')} />
-          {config.mode !== 'text' && <ReferenceUploader images={config.refImages} onChange={(refImages: RefImage[]) => patch({ refImages })} />}
+          {config.mode !== 'text' && <ReferenceUploader images={config.refImages} onChange={(refImages: RefImage[]) => patch({ refImages })} galleryRecords={results} title={config.mode === 'edit' ? '编辑原图' : '参考图'} localHint={config.mode === 'edit' ? '选择 1 张需要编辑的图片' : '支持多张参考图'} maxImages={config.mode === 'edit' ? 1 : 6} />}
         </section>
 
 
