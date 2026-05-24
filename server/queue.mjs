@@ -718,16 +718,51 @@ const RATE_LIMIT_HINTS = [
   'capacity',
 ];
 
+// 有些上游的图片接口会把一次失败的图片生成错误包装成 400, 但正文不是参数错误,
+// 而是一段类似聊天回复的自然语言说明. 这类情况通常说明上游路由到了文本回复
+// 或没有返回图片数据, 应该切换到下一个生图服务商继续尝试.
+const ASSISTANT_TEXT_400_HINTS = [
+  '如果你想',
+  '我可以',
+  '可以帮你',
+  '画面呈现',
+  '这张图',
+  '这幅图',
+  '其他方向',
+  '帮你把',
+];
+
+const NON_RETRYABLE_400_HINTS = [
+  'content_policy_violation',
+  'invalid_request_error',
+  'invalid parameter',
+  'invalid value',
+  'unsupported',
+  'not supported',
+  '缺少',
+  '无效',
+  '不支持',
+];
+
 function looksLikeRateLimit(message) {
   if (!message) return false;
   const lower = String(message).toLowerCase();
   return RATE_LIMIT_HINTS.some((hint) => lower.includes(hint.toLowerCase()));
 }
 
+function looksLikeAssistantTextInsteadOfImage(message) {
+  if (!message) return false;
+  const value = String(message);
+  const lower = value.toLowerCase();
+  if (NON_RETRYABLE_400_HINTS.some((hint) => lower.includes(hint.toLowerCase()))) return false;
+  return ASSISTANT_TEXT_400_HINTS.some((hint) => value.includes(hint));
+}
+
 function isRetryableJobResult(jobResult) {
   if (!jobResult) return false;
   if (isRetryableUpstreamStatus(jobResult.status)) return true;
   if (jobResult.status === 400 && looksLikeRateLimit(jobResult.error)) return true;
+  if (jobResult.status === 400 && looksLikeAssistantTextInsteadOfImage(jobResult.error)) return true;
   return false;
 }
 

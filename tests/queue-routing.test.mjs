@@ -152,6 +152,67 @@ await runProviderConversionJob(providers[0], 'https://anyrouter.test/v1/response
 console.log('queue provider conversion tests passed');
 
 
+{
+  const rawBody = Buffer.from(JSON.stringify({ model: 'client-model', prompt: 'assistant text 400 should fallback' }));
+  const fetchCalls = [];
+  globalThis.fetch = async (url, options = {}) => {
+    fetchCalls.push({ url, options });
+    if (fetchCalls.length === 1) {
+      return {
+        ok: false,
+        status: 400,
+        statusText: 'Bad Request',
+        headers: { get: () => 'text/plain; charset=utf-8' },
+        arrayBuffer: async () => Buffer.from('画面呈现一位角色在电脑前思考。如果你想尝试其他方向，我可以帮你调整构图。'),
+      };
+    }
+    return {
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      headers: { get: () => 'application/json' },
+      arrayBuffer: async () => Buffer.from(JSON.stringify({ data: [{ b64_json: 'd'.repeat(1200) }] })),
+    };
+  };
+  queue.init({
+    readLocalConfig: async (providerId = '') => {
+      const selected = providers.find((item) => item.id === providerId) || providers[0];
+      return { ...selected, providers };
+    },
+    upstreamHeaders: (cfg, headerContentType) => ({ Authorization: `Bearer test-${cfg.id}`, 'Content-Type': headerContentType }),
+    timeoutSignal: () => undefined,
+    stripHtml: (value) => String(value),
+    logLine: () => {},
+  });
+  const job = {
+    id: queue.nextJobId(),
+    userId: 'user-1',
+    status: 'pending',
+    method: 'POST',
+    upstreamPath: '/v1/images/generations',
+    contentType: 'application/json',
+    body: queue.rewriteImageJobBody(providers[0], rawBody, 'application/json'),
+    originalBody: rawBody,
+    autoProviderRouting: true,
+    excludeProviderId: '',
+    clientContext: { kind: 'single', placeholderId: 'placeholder-auto', prompt: 'test', mode: 'text' },
+    queuedAt: Date.now(),
+    startedAt: 0,
+    finishedAt: 0,
+    error: '',
+    result: null,
+    providerId: '',
+    providerName: '自动调度',
+  };
+  queue.enqueue(job);
+  const outcome = await waitForJob(job.id);
+  assert.equal(outcome.status, 200);
+  assert.equal(fetchCalls.length, 2);
+}
+
+console.log('queue assistant-text fallback tests passed');
+
+
 async function runForcedJob(provider, rawBody, fetchImpl) {
   globalThis.fetch = fetchImpl;
   queue.init({
