@@ -83,3 +83,58 @@ export function applyImageStyleToPrompt(prompt: string, style: ImageStylePreset 
   if (!style) return cleanPrompt;
   return `${cleanPrompt}\n风格要求: ${style.name} (${style.englishName}), ${style.prompt}.`;
 }
+
+export interface AdvancedImageStylePreset {
+  id: string;
+  type: 'advanced';
+  name: string;
+  englishName: string;
+  description: string;
+  usage: string;
+  template: string;
+}
+
+export type BasicImageStylePreset = ImageStylePreset & { type?: 'basic' };
+export type AnyImageStylePreset = BasicImageStylePreset | AdvancedImageStylePreset;
+
+export const ADVANCED_IMAGE_STYLES: AdvancedImageStylePreset[] = [
+  {
+    id: 'atlas-breakdown',
+    type: 'advanced',
+    name: '图鉴式拆解',
+    englishName: 'Atlas Breakdown',
+    description: '根据主题生成中文拆解信息图, 包含结构标注, 材质工艺, 纹样寓意和核心总结',
+    usage: '只需输入主题, 如: 明代马面裙, 宋代汝窑瓷器, 未来机甲少女',
+    template: `请根据{主题}自动生成一张“博物馆图鉴式中文拆解信息图”。
+
+要求整张图兼具真实写实主视觉、结构拆解、中文标注、材质说明、纹样寓意、色彩含义和核心特征总结。你需要根据主题自动判断最合适的主体对象、服饰体系、器物结构、时代风格、关键部件、材质工艺、颜色方案与版式结构，用户无需再提供其他信息。
+
+整体风格应为：国家博物馆展板、历史服饰图鉴、文博专题信息图，而不是普通海报、古风写真、电商详情页或动漫插画。背景采用米白、绢纸白、浅茶色等纸张质感，整体高级、克制、专业、可收藏。
+
+版式固定为：
+- 顶部：中文主标题 + 副标题 + 导语
+- 左侧：结构拆解区，中文引线标注关键部件，并配局部特写
+- 右上：材质 / 工艺 / 质感区，展示真实纹理小样并附说明
+- 右中：纹样 / 色彩 / 寓意区，展示主色板、纹样样本和文化解释
+- 底部：穿着顺序 / 构成流程图 + 核心特征总结
+
+若主题适合人物展示，则以真实人物全身站姿为中央主体；若更适合器物或单体结构，则改为中心主体拆解图，但整体仍保持完整中文信息图形式。所有文字必须为简体中文，清晰、规整、可读，不要乱码、错字、英文或拼音。重点突出真实结构、材质差异、文化说明与图鉴气质。
+
+避免：海报感、影楼感、电商感、动漫感、cosplay感、乱标注、错结构、糊字、假材质、过度装饰。`,
+  },
+];
+
+export function findAdvancedImageStyle(styleId: string) {
+  return ADVANCED_IMAGE_STYLES.find((style) => style.id === styleId) || null;
+}
+
+export function findImageStyle(styleId: string): AnyImageStylePreset | null {
+  return findBasicImageStyle(styleId) || findAdvancedImageStyle(styleId);
+}
+
+export function applyAnyImageStyleToPrompt(prompt: string, style: AnyImageStylePreset | null) {
+  const cleanPrompt = prompt.trim();
+  if (!style) return cleanPrompt;
+  if (style.type === 'advanced') return style.template.replaceAll('{主题}', cleanPrompt);
+  return applyImageStyleToPrompt(cleanPrompt, style);
+}

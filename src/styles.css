@@ -349,3 +349,10 @@ h2 { font-size: 16px; }
 .style-card span { color: var(--accent); font-size: 12px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .style-card small { color: var(--muted); line-height: 1.4; }
 @media (max-width: 720px) { .style-picker-row { display: grid; } .style-picker-actions { justify-content: stretch; } .style-picker-actions .btn { flex: 1; } .style-modal { padding: 10px; } .style-modal-panel { width: 100%; max-height: calc(100vh - 20px); border-radius: 22px; padding: 14px; } .style-modal-heading { display: grid; } .style-grid { grid-template-columns: repeat(auto-fill, minmax(132px, 1fr)); } }
+.advanced-style-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; }
+.advanced-style-card { min-width: 0; border: 1px solid var(--line); border-radius: 20px; background: var(--surface-lift); color: var(--text); padding: 16px; text-align: left; cursor: pointer; display: grid; gap: 8px; }
+.advanced-style-card:hover, .advanced-style-card.active { border-color: var(--accent-border-strong); background: var(--accent-tint-soft); }
+.advanced-style-card strong { font-size: 17px; }
+.advanced-style-card p { color: var(--text); line-height: 1.55; font-size: 13px; }
+.advanced-style-card small { color: var(--muted); line-height: 1.5; }
+@media (max-width: 720px) { .advanced-style-grid { grid-template-columns: 1fr; } }

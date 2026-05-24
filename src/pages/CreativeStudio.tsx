@@ -3,7 +3,7 @@ import type { GenerationConfig, RefImage, ResultRecord } from '../types/generati
 import { buildGenerationPayload, resolveSize } from '../lib/api/generation';
 import { createRectMaskDataUrl } from '../lib/editor/mask';
 import { randomId } from '../lib/random/id';
-import { applyImageStyleToPrompt, findBasicImageStyle } from '../lib/styles/image-styles';
+import { applyAnyImageStyleToPrompt, findImageStyle } from '../lib/styles/image-styles';
 import { readDraft, writeDraft } from '../lib/storage/drafts';
 import { ModeSwitcher } from '../components/studio/ModeSwitcher';
 import { PromptPanel } from '../components/studio/PromptPanel';
@@ -48,7 +48,7 @@ export function CreativeStudio({ onSubmit, onRetry, results, jobs }: CreativeStu
     };
   });
   const currentResults = useMemo(() => results.filter((record) => record.kind !== 'series' && submittedIds.includes(record.id)), [results, submittedIds]);
-  const selectedStyle = useMemo(() => findBasicImageStyle(selectedStyleId), [selectedStyleId]);
+  const selectedStyle = useMemo(() => findImageStyle(selectedStyleId), [selectedStyleId]);
   const currentJobs = useMemo(() => jobs.filter((job) => {
     const context = job.clientContext;
     if (!context || context.kind !== 'single') return false;
@@ -95,7 +95,7 @@ export function CreativeStudio({ onSubmit, onRetry, results, jobs }: CreativeStu
     if ((snapshot.mode === 'reference' || snapshot.mode === 'edit') && snapshot.refImages.length === 0) throw new Error('请先添加参考图');
     if (snapshot.mode === 'edit' && (!snapshot.editSelection || snapshot.editSelection.width < 0.01 || snapshot.editSelection.height < 0.01)) throw new Error('请先框选要修改的区域');
     const batchCount = Math.max(1, Math.min(MAX_BATCH, Math.round(snapshot.imageCount) || 1));
-    const effectiveSnapshot = { ...snapshot, prompt: applyImageStyleToPrompt(snapshot.prompt, selectedStyle) };
+    const effectiveSnapshot = { ...snapshot, prompt: applyAnyImageStyleToPrompt(snapshot.prompt, selectedStyle) };
     const payload = await buildGenerationPayload(effectiveSnapshot, snapshot.editSelection ? (imageDataUrl) => createRectMaskDataUrl(imageDataUrl, snapshot.editSelection!) : undefined);
     const nextIds: string[] = [];
     for (let index = 0; index < batchCount; index += 1) {

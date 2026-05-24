@@ -1,12 +1,12 @@
 import { Search, X } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { BASIC_IMAGE_STYLES, BASIC_STYLE_GROUPS, type ImageStylePreset } from '../../lib/styles/image-styles';
+import { ADVANCED_IMAGE_STYLES, BASIC_IMAGE_STYLES, BASIC_STYLE_GROUPS, type AnyImageStylePreset, type ImageStylePreset } from '../../lib/styles/image-styles';
 import { Button } from '../ui/Button';
 
 interface StylePickerProps {
-  selected: ImageStylePreset | null;
-  onChange: (style: ImageStylePreset | null) => void;
+  selected: AnyImageStylePreset | null;
+  onChange: (style: AnyImageStylePreset | null) => void;
 }
 
 function matchesQuery(style: ImageStylePreset, query: string) {
@@ -21,7 +21,7 @@ export function StylePicker({ selected, onChange }: StylePickerProps) {
   const [query, setQuery] = useState('');
   const filtered = useMemo(() => BASIC_IMAGE_STYLES.filter((style) => matchesQuery(style, query)), [query]);
 
-  function choose(style: ImageStylePreset) {
+  function choose(style: AnyImageStylePreset) {
     onChange(style);
     setOpen(false);
   }
@@ -73,7 +73,16 @@ export function StylePicker({ selected, onChange }: StylePickerProps) {
             </div>
           </>
         ) : (
-          <div className="empty-state large">高级风格会放更场景化的模板, 比如电商主图, 小红书封面, 品牌 KV, 电影海报等.</div>
+          <div className="advanced-style-grid">
+            {ADVANCED_IMAGE_STYLES.map((style) => (
+              <button key={style.id} className={`advanced-style-card ${selected?.id === style.id ? 'active' : ''}`} onClick={() => choose(style)}>
+                <span className="eyebrow">Advanced</span>
+                <strong>{style.name}</strong>
+                <p>{style.description}</p>
+                <small>{style.usage}</small>
+              </button>
+            ))}
+          </div>
         )}
       </div>
     </div>,

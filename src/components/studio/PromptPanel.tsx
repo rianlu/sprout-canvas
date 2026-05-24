@@ -1,5 +1,5 @@
 import type { GenerationConfig } from '../../types/generation';
-import type { ImageStylePreset } from '../../lib/styles/image-styles';
+import type { AnyImageStylePreset } from '../../lib/styles/image-styles';
 import { Card } from '../ui/Card';
 import { GenerationSettingsPanel } from './GenerationSettingsPanel';
 import { StylePicker } from './StylePicker';
@@ -9,8 +9,8 @@ interface PromptPanelProps {
   onChange: (patch: Partial<GenerationConfig>) => void;
   onSubmit: () => void;
   submitting: boolean;
-  selectedStyle: ImageStylePreset | null;
-  onStyleChange: (style: ImageStylePreset | null) => void;
+  selectedStyle: AnyImageStylePreset | null;
+  onStyleChange: (style: AnyImageStylePreset | null) => void;
 }
 
 export function PromptPanel({ config, onChange, onSubmit, submitting, selectedStyle, onStyleChange }: PromptPanelProps) {
