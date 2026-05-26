@@ -35,6 +35,7 @@ export function CreativeStudio({ onSubmit, onRetry, results, jobs }: CreativeStu
       prompt: readDraft('studio_prompt'),
       imageCount: 1,
       aspectRatio: '1:1',
+      sizeTier: '1K',
       requestSize: size.size,
       sizeHint: size.hint,
       quality: 'auto',
@@ -79,8 +80,8 @@ export function CreativeStudio({ onSubmit, onRetry, results, jobs }: CreativeStu
 
   function patch(next: Partial<GenerationConfig>) {
     const merged = { ...config, ...next };
-    if (next.aspectRatio) {
-      const size = resolveSize(next.aspectRatio);
+    if (next.aspectRatio || next.sizeTier) {
+      const size = resolveSize(merged.aspectRatio, merged.sizeTier);
       merged.requestSize = size.size;
       merged.sizeHint = size.hint;
     }

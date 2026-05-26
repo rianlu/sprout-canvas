@@ -40,7 +40,7 @@ const multipartBody = Buffer.from([
 {
   const body = Buffer.from(JSON.stringify({ model: 'client-model', prompt: 'test' }));
   const provider = queue.chooseImageProvider(config, '/v1/images/generations', 'application/json', '', body);
-  assert.ok(['anyrouter', 'default'].includes(provider.id));
+  assert.equal(provider.id, 'anyrouter');
   const rewritten = JSON.parse(queue.rewriteImageJobBody(provider, body, 'application/json').toString('utf8'));
   assert.equal(rewritten.model, provider.imageModel);
 }

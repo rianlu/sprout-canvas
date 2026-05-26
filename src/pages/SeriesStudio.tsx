@@ -4,13 +4,14 @@ import { Card } from '../components/ui/Card';
 import { ReferenceUploader } from '../components/studio/ReferenceUploader';
 import { ResultGrid } from '../components/studio/ResultGrid';
 import { StylePicker } from '../components/studio/StylePicker';
+import { GenerationCoreSettings } from '../components/studio/GenerationSettingsPanel';
 import { buildGenerationPayload, resolveSize } from '../lib/api/generation';
 import { requestTextGeneration } from '../lib/api/text';
 import { randomId } from '../lib/random/id';
 import { readDraft, writeDraft } from '../lib/storage/drafts';
 import { applyAnyImageStyleToPrompt, findImageStyle } from '../lib/styles/image-styles';
 import type { QueueSubmitInput } from '../lib/api/queue';
-import type { AspectRatio, GenerationConfig, ImageQuality, RefImage, ResultRecord } from '../types/generation';
+import type { AspectRatio, GenerationConfig, ImageQuality, ImageSizeTier, RefImage, ResultRecord } from '../types/generation';
 
 interface SeriesStudioProps {
   onSubmit: (input: QueueSubmitInput) => Promise<unknown>;
@@ -68,21 +69,22 @@ function parseTaskLines(value: string): BatchTask[] {
 }
 
 
-function buildBaseConfig(aspectRatio: AspectRatio, quality: ImageQuality, refs: RefImage[], mode: GenerationConfig['mode']): GenerationConfig {
-  const size = resolveSize(aspectRatio);
+function buildBaseConfig(settings: Pick<GenerationConfig, 'aspectRatio' | 'sizeTier' | 'quality' | 'background' | 'outputFormat' | 'outputCompression'>, refs: RefImage[], mode: GenerationConfig['mode']): GenerationConfig {
+  const size = resolveSize(settings.aspectRatio, settings.sizeTier);
   return {
     mode,
     generationMode: 'images',
     imageModel: 'gpt-image-2',
     prompt: '',
     imageCount: 1,
-    aspectRatio,
+    aspectRatio: settings.aspectRatio,
+    sizeTier: settings.sizeTier,
     requestSize: size.size,
     sizeHint: size.hint,
-    quality,
-    background: 'auto',
-    outputFormat: 'auto',
-    outputCompression: 90,
+    quality: settings.quality,
+    background: settings.background,
+    outputFormat: settings.outputFormat,
+    outputCompression: settings.outputCompression,
     refImages: refs,
     editSelection: null,
   };
@@ -101,8 +103,12 @@ export function SeriesStudio({ onSubmit, results }: SeriesStudioProps) {
   const [refs, setRefs] = useState<RefImage[]>([]);
   const [selectedStyleId, setSelectedStyleId] = useState(() => readDraft('batch_style'));
   const [count, setCount] = useState(() => clampInt(Number(readDraft('batch_count')), 2, MAX_BATCH_COUNT, 4));
-  const [aspectRatio, setAspectRatio] = useState<AspectRatio>('1:1');
-  const [quality, setQuality] = useState<ImageQuality>('auto');
+  const [aspectRatio, setAspectRatio] = useState<AspectRatio>((readDraft('batch_aspect_ratio') as AspectRatio) || '1:1');
+  const [sizeTier, setSizeTier] = useState<ImageSizeTier>((readDraft('batch_size_tier') as ImageSizeTier) || '1K');
+  const [quality, setQuality] = useState<ImageQuality>((readDraft('batch_quality') as ImageQuality) || 'auto');
+  const [background, setBackground] = useState<GenerationConfig['background']>((readDraft('batch_background') as GenerationConfig['background']) || 'auto');
+  const [outputFormat, setOutputFormat] = useState<GenerationConfig['outputFormat']>((readDraft('batch_output_format') as GenerationConfig['outputFormat']) || 'auto');
+  const [outputCompression, setOutputCompression] = useState(() => clampInt(Number(readDraft('batch_output_compression')), 10, 100, 90));
   const [busy, setBusy] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [toast, setToast] = useState<{ type: 'info' | 'success' | 'error'; message: string } | null>(null);
@@ -124,9 +130,15 @@ export function SeriesStudio({ onSubmit, results }: SeriesStudioProps) {
       writeDraft('batch_tasks', taskText);
       writeDraft('batch_style', selectedStyleId);
       writeDraft('batch_count', String(count));
+      writeDraft('batch_aspect_ratio', aspectRatio);
+      writeDraft('batch_size_tier', sizeTier);
+      writeDraft('batch_quality', quality);
+      writeDraft('batch_background', background);
+      writeDraft('batch_output_format', outputFormat);
+      writeDraft('batch_output_compression', String(outputCompression));
     }, 300);
     return () => window.clearTimeout(timer);
-  }, [brief, count, mode, selectedStyleId, taskText]);
+  }, [aspectRatio, background, brief, count, mode, outputCompression, outputFormat, quality, selectedStyleId, sizeTier, taskText]);
 
   useEffect(() => {
     if (mode === 'board' && !selectedStyleId) setSelectedStyleId('product-storyboard');
@@ -137,6 +149,26 @@ export function SeriesStudio({ onSubmit, results }: SeriesStudioProps) {
     const timer = window.setTimeout(() => setToast(null), 2800);
     return () => window.clearTimeout(timer);
   }, [toast]);
+
+  const baseSettings = useMemo<Pick<GenerationConfig, 'aspectRatio' | 'sizeTier' | 'quality' | 'background' | 'outputFormat' | 'outputCompression'>>(() => ({
+    aspectRatio,
+    sizeTier,
+    quality,
+    background,
+    outputFormat,
+    outputCompression,
+  }), [aspectRatio, background, outputCompression, outputFormat, quality, sizeTier]);
+
+  const settingsPreviewConfig = useMemo<GenerationConfig>(() => buildBaseConfig(baseSettings, refs, refs.length ? 'reference' : 'text'), [baseSettings, refs]);
+
+  function patchSettings(next: Partial<GenerationConfig>) {
+    if (next.aspectRatio) setAspectRatio(next.aspectRatio);
+    if (next.sizeTier) setSizeTier(next.sizeTier);
+    if (next.quality) setQuality(next.quality);
+    if (next.background) setBackground(next.background);
+    if (next.outputFormat) setOutputFormat(next.outputFormat);
+    if (typeof next.outputCompression === 'number') setOutputCompression(next.outputCompression);
+  }
 
   function switchMode(nextMode: BatchMode) {
     setMode(nextMode);
@@ -185,7 +217,7 @@ export function SeriesStudio({ onSubmit, results }: SeriesStudioProps) {
       const nextIds: string[] = [];
       for (const task of submitTasks.slice(0, mode === 'board' ? 1 : MAX_BATCH_COUNT)) {
         const prompt = applyAnyImageStyleToPrompt(task.prompt, selectedStyle);
-        const config = buildBaseConfig(aspectRatio, quality, refs, refs.length ? 'reference' : 'text');
+        const config = buildBaseConfig(baseSettings, refs, refs.length ? 'reference' : 'text');
         const payload = await buildGenerationPayload({ ...config, prompt });
         const id = randomId('result');
         nextIds.push(id);
@@ -260,10 +292,9 @@ export function SeriesStudio({ onSubmit, results }: SeriesStudioProps) {
               <div><span className="eyebrow">Style</span><h2>风格和参数</h2><p>高级风格会作为模板套用, 普通风格会追加为风格要求.</p></div>
             </div>
             <StylePicker selected={selectedStyle} onChange={(style) => setSelectedStyleId(style?.id || '')} />
-            <div className="field-grid series-settings-grid">
-              {mode !== 'board' && <label className="field"><span>生成张数</span><input type="number" inputMode="numeric" min={2} max={MAX_BATCH_COUNT} value={count} onChange={(event) => { const next = Number(event.target.value); setCount(Number.isFinite(next) ? next : 4); }} onBlur={(event) => setCount(clampInt(Number(event.target.value), 2, MAX_BATCH_COUNT, 4))} /></label>}
-              <label className="field"><span>比例</span><select value={aspectRatio} onChange={(event) => setAspectRatio(event.target.value as AspectRatio)}><option>1:1</option><option>16:9</option><option>9:16</option><option>4:3</option><option>3:4</option><option>auto</option></select></label>
-              <label className="field"><span>质量</span><select value={quality} onChange={(event) => setQuality(event.target.value as ImageQuality)}><option>auto</option><option>low</option><option>medium</option><option>high</option></select></label>
+            <div className="series-settings-block">
+              {mode !== 'board' && <label className="field series-count-field"><span>生成张数</span><input type="number" inputMode="numeric" min={2} max={MAX_BATCH_COUNT} value={count} onChange={(event) => { const next = Number(event.target.value); setCount(Number.isFinite(next) ? next : 4); }} onBlur={(event) => setCount(clampInt(Number(event.target.value), 2, MAX_BATCH_COUNT, 4))} /></label>}
+              <GenerationCoreSettings config={settingsPreviewConfig} onChange={patchSettings} className="series-core-settings" />
             </div>
           </Card>
         </div>

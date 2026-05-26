@@ -18,7 +18,6 @@ const recentImageDurations = [];
 let activeJob = null;
 let lastServedUserId = '';
 let imageJobSeq = 0;
-let providerPickSeq = 0;
 const DEFAULT_IMAGE_DURATION_MS = 90_000;
 const PROVIDER_FAILURE_THRESHOLD = 3;
 const PROVIDER_CIRCUIT_OPEN_MS = 30 * 60 * 1000;
@@ -409,11 +408,10 @@ function rankedImageProviders(config, upstreamPath, contentType, excludeId, body
   if (excludedIds.size) candidates = candidates.filter((p) => !excludedIds.has(p.id));
   if (!candidates.length) candidates = compatibleProviders(config, upstreamPath, contentType, body);
   if (!candidates.length) return [];
-  providerPickSeq += 1;
   const pool = candidates.filter((provider) => !isProviderCircuitOpen(provider.id));
   if (!pool.length) return [];
   return pool
-    .map((provider, index) => ({ provider, load: providerLoad(provider.id), order: (index + providerPickSeq) % pool.length }))
+    .map((provider, index) => ({ provider, load: providerLoad(provider.id), order: index }))
     .sort((left, right) => left.load - right.load || left.order - right.order)
     .map((item) => item.provider);
 }
@@ -633,6 +631,7 @@ function buildResponsesPayloadFromImagesPayload(provider, imagesPayload) {
   if (imagesPayload?.size) tool.size = imagesPayload.size;
   if (imagesPayload?.quality) tool.quality = imagesPayload.quality;
   if (imagesPayload?.background) tool.background = imagesPayload.background;
+  if (imagesPayload?.moderation) tool.moderation = imagesPayload.moderation;
   if (imagesPayload?.output_compression) tool.output_compression = imagesPayload.output_compression;
   const contentParts = refs.map((ref) => ({ type: 'input_image', image_url: ref.imageUrl }));
   const instruction = firstMaskRef

@@ -1,8 +1,9 @@
 import type { GenerationMode } from './provider';
 
 export type StudioMode = 'text' | 'reference' | 'edit';
-export type AspectRatio = '1:1' | '16:9' | '9:16' | '4:3' | '3:4' | 'auto';
+export type AspectRatio = '1:1' | '16:9' | '9:16' | '4:3' | '3:4' | '3:2' | '2:3' | '21:9' | 'auto';
 export type ImageQuality = 'auto' | 'low' | 'medium' | 'high';
+export type ImageSizeTier = '1K' | '2K' | '4K';
 
 export interface RefImage {
   id: string;
@@ -25,6 +26,7 @@ export interface GenerationConfig {
   prompt: string;
   imageCount: number;
   aspectRatio: AspectRatio;
+  sizeTier: ImageSizeTier;
   requestSize: string;
   sizeHint: string;
   quality: ImageQuality;

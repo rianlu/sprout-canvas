@@ -43,15 +43,22 @@ class FakeElement {
   querySelector() { return new FakeElement(); }
 }
 
-const ids = [...fs.readFileSync('index.html', 'utf8').matchAll(/id="([^"]+)"/g)].map((match) => match[1]);
+const ids = [
+  ...new Set([
+    ...[...fs.readFileSync('index.html', 'utf8').matchAll(/id="([^"]+)"/g)].map((match) => match[1]),
+    ...[...fs.readFileSync('js/app.js', 'utf8').matchAll(/#([A-Za-z][A-Za-z0-9_-]*)/g)].map((match) => match[1]),
+  ]),
+];
 const elements = new Map(ids.map((id) => [id, new FakeElement(id)]));
 for (const [id, element] of elements) element.id = id;
 
-const tabDraw = elements.get('tabDrawBtn');
+const tabDraw = new FakeElement('tabDrawBtn');
 tabDraw.dataset.page = 'draw';
-const tabGallery = elements.get('tabGalleryBtn');
+const tabSeries = new FakeElement('tabSeriesBtn');
+tabSeries.dataset.page = 'series';
+const tabGallery = new FakeElement('tabGalleryBtn');
 tabGallery.dataset.page = 'gallery';
-const tabSplit = elements.get('tabSplitBtn');
+const tabSplit = new FakeElement('tabSplitBtn');
 tabSplit.dataset.page = 'split';
 
 const documentStub = {
@@ -61,7 +68,7 @@ const documentStub = {
     return new FakeElement(selector);
   },
   querySelectorAll(selector) {
-    if (selector === '.tab-button') return [tabDraw, tabSplit, tabGallery];
+    if (selector === '.tab-button') return [tabDraw, tabSeries, tabSplit, tabGallery];
     return [];
   },
   createElement(tag) {
@@ -163,12 +170,13 @@ function assertConfig(expectedRequestSize) {
     assert.equal(payload.size, expectedRequestSize);
   }
   assert.equal(payload.quality, 'high');
+  assert.equal(payload.moderation, 'low');
   assert.equal(Object.hasOwn(payload, 'output_format'), false);
   assert.equal(Object.hasOwn(payload, 'output_compression'), false);
 }
 
 setBaseValues();
-assertConfig('1536x1024');
+assertConfig('1280x720');
 
 setBaseValues();
 elements.get('outputFormat').value = 'auto';
@@ -183,16 +191,18 @@ elements.get('outputCompression').value = '';
   assert.equal(Object.hasOwn(payload, 'output_compression'), false);
   assert.equal(Object.hasOwn(tool, 'output_format'), false);
   assert.equal(Object.hasOwn(tool, 'output_compression'), false);
+  assert.equal(tool.moderation, 'low');
 }
 
 const cases = [
   ['1:1', '1024x1024'],
-  ['16:9', '1536x1024'],
-  ['9:16', '1024x1536'],
-  ['4:3', '1536x1024'],
-  ['3:4', '1024x1536'],
+  ['16:9', '1280x720'],
+  ['9:16', '720x1280'],
+  ['4:3', '1024x768'],
+  ['3:4', '768x1024'],
   ['3:2', '1536x1024'],
   ['2:3', '1024x1536'],
+  ['21:9', '1280x544'],
   ['auto', 'auto'],
 ];
 for (const [ratio, expectedRequest] of cases) {

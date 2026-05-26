@@ -369,16 +369,18 @@ const ASPECT_RATIOS = {
   '3:4': [3, 4],
   '3:2': [3, 2],
   '2:3': [2, 3],
+  '21:9': [21, 9],
 };
 
 const RATIO_REQUEST_SIZES = {
   '1:1': '1024x1024',
-  '16:9': '1536x1024',
-  '9:16': '1024x1536',
-  '4:3': '1536x1024',
-  '3:4': '1024x1536',
+  '16:9': '1280x720',
+  '9:16': '720x1280',
+  '4:3': '1024x768',
+  '3:4': '768x1024',
   '3:2': '1536x1024',
   '2:3': '1024x1536',
+  '21:9': '1280x544',
 };
 
 function sizeLabel(size) {
@@ -688,7 +690,7 @@ function requestHeaders(config, stream = false) {
 }
 
 function buildImageTool(config) {
-  const tool = { type: 'image_generation' };
+  const tool = { type: 'image_generation', moderation: 'low' };
   if (config.outputFormat !== 'auto') tool.output_format = config.outputFormat;
   if (config.requestSize !== 'auto') tool.size = config.requestSize;
   if (config.quality !== 'auto') tool.quality = config.quality;
@@ -733,6 +735,7 @@ function buildImagesPayload(config, count = config.imageCount, runIndex = 0) {
     model: config.imageModel,
     prompt: `${config.prompt}${suffix}`,
     n: count,
+    moderation: 'low',
   };
   if (config.outputFormat !== 'auto') body.output_format = config.outputFormat;
   if (config.requestSize !== 'auto') body.size = config.requestSize;
@@ -752,6 +755,7 @@ function buildImagesEditFormData(config, count = config.imageCount, runIndex = 0
   const formData = new FormData();
   formData.append('model', config.imageModel);
   formData.append('prompt', `${config.prompt}${suffix}`);
+  formData.append('moderation', 'low');
   appendImagesFormValue(formData, 'n', count);
   appendImagesFormValue(formData, 'size', config.requestSize);
   appendImagesFormValue(formData, 'quality', config.quality);

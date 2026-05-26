@@ -121,6 +121,10 @@ h2 { font-size: 16px; }
 .field-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
 .field-grid.compact { grid-template-columns: 1fr 120px; }
 .settings-grid { grid-template-columns: repeat(4, minmax(110px, 1fr)); }
+.core-settings-grid { align-items: stretch; }
+.settings-size-card { display: grid; gap: 3px; align-content: center; min-height: 68px; margin-bottom: 12px; padding: 10px 12px; border-radius: 16px; border: 1px solid var(--line); background: var(--surface-lift); }
+.settings-size-card span, .settings-size-card small { color: var(--muted); font-size: 12px; }
+.settings-size-card strong { font-size: 15px; }
 .generation-toolbar { display: grid; gap: 12px; border-top: 1px solid var(--line); padding-top: 12px; }
 .generation-submit-row { display: grid; grid-template-columns: minmax(150px, 220px) minmax(220px, 1fr); gap: 12px; align-items: stretch; }
 .settings-summary { display: grid; gap: 4px; padding: 10px 12px; border-radius: 16px; border: 1px solid var(--line); background: var(--surface-lift); }
@@ -192,6 +196,9 @@ h2 { font-size: 16px; }
 .series-style-input { min-height: 150px; }
 .series-plan-input { min-height: 172px; }
 .series-settings-grid { grid-template-columns: 1.1fr 0.95fr 0.95fr; }
+.series-settings-block { display: grid; gap: 12px; }
+.series-count-field { max-width: 180px; }
+.series-core-settings { display: grid; gap: 12px; }
 .series-reference-card .upload-panel { padding: 14px; }
 .series-reference-card .dropzone { min-height: 116px; }
 .series-reference-card .series-settings-grid { grid-template-columns: 1fr; }
