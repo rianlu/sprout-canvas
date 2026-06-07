@@ -1,6 +1,6 @@
 services:
-  image-generator:
-    container_name: image-generator
+  sprout-canvas:
+    container_name: sprout-canvas
     build: .
     ports:
       - "8888:8787"
