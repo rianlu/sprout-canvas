@@ -1,7 +1,8 @@
 import { Search, X } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { ADVANCED_IMAGE_STYLES, ADVANCED_STYLE_GROUPS, BASIC_IMAGE_STYLES, BASIC_STYLE_GROUPS, type AdvancedImageStylePreset, type AnyImageStylePreset, type ImageStylePreset } from '../../lib/styles/image-styles';
+import { useFocusTrap } from '../../hooks/useFocusTrap';
 import { Button } from '../ui/Button';
 
 interface StylePickerProps {
@@ -26,25 +27,48 @@ export function StylePicker({ selected, onChange }: StylePickerProps) {
   const [tab, setTab] = useState<'basic' | 'advanced'>('basic');
   const [query, setQuery] = useState('');
   const [previewStyle, setPreviewStyle] = useState<AdvancedImageStylePreset | null>(null);
+  const modalPanelRef = useFocusTrap<HTMLDivElement>(open && !previewStyle);
+  const examplePanelRef = useFocusTrap<HTMLDivElement>(Boolean(previewStyle));
   const filtered = useMemo(() => BASIC_IMAGE_STYLES.filter((style) => matchesQuery(style, query)), [query]);
   const filteredAdvanced = useMemo(() => ADVANCED_IMAGE_STYLES.filter((style) => matchesAdvancedQuery(style, query)), [query]);
 
+  useEffect(() => {
+    if (!open) return undefined;
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key !== 'Escape') return;
+      event.preventDefault();
+      if (previewStyle) {
+        setPreviewStyle(null);
+        return;
+      }
+      setPreviewStyle(null);
+      setOpen(false);
+    }
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [open, previewStyle]);
+
+  function closePicker() {
+    setPreviewStyle(null);
+    setOpen(false);
+  }
+
   function choose(style: AnyImageStylePreset) {
     onChange(style);
-    setOpen(false);
+    closePicker();
   }
 
   const modal = open ? createPortal(
     <div className="style-modal" role="dialog" aria-modal="true" aria-label="选择图片风格">
-      <button className="style-modal-backdrop" aria-label="关闭风格选择" onClick={() => setOpen(false)} />
-      <div className="style-modal-panel">
+      <button className="style-modal-backdrop" aria-label="关闭风格选择" onClick={closePicker} />
+      <div ref={modalPanelRef} className="style-modal-panel">
         <div className="style-modal-heading">
           <div>
             <span className="eyebrow">Style</span>
             <h2>选择图片风格</h2>
             <p>风格不会改写输入框, 只会在提交时自动追加到提示词.</p>
           </div>
-          <Button variant="ghost" onClick={() => setOpen(false)}><X size={16} />关闭</Button>
+          <Button variant="ghost" onClick={closePicker}><X size={16} />关闭</Button>
         </div>
 
         <div className="style-tabs" role="tablist" aria-label="风格类型">
@@ -119,7 +143,7 @@ export function StylePicker({ selected, onChange }: StylePickerProps) {
       {previewStyle?.exampleImage && (
         <div className="style-example-viewer" role="dialog" aria-modal="true" aria-label="高级风格示例图">
           <button className="style-example-backdrop" aria-label="关闭示例图" onClick={() => setPreviewStyle(null)} />
-          <div className="style-example-panel">
+          <div ref={examplePanelRef} className="style-example-panel">
             <div className="style-example-heading">
               <div><span className="eyebrow">Example</span><h2>{previewStyle.name}</h2></div>
               <Button variant="ghost" onClick={() => setPreviewStyle(null)}><X size={16} />关闭</Button>
