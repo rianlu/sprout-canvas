@@ -103,7 +103,7 @@ export function CreativeStudio({ onSubmit, onRetry, results, jobs }: CreativeStu
       endpoint: '/v1/images/generations',
       body: JSON.stringify(payload),
       contentType: 'application/json',
-      clientContext: { kind: 'single', placeholderId: id, prompt: snapshot.prompt, mode: snapshot.mode },
+      clientContext: { kind: 'single', placeholderId: id, prompt: snapshot.prompt, mode: snapshot.mode, outputFormat: snapshot.outputFormat },
     });
     return nextIds;
   }

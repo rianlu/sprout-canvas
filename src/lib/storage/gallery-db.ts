@@ -1,4 +1,5 @@
 import type { ResultRecord } from '../../types/generation';
+import { dataUrlFormat, normalizeImageOutputFormat } from '../image/format';
 
 const DB_NAME = 'img-gen-gallery';
 const STORE_NAME = 'records';
@@ -49,6 +50,7 @@ function normalizeRecord(record: StoredResultRecord, index = 0): ResultRecord | 
     providerName: typeof record.providerName === 'string' ? record.providerName : '自动调度',
     mode: record.mode === 'reference' || record.mode === 'edit' ? record.mode : 'text',
     kind: record.kind || 'single',
+    outputFormat: dataUrlFormat(record.dataUrl) || normalizeImageOutputFormat(record.outputFormat),
     createdAt,
   };
 }

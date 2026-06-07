@@ -2,6 +2,7 @@ import { ChevronLeft, ChevronRight, Download, Trash2, X } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import type { ResultRecord } from '../../types/generation';
 import { buildDownloadName } from '../../lib/image/filename';
+import { imageFileExtension } from '../../lib/image/format';
 import { useFocusTrap } from '../../hooks/useFocusTrap';
 import { Button } from '../ui/Button';
 
@@ -73,7 +74,7 @@ export function GalleryGrid({ records, onClear, onDelete }: { records: ResultRec
   function download(record: ResultRecord) {
     const anchor = document.createElement('a');
     anchor.href = record.dataUrl;
-    anchor.download = buildDownloadName(record.prompt, record.createdAt);
+    anchor.download = buildDownloadName(record.prompt, record.createdAt, imageFileExtension(record.dataUrl, record.outputFormat));
     anchor.click();
   }
 

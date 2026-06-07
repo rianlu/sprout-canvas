@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { cancelQueueJob, getQueueResult, listQueueJobs, retryQueueJob, submitQueueJob, type QueueSubmitInput } from '../lib/api/queue';
-import { resultDataUrl } from '../lib/image/format';
+import { dataUrlFormat, normalizeImageOutputFormat, resultDataUrl } from '../lib/image/format';
 import type { ResultKind, ResultRecord, StudioMode } from '../types/generation';
 import type { QueueJob } from '../types/queue';
 
@@ -25,7 +25,7 @@ export function useQueue(onResult: (record: ResultRecord) => void) {
       handled.current.add(job.id);
       try {
         const result = await getQueueResult(job.id);
-        const dataUrl = resultDataUrl(result);
+        const dataUrl = await resultDataUrl(result, job.clientContext?.outputFormat);
         if (!dataUrl) {
           handled.current.delete(job.id);
           continue;
@@ -39,6 +39,7 @@ export function useQueue(onResult: (record: ResultRecord) => void) {
           providerName: job.providerName,
           mode: (context?.mode || 'text') as StudioMode,
           kind: (context?.kind || 'single') as ResultKind,
+          outputFormat: dataUrlFormat(dataUrl) || normalizeImageOutputFormat(context?.outputFormat),
           createdAt: Date.now(),
         });
       } catch (error) {
@@ -110,4 +111,3 @@ export function useQueue(onResult: (record: ResultRecord) => void) {
 
   return { jobs, globalActive, globalQueued, submit, cancel, retry, refresh: tick };
 }
-

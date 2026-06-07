@@ -229,7 +229,7 @@ async function handleAuthStatus(req, res) {
   const session = sessionFromRequest(req);
   json(res, 200, {
     required: Boolean(config.accessPassword),
-    authenticated: !config.accessPassword || session !== null,
+    authenticated: session !== null,
     userId: session?.userId || '',
   });
 }
@@ -258,8 +258,9 @@ async function handleAuthLogin(req, res) {
   let payload = {};
   try {
     payload = JSON.parse((await readRequestBody(req)).toString('utf8') || '{}');
-  } catch {
-    json(res, 400, { error: '请求体不是有效 JSON' });
+  } catch (error) {
+    const statusCode = Number(error?.statusCode) || 400;
+    json(res, statusCode, { error: statusCode === 400 ? '请求体不是有效 JSON' : error.message || String(error) });
     return;
   }
   const userId = String(payload.userId || '').trim();
@@ -545,8 +546,9 @@ async function handleTextGeneration(req, res) {
   let payload;
   try {
     payload = JSON.parse((await readRequestBody(req)).toString('utf8') || '{}');
-  } catch {
-    json(res, 400, { error: '请求体不是有效 JSON' });
+  } catch (error) {
+    const statusCode = Number(error?.statusCode) || 400;
+    json(res, statusCode, { error: statusCode === 400 ? '请求体不是有效 JSON' : error.message || String(error) });
     return;
   }
   const errors = [];
@@ -751,16 +753,28 @@ function handleRetryJob(req, res, jobId) {
 }
 
 async function serveStatic(req, res, pathname) {
-  const cleanPath = pathname === '/' ? '/index.html' : decodeURIComponent(pathname);
+  let cleanPath;
+  try {
+    cleanPath = pathname === '/' ? '/index.html' : decodeURIComponent(pathname);
+  } catch {
+    json(res, 400, { error: '请求路径编码无效' });
+    return;
+  }
   if (cleanPath.startsWith('/config/') || cleanPath.includes('/.') || path.basename(cleanPath).startsWith('.')) {
     res.writeHead(404);
     res.end('Not found');
     return;
   }
-  const distRoot = path.join(ROOT, 'dist');
-  const staticRoot = existsSync(path.join(distRoot, 'index.html')) ? distRoot : ROOT;
-  let filePath = path.resolve(staticRoot, `.${cleanPath}`);
-  if (!filePath.startsWith(staticRoot)) {
+  const staticRoot = path.resolve(ROOT, 'dist');
+  const entryPath = path.join(staticRoot, 'index.html');
+  if (!existsSync(entryPath)) {
+    res.writeHead(503, { 'Content-Type': 'text/html; charset=utf-8' });
+    res.end('<!doctype html><meta charset="utf-8"><title>需要构建</title><body><h1>前端产物不存在</h1><p>请先运行 <code>npm run build</code>, 或开发时同时运行 <code>npm start</code> 和 <code>npm run dev</code>.</p></body>');
+    return;
+  }
+  const filePath = path.resolve(staticRoot, `.${cleanPath}`);
+  const relativePath = path.relative(staticRoot, filePath);
+  if (relativePath.startsWith('..') || path.isAbsolute(relativePath)) {
     res.writeHead(403);
     res.end('Forbidden');
     return;
@@ -770,8 +784,8 @@ async function serveStatic(req, res, pathname) {
     res.writeHead(200, { 'Content-Type': MIME_TYPES.get(path.extname(filePath)) || 'application/octet-stream' });
     res.end(data);
   } catch {
-    if (staticRoot === distRoot && !path.extname(cleanPath)) {
-      const data = await readFile(path.join(distRoot, 'index.html'));
+    if (!path.extname(cleanPath)) {
+      const data = await readFile(entryPath);
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
       res.end(data);
       return;
@@ -819,7 +833,8 @@ const server = createServer(async (req, res) => {
     if (jobResultMatch && req.method === 'GET') return handleJobResult(req, res, jobResultMatch[1]);
     await serveStatic(req, res, url.pathname);
   } catch (error) {
-    json(res, 500, { error: error.message || String(error) });
+    const statusCode = Number(error?.statusCode) || 500;
+    json(res, statusCode, { error: error.message || String(error) });
   }
 });
 

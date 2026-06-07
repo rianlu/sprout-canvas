@@ -2,6 +2,7 @@ import { Clock, Download, Loader2, Trash2, X } from 'lucide-react';
 import type { ResultRecord } from '../../types/generation';
 import type { QueueJob } from '../../types/queue';
 import { buildDownloadName } from '../../lib/image/filename';
+import { imageFileExtension } from '../../lib/image/format';
 import { Button } from '../ui/Button';
 
 interface ResultGridProps {
@@ -16,7 +17,7 @@ interface ResultGridProps {
 function downloadRecord(record: ResultRecord) {
   const anchor = document.createElement('a');
   anchor.href = record.dataUrl;
-  anchor.download = buildDownloadName(record.prompt, record.createdAt);
+  anchor.download = buildDownloadName(record.prompt, record.createdAt, imageFileExtension(record.dataUrl, record.outputFormat));
   anchor.click();
 }
 

@@ -4,6 +4,7 @@ export type StudioMode = 'text' | 'reference' | 'edit';
 export type AspectRatio = '1:1' | '16:9' | '9:16' | '4:3' | '3:4' | '3:2' | '2:3' | '21:9' | 'auto';
 export type ImageQuality = 'auto' | 'low' | 'medium' | 'high';
 export type ImageSizeTier = '1K' | '2K' | '4K';
+export type ImageOutputFormat = 'auto' | 'png' | 'jpeg' | 'webp';
 
 export interface RefImage {
   id: string;
@@ -31,7 +32,7 @@ export interface GenerationConfig {
   sizeHint: string;
   quality: ImageQuality;
   background: 'auto' | 'transparent' | 'opaque';
-  outputFormat: 'auto' | 'png' | 'jpeg' | 'webp';
+  outputFormat: ImageOutputFormat;
   outputCompression: number;
   refImages: RefImage[];
   editSelection?: RectSelection | null;
@@ -47,5 +48,6 @@ export interface ResultRecord {
   providerName: string;
   mode: StudioMode;
   kind: ResultKind;
+  outputFormat?: ImageOutputFormat;
   createdAt: number;
 }

@@ -10,8 +10,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## 常用命令
 | 命令 | 说明 |
 |---|---|
-| `npm start` | 跑 Node 22 服务端 `server.mjs`, 默认 `127.0.0.1:8787`. 检测到 `dist/index.html` 用 Vite 产物, 否则回落到根目录的 `index.html` + `js/` + `css/` 旧版入口 |
-| `npm run dev` | Vite 开发服务器. `/api` `/ready` `/health` 反代到 8787, 因此**必须同时跑 `npm start`** |
+| `npm start` | 先跑 `npm run build`, 再启动 Node 22 服务端 `server.mjs`, 默认 `127.0.0.1:8787` |
+| `npm run start:server` | 只启动服务端, 要求 `dist/index.html` 已存在 |
+| `npm run dev:api` | 只启动 API 服务端, 给 Vite 开发服务器反代使用 |
+| `npm run dev` | Vite 开发服务器. `/api` `/ready` `/health` 反代到 8787, 因此**必须同时跑 `npm run dev:api`** |
 | `npm run build` | `tsc -b && vite build` → `dist/` |
 | `npm test` | `node --check` 静态校验 `server.mjs` 与 `server/*.mjs`, 跑 `tests/queue-routing.test.mjs` + `tests/text-routing.test.mjs`, 再 `npm run build`, 最后 `npm run test:legacy` |
 | `npm run test:legacy` | 仅 `node --check js/app.js` — 防止改坏旧的纯 JS 入口 |
@@ -32,14 +34,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 单 Node 进程 `server.mjs` 同时承担: 静态资源服务, 浏览器 `/api/*` 入口, 上游 API Key 持有方, 内存任务队列. **零运行时依赖** — `package.json` 中所有 `dependencies` 都只在前端构建期使用. 服务端只用 Node 22 内置模块.
 
 ### 模块职责
-- `server.mjs`: HTTP 路由 + auth + 文本生成 (`/api/text`, 自带 `/v1/responses` → `/v1/chat/completions` 回落) + 生图请求入队 + 静态文件. 是唯一拥有上游 API Key 的进程.
+- `server.mjs`: HTTP 路由 + auth + 文本生成 (`/api/text`, 按 `textProviders[]` 调用 `/v1/chat/completions`) + 生图请求入队 + 静态文件. 是唯一拥有上游 API Key 的进程.
 - `server/queue.mjs`: 生图任务队列. **严格单 worker** (`imageConcurrency=1`), 按 `userId` 分桶 FIFO, 用户间公平轮询. 提供 `chooseImageProvider` (自动路由, 跳过不支持当前请求类型的 Provider) + `rewriteImageJobBody` (把客户端发过来的 `model` 字段强行改成所选 Provider 的 `imageModel`) + 熔断 (`PROVIDER_FAILURE_THRESHOLD=3`, 30 分钟 `PROVIDER_CIRCUIT_OPEN_MS`). 任务 TTL 30 分钟, **进程重启即全部丢失**.
 - `server/text-routing.mjs`: 文本提示词优化 Provider 的熔断状态机, 接口与生图类似.
 - `src/app/App.tsx`: React 19 + StrictMode 入口. 顶层挂载 `useAuth` + `useGallery` + `useQueue`, 按 `PageKey` 切 `pages/`.
 - `src/pages/`: `CreativeStudio` (单图), `SeriesStudio` (先调文本拆分→批量入队, 携带 `clientContext.kind='series'`), `SplitTool` (纯前端切图, 不打上游), 展馆在 `components/gallery/GalleryGrid`.
 - `src/hooks/useQueue.ts`: 每 2.2 秒轮询 `/api/jobs/me`. 命中 `succeeded` 后拉 `/api/jobs/:id/result`, 用 `clientContext.placeholderId` 把结果填回画廊占位.
 - `src/lib/storage/gallery-db.ts`: 展馆只在浏览器 IndexedDB (`img-gen-gallery` v2). 旧 `localStorage` 数据自动迁移. **不在服务端共享**.
-- `js/app.js` + `css/styles.css` + 根 `index.html`: 旧纯 JS 入口, 服务端在 `dist/` 缺失时会用. Dockerfile, `npm run test:legacy` 都依赖它存在. 删之前必须同步清理三处.
+- `js/app.js` + `css/styles.css`: 旧纯 JS 兼容资产, 当前服务端不再作为 `dist/` 缺失时的回退入口. `npm run test:legacy` 仍依赖它存在. 删之前必须同步清理测试与文档.
 
 ### 关键时序: 生图
 1. 浏览器 `POST /api/jobs/images/generations` (或 `/edits` / `/responses`), 带 `X-Client-Context` (base64 后的 `{kind, placeholderId, prompt, mode}` JSON). 可带 `X-Provider-Id` 强制指定, 不带则自动路由.

@@ -46,17 +46,19 @@ cp config/local.config.example.json config/local.config.json
 ## 3. 本地运行验证
 
 ```bash
-# 安装依赖 (本项目零运行时依赖, 仅 Node 22+)
+# 安装依赖并构建前端产物
 node --version   # >= 22
+npm ci
+npm run build
 
 # 启动
-npm start
+npm run start:server
 
 # 健康检查
 curl http://127.0.0.1:8787/health   # 进程存活
 curl http://127.0.0.1:8787/ready    # 配置就绪
 
-# 跑参数冒烟测试
+# 跑完整验证
 npm test
 ```
 
@@ -67,12 +69,14 @@ npm test
 ### 4.1 准备
 - 安装 Node.js 22+.
 - 上传项目目录到服务器, **不要包含** `config/local.config.json` (上传后单独创建并填值).
+- 执行 `npm ci && npm run build`, 确认 `dist/index.html` 存在.
 - 在服务器项目目录确认: `accessPassword` 不是默认值, 所有 `apiKey` 不是占位 `sk-your-*`.
 - `NODE_ENV=production` 会强制校验上述项.
 
 ### 4.2 方式一: PM2 守护
 ```bash
 npm i -g pm2
+npm ci
 npm run pm2:start
 npm run pm2:logs       # 查看日志
 pm2 save               # 保存进程列表
@@ -125,10 +129,10 @@ HTTPS 部署时记得把 `local.config.json` 里的 `secureCookies` 改为 `true
 3. 文本优化按 `textProviders` 顺序自动主备切换.
 
 ### 5.3 提示词优化 502 排查
-- 服务端先请求上游 `/v1/responses`.
-- 上游返回 502 / 404 / 不支持 Responses 时, 自动回落到 `/v1/chat/completions`.
-- 两个接口都失败时, 页面只显示清理后的错误摘要, 不再展示 Cloudflare HTML 错误页.
-- 仍失败时, 核对 `textProviders` 里的 `baseUrl / apiKey / model` 是否支持文本生成.
+- 服务端按 `textProviders[]` 健康排序逐个请求上游 `/v1/chat/completions`.
+- 某个文本服务商连续失败会短暂熔断, 后续请求自动尝试下一个文本服务商.
+- 页面只显示清理后的错误摘要, 不展示 Cloudflare HTML 错误页.
+- 仍失败时, 核对 `textProviders` 里的 `baseUrl / apiKey / model` 是否支持 Chat Completions.
 
 ## 6. 当前架构边界
 - 适合**小范围朋友使用**的部署规模.

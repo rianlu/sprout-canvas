@@ -5,6 +5,7 @@ export interface QueueClientContext {
   placeholderId: string;
   prompt: string;
   mode: string;
+  outputFormat?: 'auto' | 'png' | 'jpeg' | 'webp';
 }
 
 export interface QueueJob {

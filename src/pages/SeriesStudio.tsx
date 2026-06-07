@@ -226,7 +226,7 @@ export function SeriesStudio({ onSubmit, results }: SeriesStudioProps) {
           endpoint: '/v1/images/generations',
           body: JSON.stringify(payload),
           contentType: 'application/json',
-          clientContext: { kind: 'series', placeholderId: id, prompt: task.prompt, mode: refs.length ? 'reference' : 'text' },
+          clientContext: { kind: 'series', placeholderId: id, prompt: task.prompt, mode: refs.length ? 'reference' : 'text', outputFormat: config.outputFormat },
         });
       }
       setToast({ type: 'success', message: `已提交 ${nextIds.length} 个任务, 队列会依次生成.` });

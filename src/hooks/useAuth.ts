@@ -24,11 +24,16 @@ export function useAuth() {
     try {
       const status = await authStatus();
       setRequired(status.required);
+      if (!status.required && !status.authenticated) {
+        await login('', userId);
+        setAuthenticated(true);
+        return;
+      }
       setAuthenticated(status.authenticated);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [userId]);
 
   const signIn = useCallback(async (password: string) => {
     await login(password, userId);
