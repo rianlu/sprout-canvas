@@ -97,14 +97,14 @@ export function CreativeStudio({ onSubmit, onRetry, results, jobs }: CreativeStu
     const payload = await buildGenerationPayload(effectiveSnapshot, snapshot.editSelection ? (imageDataUrl) => createRectMaskDataUrl(imageDataUrl, snapshot.editSelection!) : undefined);
     const nextIds: string[] = [];
     const id = randomId('result');
-    nextIds.push(id);
-    setSubmittedIds((current) => [id, ...current.filter((item) => item !== id)].slice(0, 24));
     await onSubmit({
       endpoint: '/v1/images/generations',
       body: JSON.stringify(payload),
       contentType: 'application/json',
       clientContext: { kind: 'single', placeholderId: id, prompt: snapshot.prompt, mode: snapshot.mode, outputFormat: snapshot.outputFormat },
     });
+    nextIds.push(id);
+    setSubmittedIds((current) => [id, ...current.filter((item) => item !== id)].slice(0, 24));
     return nextIds;
   }
 

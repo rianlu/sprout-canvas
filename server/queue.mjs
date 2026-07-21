@@ -239,8 +239,9 @@ async function processImageJob(job) {
         recordProviderSuccess(config.id);
         break;
       }
-      recordProviderFailure(config.id, jobResult.error);
-      if (!isRetryableJobResult(jobResult) || index === providers.length - 1) break;
+      const retryable = isRetryableJobResult(jobResult);
+      if (retryable) recordProviderFailure(config.id, jobResult.error);
+      if (!retryable || index === providers.length - 1) break;
       logLine('WARN', `[image-job] retryable ${job.id} provider=${config.name} status=${jobResult.status} error=${jobResult.error}`);
     }
     job.finishedAt = Date.now();

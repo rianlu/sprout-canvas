@@ -220,14 +220,14 @@ export function SeriesStudio({ onSubmit, results }: SeriesStudioProps) {
         const config = buildBaseConfig(baseSettings, refs, refs.length ? 'reference' : 'text');
         const payload = await buildGenerationPayload({ ...config, prompt });
         const id = randomId('result');
-        nextIds.push(id);
-        setSubmittedIds((current) => [id, ...current.filter((item) => item !== id)].slice(0, 36));
         await onSubmit({
           endpoint: '/v1/images/generations',
           body: JSON.stringify(payload),
           contentType: 'application/json',
           clientContext: { kind: 'series', placeholderId: id, prompt: task.prompt, mode: refs.length ? 'reference' : 'text', outputFormat: config.outputFormat },
         });
+        nextIds.push(id);
+        setSubmittedIds((current) => [id, ...current.filter((item) => item !== id)].slice(0, 36));
       }
       setToast({ type: 'success', message: `已提交 ${nextIds.length} 个任务, 队列会依次生成.` });
     } finally {

@@ -298,4 +298,20 @@ async function runForcedJob(provider, rawBody, fetchImpl) {
   assert.equal(fetchCalls[0].url, 'https://miaomiao.test/v1/images/generations');
 }
 
+{
+  const rawBody = Buffer.from(JSON.stringify({ model: 'client-model', prompt: 'policy rejection does not trip circuit' }));
+  for (let index = 0; index < 3; index += 1) {
+    const { outcome } = await runForcedJob(providers[1], rawBody, async () => ({
+      ok: false,
+      status: 400,
+      statusText: 'Bad Request',
+      headers: { get: () => 'application/json' },
+      arrayBuffer: async () => Buffer.from(JSON.stringify({ error: { message: 'content_policy_violation' } })),
+    }));
+    assert.equal(outcome.status, 400);
+  }
+  const selected = queue.chooseImageProvider(config, '/v1/images/generations', 'application/json', '', rawBody);
+  assert.equal(selected.id, 'default');
+}
+
 console.log('queue circuit breaker and retry tests passed');
