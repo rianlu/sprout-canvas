@@ -1,21 +1,22 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Button } from '../components/ui/Button';
-import { Card } from '../components/ui/Card';
-import { ReferenceUploader } from '../components/studio/ReferenceUploader';
-import { ResultGrid } from '../components/studio/ResultGrid';
-import { StylePicker } from '../components/studio/StylePicker';
-import { GenerationCoreSettings } from '../components/studio/GenerationSettingsPanel';
+import { LayoutDashboard, Loader2, Minus, Plus, Wand2 } from 'lucide-react';
+import { StyleQuickPicker } from '../components/studio/StyleQuickPicker';
+import { ReferencePanel } from '../components/studio/ReferencePanel';
+import { ResultStream } from '../components/studio/ResultStream';
+import { ParamsPanel } from '../components/studio/ParamsPanel';
 import { buildGenerationPayload, resolveSize } from '../lib/api/generation';
 import { requestTextGeneration } from '../lib/api/text';
 import { randomId } from '../lib/random/id';
 import { readDraft, writeDraft } from '../lib/storage/drafts';
 import { applyAnyImageStyleToPrompt, findImageStyle } from '../lib/styles/image-styles';
 import type { QueueSubmitInput } from '../lib/api/queue';
-import type { AspectRatio, GenerationConfig, ImageQuality, ImageSizeTier, RefImage, ResultRecord } from '../types/generation';
+import type { GenerationConfig, RefImage, ResultRecord } from '../types/generation';
+import type { QueueJob } from '../types/queue';
 
 interface SeriesStudioProps {
-  onSubmit: (input: QueueSubmitInput) => Promise<unknown>;
+  onSubmit: (input: QueueSubmitInput) => Promise<QueueJob>;
   results: ResultRecord[];
+  jobs: QueueJob[];
 }
 
 type BatchMode = 'variants' | 'multiTopic' | 'board';
@@ -27,26 +28,23 @@ interface BatchTask {
 
 const MAX_BATCH_COUNT = 9;
 
-const MODE_META: Record<BatchMode, { label: string; eyebrow: string; description: string; placeholder: string; optimizeLabel: string }> = {
+const MODE_META: Record<BatchMode, { label: string; description: string; placeholder: string; optimizeLabel: string }> = {
   variants: {
     label: '同图变体',
-    eyebrow: 'Image Variations',
-    description: '基于一张参考图, 批量生成相似但不同的版本, 适合换背景, 构图, 配色, 广告版式和服装道具。',
-    placeholder: '例如: 基于这张产品图做 4 版夏日广告图, 分别突出清爽背景, 产品近景, 生活方式场景和极简棚拍。',
+    description: '基于一张参考图, 批量生成相似但不同的版本.',
+    placeholder: '例如: 基于这张产品图做 4 版夏日广告图, 分别突出清爽背景, 产品近景, 生活方式场景和极简棚拍.',
     optimizeLabel: '生成任务清单',
   },
   multiTopic: {
     label: '多主题同风格',
-    eyebrow: 'Multi Topic',
-    description: '每行一个主题, 套同一个风格和参数批量生成, 适合一批产品主图, 一组角色, 多个海报方向。',
-    placeholder: '每行一个主题:\n草莓味气泡水夏日主图\n柠檬味气泡水夏日主图\n白桃味气泡水夏日主图\n葡萄味气泡水夏日主图',
+    description: '每行一个主题, 套同一个风格批量生成.',
+    placeholder: '每行一个主题:\n草莓味气泡水夏日主图\n柠檬味气泡水夏日主图',
     optimizeLabel: '优化主题清单',
   },
   board: {
     label: '分镜套图',
-    eyebrow: 'Board Template',
-    description: '输入一个主题, 使用高级模板生成一张九宫格, 资料卡或广告板大图, 生成后可进入切图。',
-    placeholder: '例如: 一款东方木质调香水的 9 宫格广告分镜, 需要包含氛围, 产品, 材质, 使用场景和品牌收尾。',
+    description: '一个主题生成一张分镜大图, 之后可切图拆分.',
+    placeholder: '例如: 一款东方木质调香水的九宫格广告分镜, 需要包含氛围, 产品, 材质, 使用场景和品牌收尾.',
     optimizeLabel: '优化套图主题',
   },
 };
@@ -68,81 +66,78 @@ function parseTaskLines(value: string): BatchTask[] {
   });
 }
 
-
-function buildBaseConfig(settings: Pick<GenerationConfig, 'aspectRatio' | 'sizeTier' | 'quality' | 'background' | 'outputFormat' | 'outputCompression'>, refs: RefImage[], mode: GenerationConfig['mode']): GenerationConfig {
-  const size = resolveSize(settings.aspectRatio, settings.sizeTier);
-  return {
-    mode,
-    generationMode: 'images',
-    imageModel: 'gpt-image-2',
-    prompt: '',
-    imageCount: 1,
-    aspectRatio: settings.aspectRatio,
-    sizeTier: settings.sizeTier,
-    requestSize: size.size,
-    sizeHint: size.hint,
-    quality: settings.quality,
-    background: settings.background,
-    outputFormat: settings.outputFormat,
-    outputCompression: settings.outputCompression,
-    refImages: refs,
-    editSelection: null,
-  };
-}
-
 function buildOptimizeSystem(mode: BatchMode, count: number) {
-  if (mode === 'variants') return `你是 AI 生图批量变体策划器。用户会提供一张参考图和一句目标。请拆成 ${count} 条可直接用于图生图的变体任务。只输出多行文本, 每行格式为“变体名称: 具体画面目标”。必须让每条都保持参考图主体一致, 但在背景, 构图, 配色, 镜头, 广告版式或道具上形成清晰差异。禁止 Markdown, 禁止编号, 禁止解释, 禁止 think。`;
-  if (mode === 'multiTopic') return '你是 AI 生图批量提示词优化器。用户会提供多行主题。请逐行优化成可直接生图的任务清单, 保持统一视觉风格和质量标准。只输出多行文本, 每行格式为“主题名称: 优化后的完整画面描述”。禁止 Markdown, 禁止解释, 禁止 think。';
-  return '你是 AI 分镜套图主题优化器。用户会提供一个粗略主题。请优化成适合生成一张九宫格分镜板, 角色资料卡, 广告板或图鉴大图的主题描述。只输出 1 段中文, 80 到 160 字, 必须包含主体, 场景, 镜头/模块, 风格, 版式, 画面重点和一致性约束。禁止标题, Markdown, 列表, emoji, 解释, 示例, think。';
+  if (mode === 'variants') return `你是 AI 生图批量变体策划器。用户会提供一张参考图和一句目标。请拆成 ${count} 条可直接用于图生图的变体任务。只输出多行文本, 每行格式为“变体名称: 具体画面目标”。必须让每条都保持参考图主体一致, 但在背景, 构图, 配色, 镜头, 广告版式或道具上形成清晰差异。禁止 Markdown, 禁止编号, 禁止解释。`;
+  if (mode === 'multiTopic') return '你是 AI 生图批量提示词优化器。用户会提供多行主题。请逐行优化成可直接生图的任务清单, 保持统一视觉风格和质量标准。只输出多行文本, 每行格式为“主题名称: 优化后的完整画面描述”。禁止 Markdown, 禁止解释。';
+  return '你是 AI 分镜套图主题优化器。用户会提供一个粗略主题。请优化成适合生成一张九宫格分镜板, 角色资料卡, 广告板或图鉴大图的主题描述。只输出 1 段中文, 80 到 160 字, 必须包含主体, 场景, 镜头/模块, 风格, 版式, 画面重点和一致性约束。禁止标题, Markdown, 列表, emoji, 解释, 示例。';
 }
 
-export function SeriesStudio({ onSubmit, results }: SeriesStudioProps) {
+export function SeriesStudio({ onSubmit, results, jobs }: SeriesStudioProps) {
   const [mode, setMode] = useState<BatchMode>(() => (readDraft('batch_mode') as BatchMode) || 'variants');
   const [brief, setBrief] = useState(() => readDraft('batch_brief'));
   const [taskText, setTaskText] = useState(() => readDraft('batch_tasks'));
   const [refs, setRefs] = useState<RefImage[]>([]);
-  const [selectedStyleId, setSelectedStyleId] = useState(() => readDraft('batch_style'));
+  const [styleId, setStyleId] = useState(() => readDraft('batch_style'));
   const [count, setCount] = useState(() => clampInt(Number(readDraft('batch_count')), 2, MAX_BATCH_COUNT, 4));
-  const [aspectRatio, setAspectRatio] = useState<AspectRatio>((readDraft('batch_aspect_ratio') as AspectRatio) || '1:1');
-  const [sizeTier, setSizeTier] = useState<ImageSizeTier>((readDraft('batch_size_tier') as ImageSizeTier) || '1K');
-  const [quality, setQuality] = useState<ImageQuality>((readDraft('batch_quality') as ImageQuality) || 'auto');
-  const [background, setBackground] = useState<GenerationConfig['background']>((readDraft('batch_background') as GenerationConfig['background']) || 'auto');
-  const [outputFormat, setOutputFormat] = useState<GenerationConfig['outputFormat']>((readDraft('batch_output_format') as GenerationConfig['outputFormat']) || 'auto');
-  const [outputCompression, setOutputCompression] = useState(() => clampInt(Number(readDraft('batch_output_compression')), 10, 100, 90));
+  const [config, setConfig] = useState<GenerationConfig>(() => {
+    const size = resolveSize((readDraft('batch_aspect_ratio') as GenerationConfig['aspectRatio']) || '1:1');
+    return {
+      mode: 'text',
+      generationMode: 'images',
+      imageModel: 'gpt-image-2',
+      prompt: '',
+      imageCount: 1,
+      aspectRatio: (readDraft('batch_aspect_ratio') as GenerationConfig['aspectRatio']) || '1:1',
+      sizeTier: '1K',
+      requestSize: size.size,
+      sizeHint: size.hint,
+      quality: (readDraft('batch_quality') as GenerationConfig['quality']) || 'auto',
+      background: 'auto',
+      outputFormat: (readDraft('batch_output_format') as GenerationConfig['outputFormat']) || 'auto',
+      outputCompression: 90,
+      refImages: [],
+      editSelection: null,
+    };
+  });
   const [busy, setBusy] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [toast, setToast] = useState<{ type: 'info' | 'success' | 'error'; message: string } | null>(null);
   const [submittedIds, setSubmittedIds] = useState<string[]>([]);
+  const [pendingIds, setPendingIds] = useState<string[]>([]);
 
-  const selectedStyle = useMemo(() => findImageStyle(selectedStyleId), [selectedStyleId]);
+  const selectedStyle = useMemo(() => findImageStyle(styleId), [styleId]);
   const tasks = useMemo(() => {
     if (mode === 'board') return brief.trim() ? [{ title: '分镜套图', prompt: brief.trim() }] : [];
     if (mode === 'variants') return parseTaskLines(taskText).slice(0, MAX_BATCH_COUNT);
     return parseTaskLines(taskText || brief).slice(0, MAX_BATCH_COUNT);
   }, [brief, mode, taskText]);
   const plannedCount = mode === 'board' ? (brief.trim() ? 1 : 0) : Math.max(0, Math.min(mode === 'multiTopic' ? tasks.length : count, MAX_BATCH_COUNT));
-  const batchResults = useMemo(() => results.filter((record) => record.kind === 'series' && submittedIds.includes(record.id)), [results, submittedIds]);
 
+  const seriesResults = useMemo(() => results.filter((record) => record.kind === 'series' && submittedIds.includes(record.id)), [results, submittedIds]);
+  const seriesJobs = useMemo(() => jobs.filter((job) => {
+    const context = job.clientContext;
+    if (!context || context.kind !== 'series') return false;
+    return submittedIds.includes(context.placeholderId || job.id);
+  }), [jobs, submittedIds]);
+
+  // 草稿持久化
   useEffect(() => {
     const timer = window.setTimeout(() => {
       writeDraft('batch_mode', mode);
       writeDraft('batch_brief', brief);
       writeDraft('batch_tasks', taskText);
-      writeDraft('batch_style', selectedStyleId);
+      writeDraft('batch_style', styleId);
       writeDraft('batch_count', String(count));
-      writeDraft('batch_aspect_ratio', aspectRatio);
-      writeDraft('batch_size_tier', sizeTier);
-      writeDraft('batch_quality', quality);
-      writeDraft('batch_background', background);
-      writeDraft('batch_output_format', outputFormat);
-      writeDraft('batch_output_compression', String(outputCompression));
+      writeDraft('batch_aspect_ratio', config.aspectRatio);
+      writeDraft('batch_quality', config.quality);
+      writeDraft('batch_output_format', config.outputFormat);
     }, 300);
     return () => window.clearTimeout(timer);
-  }, [aspectRatio, background, brief, count, mode, outputCompression, outputFormat, quality, selectedStyleId, sizeTier, taskText]);
+  }, [brief, config.aspectRatio, config.outputFormat, config.quality, count, mode, styleId, taskText]);
 
   useEffect(() => {
-    if (mode === 'board' && !selectedStyleId) setSelectedStyleId('product-storyboard');
-  }, [mode, selectedStyleId]);
+    if (mode === 'board' && !styleId) setStyleId('product-storyboard');
+  }, [mode, styleId]);
 
   useEffect(() => {
     if (!toast) return undefined;
@@ -150,36 +145,16 @@ export function SeriesStudio({ onSubmit, results }: SeriesStudioProps) {
     return () => window.clearTimeout(timer);
   }, [toast]);
 
-  const baseSettings = useMemo<Pick<GenerationConfig, 'aspectRatio' | 'sizeTier' | 'quality' | 'background' | 'outputFormat' | 'outputCompression'>>(() => ({
-    aspectRatio,
-    sizeTier,
-    quality,
-    background,
-    outputFormat,
-    outputCompression,
-  }), [aspectRatio, background, outputCompression, outputFormat, quality, sizeTier]);
-
-  const settingsPreviewConfig = useMemo<GenerationConfig>(() => buildBaseConfig(baseSettings, refs, refs.length ? 'reference' : 'text'), [baseSettings, refs]);
-
-  function patchSettings(next: Partial<GenerationConfig>) {
-    if (next.aspectRatio) setAspectRatio(next.aspectRatio);
-    if (next.sizeTier) setSizeTier(next.sizeTier);
-    if (next.quality) setQuality(next.quality);
-    if (next.background) setBackground(next.background);
-    if (next.outputFormat) setOutputFormat(next.outputFormat);
-    if (typeof next.outputCompression === 'number') setOutputCompression(next.outputCompression);
-  }
-
-  function switchMode(nextMode: BatchMode) {
-    setMode(nextMode);
-    setTaskText('');
-    if (nextMode === 'variants') setCount(4);
-    if (nextMode === 'multiTopic') setCount(4);
-    if (nextMode === 'board') setCount(1);
-  }
+  useEffect(() => {
+    setConfig((current) => {
+      const size = resolveSize(current.aspectRatio, current.sizeTier);
+      if (current.requestSize === size.size) return current;
+      return { ...current, requestSize: size.size, sizeHint: size.hint };
+    });
+  }, [config.aspectRatio, config.sizeTier]);
 
   async function optimizePrompt() {
-    if (!brief.trim()) throw new Error('请先填写你想生成什么');
+    if (!brief.trim()) throw new Error('请先填写主题描述');
     setBusy(true);
     try {
       const content = mode === 'variants'
@@ -192,7 +167,7 @@ export function SeriesStudio({ onSubmit, results }: SeriesStudioProps) {
       if (!optimized) throw new Error('优化结果为空');
       if (mode === 'board') setBrief(optimized);
       else setTaskText(optimized);
-      setToast({ type: 'success', message: '提示词已优化, 请确认后提交.' });
+      setToast({ type: 'success', message: '提示词已优化, 请确认后提交' });
     } finally {
       setBusy(false);
     }
@@ -202,7 +177,6 @@ export function SeriesStudio({ onSubmit, results }: SeriesStudioProps) {
     if (mode === 'variants' && refs.length === 0) throw new Error('同图变体需要先上传图片或从展馆选择图片');
     if (mode === 'board' && !brief.trim()) throw new Error('请填写分镜套图主题');
     if (mode !== 'board' && tasks.length === 0) throw new Error('请先填写或优化任务清单');
-    if (selectedStyle?.type === 'advanced' && selectedStyle.requiresReference && refs.length === 0) throw new Error('当前高级风格需要上传或选择参考图');
   }
 
   async function submitBatch() {
@@ -217,9 +191,8 @@ export function SeriesStudio({ onSubmit, results }: SeriesStudioProps) {
       const nextIds: string[] = [];
       for (const task of submitTasks.slice(0, mode === 'board' ? 1 : MAX_BATCH_COUNT)) {
         const prompt = applyAnyImageStyleToPrompt(task.prompt, selectedStyle);
-        const config = buildBaseConfig(baseSettings, refs, refs.length ? 'reference' : 'text');
-        const payload = await buildGenerationPayload({ ...config, prompt });
-        const id = randomId('result');
+        const payload = await buildGenerationPayload({ ...config, prompt, refImages: refs });
+        const id = randomId('shot');
         await onSubmit({
           endpoint: '/v1/images/generations',
           body: JSON.stringify(payload),
@@ -228,8 +201,9 @@ export function SeriesStudio({ onSubmit, results }: SeriesStudioProps) {
         });
         nextIds.push(id);
         setSubmittedIds((current) => [id, ...current.filter((item) => item !== id)].slice(0, 36));
+        setPendingIds((current) => [id, ...current].slice(0, 36));
       }
-      setToast({ type: 'success', message: `已提交 ${nextIds.length} 个任务, 队列会依次生成.` });
+      setToast({ type: 'success', message: `已提交 ${nextIds.length} 个任务, 队列会依次生成` });
     } finally {
       setSubmitting(false);
     }
@@ -246,81 +220,126 @@ export function SeriesStudio({ onSubmit, results }: SeriesStudioProps) {
   }
 
   return (
-    <div className="series-page batch-page">
-      <header className="studio-hero series-hero">
-        <div>
-          <span className="eyebrow">Batch Workflow</span>
-          <h1>批量出图</h1>
-          <p>创作台专注单张精修, 这里负责一次生成多张图: 同图变体, 多主题同风格或分镜套图.</p>
-        </div>
-        <div className="provider-pill">
-          <span>预计提交</span>
-          <strong>{plannedCount || 0} 张</strong>
+    <div className="series-page">
+      <header className="page-head">
+        <div className="page-head-copy">
+          <h1>系列策划</h1>
+          <p>一个主题拆一批分镜, 逐张提交按队列顺序生成</p>
         </div>
       </header>
 
-      <div className="batch-mode-grid" role="tablist" aria-label="批量出图模式">
-        {(Object.entries(MODE_META) as Array<[BatchMode, typeof MODE_META[BatchMode]]>).map(([key, item]) => (
-          <button key={key} className={`batch-mode-card ${mode === key ? 'active' : ''}`} onClick={() => switchMode(key)}>
-            <span className="eyebrow">{item.eyebrow}</span>
-            <strong>{item.label}</strong>
-            <small>{item.description}</small>
-          </button>
-        ))}
-      </div>
+      <section className="series-toolbar" aria-label="系列工作流">
+        <div className="series-toolbar-row">
+          <div className="series-mode-seg" role="tablist" aria-label="系列类型">
+            {(Object.entries(MODE_META) as Array<[BatchMode, typeof MODE_META[BatchMode]]>).map(([key, item]) => (
+              <button key={key} type="button" role="tab" aria-selected={mode === key} className={mode === key ? 'active' : ''} onClick={() => { setMode(key); setTaskText(''); if (key !== 'board') setCount(4); }}>
+                {item.label}
+              </button>
+            ))}
+          </div>
 
-      <div className="series-layout batch-layout">
-        <div className="series-main batch-main">
-          <Card className="series-step-card batch-input-card">
-            <div className="series-step-heading">
-              <span className="step-badge">1</span>
-              <div><span className="eyebrow">Input</span><h2>{MODE_META[mode].label}</h2><p>{MODE_META[mode].description}</p></div>
+          {mode !== 'board' && (
+            <div className="shot-stepper">
+              <span className="stepper-label">共</span>
+              <button type="button" className="stepper-btn" disabled={count <= 2} onClick={() => setCount((c) => Math.max(2, c - 1))} aria-label="减少张数"><Minus size={14} /></button>
+              <span className="stepper-value">{count}</span>
+              <button type="button" className="stepper-btn" disabled={count >= MAX_BATCH_COUNT} onClick={() => setCount((c) => Math.min(MAX_BATCH_COUNT, c + 1))} aria-label="增加张数"><Plus size={14} /></button>
+              <span className="stepper-label">张</span>
             </div>
+          )}
 
-            {mode === 'variants' && (
-              <ReferenceUploader images={refs} onChange={setRefs} galleryRecords={results} title="变体参考图" localHint="选择 1 张作为批量变体基础图" maxImages={1} />
-            )}
-
-            <label className="field"><span>{mode === 'multiTopic' ? '多行主题' : mode === 'board' ? '套图主题' : '变体需求'}</span><textarea className="series-content-input" value={brief} onChange={(event) => setBrief(event.target.value)} placeholder={MODE_META[mode].placeholder} /></label>
-
-            <div className="button-row"><Button disabled={busy || !brief.trim()} onClick={() => { void runAction(optimizePrompt); }}>{busy ? '优化中...' : MODE_META[mode].optimizeLabel}</Button></div>
-          </Card>
-
-          <Card className="series-step-card batch-style-card">
-            <div className="series-step-heading">
-              <span className="step-badge">2</span>
-              <div><span className="eyebrow">Style</span><h2>风格和参数</h2><p>高级风格会作为模板套用, 普通风格会追加为风格要求.</p></div>
-            </div>
-            <StylePicker selected={selectedStyle} onChange={(style) => setSelectedStyleId(style?.id || '')} />
-            <div className="series-settings-block">
-              {mode !== 'board' && <label className="field series-count-field"><span>生成张数</span><input type="number" inputMode="numeric" min={2} max={MAX_BATCH_COUNT} value={count} onChange={(event) => { const next = Number(event.target.value); setCount(Number.isFinite(next) ? next : 4); }} onBlur={(event) => setCount(clampInt(Number(event.target.value), 2, MAX_BATCH_COUNT, 4))} /></label>}
-              <GenerationCoreSettings config={settingsPreviewConfig} onChange={patchSettings} className="series-core-settings" />
-            </div>
-          </Card>
+          <div className="chip chip-accent" title="预计提交数量"><span className="dot" aria-hidden="true" />预计 {plannedCount || 0} 张</div>
         </div>
 
-        <aside className="series-side batch-side">
-          <Card className="series-step-card sticky-card">
-            <div className="series-step-heading">
-              <span className="step-badge">3</span>
-              <div><span className="eyebrow">Tasks</span><h2>确认任务清单</h2><p>{mode === 'board' ? '分镜套图固定提交 1 张大图, 生成后可去切图.' : '每行会作为一张图提交到队列, 可手动修改.'}</p></div>
+        <div className="series-theme-row">
+          <div className="field">
+            <textarea
+              className="series-content-input"
+              value={brief}
+              onChange={(event) => setBrief(event.target.value)}
+              placeholder={MODE_META[mode].placeholder}
+              aria-label="主题描述"
+              rows={3}
+              style={{ minHeight: 92 }}
+            />
+          </div>
+          <button type="button" className="btn btn-primary btn-lg" disabled={busy || !brief.trim()} onClick={() => { void runAction(optimizePrompt); }}>
+            {busy ? <Loader2 className="spin" size={16} aria-hidden="true" /> : <Wand2 size={16} aria-hidden="true" />}
+            {busy ? '拆解中...' : '自动拆解'}
+          </button>
+        </div>
+      </section>
+
+      <div className="series-layout" style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 340px) minmax(0, 1fr)', gap: 24, alignItems: 'start' }}>
+        <aside className="control-rail" style={{ position: 'sticky', top: 'calc(var(--top-bar-h) + 20px)' }} aria-label="系列参数">
+          <StyleQuickPicker styleId={styleId} onSelect={setStyleId} />
+          {mode === 'variants' && (
+            <ReferencePanel images={refs} onChange={setRefs} galleryRecords={results} maxImages={1} singleMode />
+          )}
+          <ParamsPanel
+            config={{ ...config, imageCount: 1, prompt: brief }}
+            onChange={(patch) => setConfig((current) => ({ ...current, ...patch }))}
+            onSubmit={() => { void runAction(submitBatch); }}
+            submitting={submitting}
+            promptEmpty={plannedCount === 0}
+          />
+        </aside>
+
+        <section aria-label="分镜任务">
+          {tasks.length === 0 ? (
+            <div className="empty-state" style={{ minHeight: 280 }}>
+              <LayoutDashboard className="empty-icon" size={28} aria-hidden="true" />
+              <strong>还没有分镜清单</strong>
+              <span>填写主题后点击「自动拆解」, 或在左侧直接输入每行一个主题</span>
             </div>
-            {mode !== 'board' && <label className="field"><span>任务清单</span><textarea className="series-plan-input" value={taskText} onChange={(event) => setTaskText(event.target.value)} placeholder={'例:\n清爽背景版: 保持主体, 换成夏日浅色背景\n产品近景版: 放大材质细节和反光\n生活方式版: 放到真实使用场景中'} /></label>}
-            <div className="series-plan-preview">
-              {tasks.length === 0 ? <div className="empty-state">{mode === 'variants' ? '未生成任务清单时, 会按默认差异方向自动提交多张. 点击生成任务清单后可逐条编辑.' : '还没有任务清单. 可以先写目标, 再点击优化提示词.'}</div> : tasks.slice(0, mode === 'board' ? 1 : MAX_BATCH_COUNT).map((task, index) => (
-                <article key={`${task.title}-${index}`} className="series-plan-item"><span>{index + 1}</span><div><strong>{task.title}</strong><p>{task.prompt}</p></div></article>
+          ) : (
+            <div className="shot-grid">
+              {tasks.slice(0, mode === 'board' ? 1 : MAX_BATCH_COUNT).map((task, index) => (
+                <article key={`${task.title}-${index}`} className={`shot-card ${index < seriesResults.length ? '' : 'pending'}`}>
+                  <div className="shot-card-head">
+                    <div className="shot-id-row">
+                      <span className="shot-badge">{index + 1}</span>
+                      <h3 title={task.title}>{task.title}</h3>
+                    </div>
+                    <span className="chip">待提交</span>
+                  </div>
+                  <p className="shot-desc" title={task.prompt}>{task.prompt}</p>
+                  <div className="shot-card-foot">
+                    <span className="foot-actions">
+                      <button type="button" className="link-btn" onClick={() => setTaskText((current) => {
+                        const lines = current.split('\n');
+                        if (index < lines.length) lines.splice(index, 1, `${task.title}: ${task.prompt}`);
+                        return lines.join('\n');
+                      })}>编辑</button>
+                    </span>
+                    <span className="foot-actions">
+                      <button type="button" className="link-btn danger" onClick={() => setTaskText((current) => {
+                        const lines = current.split('\n').filter(Boolean);
+                        const normalized = lines.map((line) => line.trim()).indexOf(`${task.title}: ${task.prompt}`) >= 0 ? lines.indexOf(`${task.title}: ${task.prompt}`) : lines.findIndex((line) => line.trim() === `${task.title}: ${task.prompt}`);
+                        if (normalized >= 0) lines.splice(normalized, 1);
+                        return lines.join('\n');
+                      })}>移除</button>
+                    </span>
+                  </div>
+                </article>
               ))}
             </div>
-            <Button variant="primary" className="generate-button" disabled={submitting || plannedCount === 0} onClick={() => { void runAction(submitBatch); }}>{submitting ? '正在提交...' : `提交 ${plannedCount || 0} 个任务`}</Button>
-            <p className="series-help-text">提交后不会阻塞页面, 所有任务会进入右下角队列排队生成.</p>
-          </Card>
-        </aside>
+          )}
+
+          {seriesResults.length + seriesJobs.length > 0 && (
+            <div style={{ marginTop: 24 }}>
+              <div className="result-stream-head">
+                <div className="page-head-copy">
+                  <h2 className="t-headline-sm">本次批量结果</h2>
+                  <p>{seriesResults.length} 张已完成</p>
+                </div>
+              </div>
+              <ResultStream records={seriesResults} jobs={seriesJobs} pendingIds={pendingIds} onDismiss={(id) => setSubmittedIds((c) => c.filter((item) => item !== id))} />
+            </div>
+          )}
+        </section>
       </div>
 
-      <section className="series-results-section">
-        <div className="preview-heading"><div><span className="eyebrow">Results</span><h2>本次批量结果</h2></div><span>{batchResults.length} 张</span></div>
-        <ResultGrid records={batchResults} />
-      </section>
       {toast && <div className={`toast ${toast.type}`} role="status" aria-live="polite">{toast.message}</div>}
     </div>
   );

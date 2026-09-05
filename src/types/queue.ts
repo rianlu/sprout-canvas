@@ -22,6 +22,7 @@ export interface QueueJob {
   globalActive: number;
   globalQueued: number;
   averageMs: number;
+  estimatedWaitMs: number;
   queuedAt: number;
   startedAt: number;
   finishedAt: number;

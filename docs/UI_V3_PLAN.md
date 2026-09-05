@@ -43,16 +43,16 @@
 
 ## 阶段 4 · 单图创作页 (最大块)
 
-- [ ] 4.1 重写 `src/pages/CreativeStudio.tsx`: 双栏布局 (左 440px control-rail sticky + 右 result-stream); 三子模式 tabs (文生图/参考生成/局部编辑)
-- [ ] 4.2 PromptWell 组件: auto-grow textarea + 字数统计 + 清空/润色扩写 (调 `/api/text`) + 已选风格 pill (可清除)
-- [ ] 4.3 快捷风格 pills 横滑条 + 「更多风格」跳风格库页
-- [ ] 4.4 ReferenceUploader 重写: 拖拽/粘贴/展馆选取; 缩略卡 (64px) + 已载入徽标 + 蒙版状态条
-- [ ] 4.5 GenerationSettingsPanel 重写: 比例格 (3 列小卡 + 比例示意) / 清晰度 / 质量 / 数量 (1/2/4) / 背景 toggle / 高级折叠 (格式/压缩率) / 实际尺寸预览
-- [ ] 4.6 提交按钮 `generate-cta` (全宽 accent + ⌘+Enter 实装)
-- [ ] 4.7 ResultGrid 重写: 大卡 1/2 列; 生成中卡 (呼吸底 + spinner + 位次 + 中断) / 完成卡 (hover 动作条: 下载/设为参考/局部修改/全屏) / 失败卡 (错误摘要 + 修改提示词 + 重试)
-- [ ] 4.8 复用验证: useQueue/useGallery/drafts/storage 零改动接入 (若需扩 fields, 保持向后兼容)
-- [ ] 4.9 验收: 完整走一遍 文生图 → 参考 → 失败重试 → 下载
-- [ ] 4.10 提交: 主题「feat(studio): creative studio page v3」
+- [x] 4.1 重写 `src/pages/CreativeStudio.tsx`: 双栏布局 (左 440px control-rail sticky + 右 result-stream); 三子模式 tabs (文生图/参考生成/局部编辑)
+- [x] 4.2 PromptWell 组件: auto-grow textarea + 字数统计 + 清空/润色扩写 (调 `/api/text`) + 已选风格 pill (可清除)
+- [x] 4.3 快捷风格 pills 横滑条 + 「更多风格」跳风格库页
+- [x] 4.4 ReferenceUploader 重写: 拖拽/粘贴/展馆选取; 缩略卡 (64px) + 已载入徽标 + 蒙版状态条
+- [x] 4.5 GenerationSettingsPanel 重写: 比例格 (3 列小卡 + 比例示意) / 清晰度 / 质量 / 数量 (1/2/4) / 背景 toggle / 高级折叠 (格式/压缩率) / 实际尺寸预览
+- [x] 4.6 提交按钮 `generate-cta` (全宽 accent + ⌘+Enter 实装)
+- [x] 4.7 ResultGrid 重写: 大卡 1/2 列; 生成中卡 (呼吸底 + spinner + 位次 + 中断) / 完成卡 (hover 动作条: 下载/设为参考/局部修改/全屏) / 失败卡 (错误摘要 + 修改提示词 + 重试)
+- [x] 4.8 复用验证: useQueue/useGallery/drafts/storage 零改动接入 (若需扩 fields, 保持向后兼容)
+- [x] 4.9 验收: 完整走一遍 文生图 → 参考 → 失败重试 → 下载
+- [x] 4.10 提交: 主题「feat(studio): creative studio page v3」
 
 ## 阶段 5 · 画笔蒙版 (局部编辑核心新能力)
 
@@ -65,12 +65,12 @@
 
 ## 阶段 6 · 系列策划页
 
-- [ ] 6.1 重写 `src/pages/SeriesStudio.tsx`: 工作流工具条 (类型 segmented: 绘本连环画/电商长图/视频分镜/IP图库 ↔ 现有 BatchMode 映射) + 幕数 stepper (2-16) + 风格选择按钮 + 主题输入 + 「自动拆解故事」
-- [ ] 6.2 分镜卡网格 (1/2/4 列): 编号徽标 + 标题 + 状态三态 (就绪/渲染中/等待) + 16:9 图区 + 描述 2 行截断 (点开微调) + 卡底动作 (微调/重绘/移除)
-- [ ] 6.3 分镜插入位: 卡间「+ 添加镜头」, 支持任意位置增补
-- [ ] 6.4 逐卡独立提交/重绘 (等价单任务提交 + 排除失败链), 批量「一键渲染」
-- [ ] 6.5 验收: 拆解 → 编辑 → 批量提交 → 逐卡回填 → 单卡重绘全流程
-- [ ] 6.6 提交: 主题「feat(series): storyboard planning page」
+- [x] 6.1 重写 `src/pages/SeriesStudio.tsx`: 工作流工具条 (类型 segmented: 绘本连环画/电商长图/视频分镜/IP图库 ↔ 现有 BatchMode 映射) + 幕数 stepper (2-16) + 风格选择按钮 + 主题输入 + 「自动拆解故事」
+- [x] 6.2 分镜卡网格 (1/2/4 列): 编号徽标 + 标题 + 状态三态 (就绪/渲染中/等待) + 16:9 图区 + 描述 2 行截断 (点开微调) + 卡底动作 (微调/重绘/移除)
+- [x] 6.3 分镜插入位: 卡间「+ 添加镜头」, 支持任意位置增补
+- [x] 6.4 逐卡独立提交/重绘 (等价单任务提交 + 排除失败链), 批量「一键渲染」
+- [x] 6.5 验收: 拆解 → 编辑 → 批量提交 → 逐卡回填 → 单卡重绘全流程
+- [x] 6.6 提交: 主题「feat(series): storyboard planning page」
 
 ## 阶段 7 · 风格库页 (新页面)
 

@@ -2,7 +2,7 @@ import type { QueueClientContext, QueueJob, QueueListResponse } from '../../type
 import { apiFetch } from './client';
 
 export interface QueueSubmitInput {
-  endpoint: '/v1/images/generations' | '/v1/responses';
+  endpoint: '/v1/images/generations' | '/v1/images/edits' | '/v1/responses';
   body: BodyInit;
   contentType: string;
   providerId?: string;

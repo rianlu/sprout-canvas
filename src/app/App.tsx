@@ -89,7 +89,7 @@ export function App() {
         <CreativeStudio onSubmit={submit} onRetry={queue.retry} results={gallery.records} jobs={queue.jobs} />
       )}
       {page === 'series' && (
-        <SeriesStudio onSubmit={submit} results={gallery.records} />
+        <SeriesStudio onSubmit={submit} results={gallery.records} jobs={queue.jobs} />
       )}
       {page === 'styles' && (
         <StylesLibrary onUseInStudio={() => setPage('studio')} />

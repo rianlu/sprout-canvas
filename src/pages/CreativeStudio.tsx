@@ -1,18 +1,19 @@
-import { useEffect, useMemo, useState } from 'react';
-import type { GenerationConfig, RefImage, ResultRecord } from '../types/generation';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Sparkles } from 'lucide-react';
+import type { GenerationConfig, RectSelection, RefImage, ResultRecord } from '../types/generation';
+import type { QueueJob } from '../types/queue';
 import { buildGenerationPayload, resolveSize } from '../lib/api/generation';
 import { createRectMaskDataUrl } from '../lib/editor/mask';
 import { randomId } from '../lib/random/id';
 import { applyAnyImageStyleToPrompt, findImageStyle } from '../lib/styles/image-styles';
 import { readDraft, writeDraft } from '../lib/storage/drafts';
-import { ModeSwitcher } from '../components/studio/ModeSwitcher';
-import { PromptPanel } from '../components/studio/PromptPanel';
-import { ReferenceUploader } from '../components/studio/ReferenceUploader';
-import { RegionEditor } from '../components/editor/RegionEditor';
-import { ResultGrid } from '../components/studio/ResultGrid';
-import { Button } from '../components/ui/Button';
 import type { QueueSubmitInput } from '../lib/api/queue';
-import type { QueueJob } from '../types/queue';
+import { ModeTabs } from '../components/studio/ModeTabs';
+import { PromptWell } from '../components/studio/PromptWell';
+import { StyleQuickPicker } from '../components/studio/StyleQuickPicker';
+import { ReferencePanel } from '../components/studio/ReferencePanel';
+import { ParamsPanel } from '../components/studio/ParamsPanel';
+import { ResultStream } from '../components/studio/ResultStream';
 
 interface CreativeStudioProps {
   onSubmit: (input: QueueSubmitInput) => Promise<QueueJob>;
@@ -21,18 +22,23 @@ interface CreativeStudioProps {
   jobs: QueueJob[];
 }
 
+const STUDIO_STYLE_DRAFT_KEY = 'studio_style';
+const STUDIO_PROMPT_DRAFT_KEY = 'studio_prompt';
+
 export function CreativeStudio({ onSubmit, onRetry, results, jobs }: CreativeStudioProps) {
   const [toast, setToast] = useState<{ type: 'info' | 'success' | 'error'; message: string } | null>(null);
+  const [submitting, setSubmitting] = useState(false);
   const [submittedIds, setSubmittedIds] = useState<string[]>([]);
-  const [editorVisible, setEditorVisible] = useState(true);
-  const [selectedStyleId, setSelectedStyleId] = useState(() => readDraft('studio_style'));
+  const [styleId, setStyleId] = useState(() => readDraft(STUDIO_STYLE_DRAFT_KEY));
+  const [pendingIds, setPendingIds] = useState<string[]>([]);
+  const railRef = useRef<HTMLDivElement>(null);
   const [config, setConfig] = useState<GenerationConfig>(() => {
     const size = resolveSize('1:1');
     return {
       mode: 'text',
       generationMode: 'images',
       imageModel: 'gpt-image-2',
-      prompt: readDraft('studio_prompt'),
+      prompt: readDraft(STUDIO_PROMPT_DRAFT_KEY),
       imageCount: 1,
       aspectRatio: '1:1',
       sizeTier: '1K',
@@ -46,138 +52,188 @@ export function CreativeStudio({ onSubmit, onRetry, results, jobs }: CreativeStu
       editSelection: null,
     };
   });
+
+  // 草稿持久化
+  useEffect(() => { writeDraft(STUDIO_PROMPT_DRAFT_KEY, config.prompt); }, [config.prompt]);
+  useEffect(() => { writeDraft(STUDIO_STYLE_DRAFT_KEY, styleId); }, [styleId]);
+
+  // 比例/清晰度变化时同步实际尺寸
+  useEffect(() => {
+    setConfig((current) => {
+      const size = resolveSize(current.aspectRatio, current.sizeTier);
+      if (current.requestSize === size.size) return current;
+      return { ...current, requestSize: size.size, sizeHint: size.hint };
+    });
+  }, [config.aspectRatio, config.sizeTier]);
+
+  const selectedStyle = useMemo(() => findImageStyle(styleId), [styleId]);
+
+  // 当前页可见的结果/任务 (单图 kind)
   const currentResults = useMemo(() => results.filter((record) => record.kind !== 'series' && submittedIds.includes(record.id)), [results, submittedIds]);
-  const selectedStyle = useMemo(() => findImageStyle(selectedStyleId), [selectedStyleId]);
   const currentJobs = useMemo(() => jobs.filter((job) => {
     const context = job.clientContext;
     if (!context || context.kind !== 'single') return false;
     return submittedIds.includes(context.placeholderId || job.id);
   }), [jobs, submittedIds]);
-  const pendingIds = useMemo(() => {
-    const resultIds = new Set(currentResults.map((record) => record.id));
-    const jobIds = new Set(currentJobs.map((job) => job.clientContext?.placeholderId || job.id));
-    return submittedIds.filter((id) => !resultIds.has(id) && !jobIds.has(id));
-  }, [submittedIds, currentResults, currentJobs]);
 
   useEffect(() => {
     if (!toast) return undefined;
-    const timer = window.setTimeout(() => setToast(null), 2800);
+    const timer = window.setTimeout(() => setToast(null), 2600);
     return () => window.clearTimeout(timer);
   }, [toast]);
 
-  useEffect(() => {
-    if (config.mode === 'edit') setEditorVisible(true);
-  }, [config.mode]);
-
-  useEffect(() => {
-    const timer = window.setTimeout(() => writeDraft('studio_prompt', config.prompt), 400);
-    return () => window.clearTimeout(timer);
-  }, [config.prompt]);
-
-  useEffect(() => {
-    writeDraft('studio_style', selectedStyleId);
-  }, [selectedStyleId]);
-
-  function patch(next: Partial<GenerationConfig>) {
-    const merged = { ...config, ...next };
-    if (next.aspectRatio || next.sizeTier) {
-      const size = resolveSize(merged.aspectRatio, merged.sizeTier);
-      merged.requestSize = size.size;
-      merged.sizeHint = size.hint;
-    }
-    if (next.mode === 'text') merged.refImages = [];
-    setConfig(merged);
-  }
-
-  async function submit(snapshot: GenerationConfig) {
-    if (!snapshot.prompt.trim()) throw new Error('请填写提示词');
-    if ((snapshot.mode === 'reference' || snapshot.mode === 'edit') && snapshot.refImages.length === 0) throw new Error('请先添加参考图');
-    if (snapshot.mode === 'edit' && (!snapshot.editSelection || snapshot.editSelection.width < 0.01 || snapshot.editSelection.height < 0.01)) throw new Error('请先框选要修改的区域');
-    const effectiveSnapshot = { ...snapshot, imageCount: 1, prompt: applyAnyImageStyleToPrompt(snapshot.prompt, selectedStyle) };
-    const payload = await buildGenerationPayload(effectiveSnapshot, snapshot.editSelection ? (imageDataUrl) => createRectMaskDataUrl(imageDataUrl, snapshot.editSelection!) : undefined);
-    const nextIds: string[] = [];
-    const id = randomId('result');
-    await onSubmit({
-      endpoint: '/v1/images/generations',
-      body: JSON.stringify(payload),
-      contentType: 'application/json',
-      clientContext: { kind: 'single', placeholderId: id, prompt: snapshot.prompt, mode: snapshot.mode, outputFormat: snapshot.outputFormat },
+  const patchConfig = useCallback((patch: Partial<GenerationConfig>) => {
+    setConfig((current) => {
+      if (patch.mode && patch.mode !== current.mode) {
+        return { ...current, ...patch, refImages: patch.mode === 'text' ? [] : current.refImages, editSelection: patch.mode === 'text' ? null : current.editSelection };
+      }
+      return { ...current, ...patch };
     });
-    nextIds.push(id);
-    setSubmittedIds((current) => [id, ...current.filter((item) => item !== id)].slice(0, 24));
-    return nextIds;
-  }
+  }, []);
 
-  function clearCurrentInputs(mode: GenerationConfig['mode']) {
-    setConfig((current) => ({
-      ...current,
-      prompt: '',
-      refImages: mode === 'text' ? current.refImages : [],
-      editSelection: mode === 'edit' ? null : current.editSelection,
-    }));
-  }
-
-  async function handleSubmit() {
-    const snapshot = config;
-    setToast({ type: 'info', message: '正在提交到任务队列...' });
-    try {
-      const ids = await submit(snapshot);
-      clearCurrentInputs(snapshot.mode);
-      if (snapshot.mode === 'edit') setEditorVisible(false);
-      setToast({ type: 'success', message: `已提交 ${ids.length} 个任务, 可以继续创作.` });
-    } catch (error) {
-      setToast({ type: 'error', message: error instanceof Error ? error.message : '提交失败, 请稍后重试' });
+  const submit = useCallback(async () => {
+    const prompt = config.prompt.trim();
+    if (!prompt || submitting) return;
+    if (config.mode === 'edit' && config.refImages.length === 0) {
+      setToast({ type: 'error', message: '局部编辑需要先载入一张原图' });
+      return;
     }
-  }
+    setSubmitting(true);
+    try {
+      const style = findImageStyle(styleId);
+      const snapshot: GenerationConfig = { ...config, prompt: applyAnyImageStyleToPrompt(prompt, style) };
+      const effectivePrompt = snapshot.prompt;
 
-  const editImage = config.mode === 'edit' ? config.refImages[0] || null : null;
-  const showEditEditor = config.mode === 'edit' && editorVisible;
-  const showEditToggle = config.mode === 'edit' && submittedIds.length > 0 && Boolean(editImage);
+      for (let index = 0; index < snapshot.imageCount; index += 1) {
+        const placeholderId = randomId('task');
+        const payload = await buildGenerationPayload(
+          { ...snapshot, prompt: effectivePrompt },
+          snapshot.mode === 'edit' && snapshot.editSelection
+            ? (imageDataUrl: string) => createRectMaskDataUrl(imageDataUrl, snapshot.editSelection!)
+            : undefined,
+        );
+        const refCount = Array.isArray((payload as { ref_images?: unknown }).ref_images)
+          ? ((payload as { ref_images?: unknown[] }).ref_images as unknown[]).length
+          : 0;
+        const isEdit = snapshot.mode === 'edit' || refCount > 0;
+        const endpoint: QueueSubmitInput['endpoint'] = isEdit ? '/v1/images/edits' : '/v1/images/generations';
+        const job = await onSubmit({
+          endpoint,
+          body: JSON.stringify(payload),
+          contentType: 'application/json',
+          clientContext: {
+            kind: 'single',
+            placeholderId,
+            prompt,
+            mode: snapshot.mode,
+            outputFormat: snapshot.outputFormat,
+          },
+        });
+        setSubmittedIds((current) => [placeholderId, ...current]);
+        setPendingIds((current) => [placeholderId, ...current]);
+        if (!job?.id) throw new Error('任务提交异常');
+      }
+      setToast({ type: 'success', message: `已提交 ${snapshot.imageCount} 个生成任务` });
+    } catch (error) {
+      setToast({ type: 'error', message: error instanceof Error ? error.message : '提交失败, 请重试' });
+    } finally {
+      setSubmitting(false);
+    }
+  }, [config, styleId, submitting, onSubmit]);
+
+  // ⌘/Ctrl + Enter 全局快捷提交
+  useEffect(() => {
+    function onKey(event: KeyboardEvent) {
+      if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
+        event.preventDefault();
+        void submit();
+      }
+    }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [submit]);
+
+  const dismiss = useCallback((placeholderId: string) => {
+    setSubmittedIds((current) => current.filter((id) => id !== placeholderId));
+    setPendingIds((current) => current.filter((id) => id !== placeholderId));
+  }, []);
+
+  const retryJob = useCallback(async (jobId: string, placeholderId: string) => {
+    try {
+      const job = await onRetry(jobId);
+      if (job?.clientContext?.placeholderId) {
+        setSubmittedIds((current) => [job.clientContext!.placeholderId, ...current]);
+      } else {
+        setSubmittedIds((current) => [placeholderId, ...current]);
+      }
+    } catch (error) {
+      setToast({ type: 'error', message: error instanceof Error ? error.message : '重试失败' });
+    }
+  }, [onRetry]);
+
+  const modeLabel = config.mode === 'text' ? '文生图' : config.mode === 'reference' ? '参考生成' : '局部编辑';
+
   return (
-    <div className="studio-page">
-      <header className="studio-hero">
-        <div>
-          <span className="eyebrow">芽绘台</span>
-          <h1>创作台</h1>
-          <p>专注单张精修, 参考和局部编辑. 需要多张图时请使用批量出图.</p>
-        </div>
-      </header>
+    <div className="studio-layout">
+      <div ref={railRef} className="control-rail" aria-label="生成参数">
+        <ModeTabs mode={config.mode} onModeChange={(mode) => patchConfig({ mode })} />
 
-      <ModeSwitcher value={config.mode} onChange={(mode) => patch({ mode })} />
+        <PromptWell
+          value={config.prompt}
+          onChange={(prompt) => setConfig((current) => ({ ...current, prompt }))}
+          styleName={selectedStyle ? `${selectedStyle.name}` : null}
+          onClearStyle={() => setStyleId('')}
+        />
 
-      <div className="studio-workbench">
-        <section className="studio-composer">
-          <PromptPanel config={config} onChange={patch} onSubmit={() => { void handleSubmit(); }} submitting={Boolean(toast && toast.type === 'info')} selectedStyle={selectedStyle} onStyleChange={(style) => setSelectedStyleId(style?.id || '')} />
-          {config.mode !== 'text' && <ReferenceUploader images={config.refImages} onChange={(refImages: RefImage[]) => patch({ refImages })} galleryRecords={results} title={config.mode === 'edit' ? '编辑原图' : '参考图'} localHint={config.mode === 'edit' ? '选择 1 张需要编辑的图片' : '支持多张参考图'} maxImages={config.mode === 'edit' ? 1 : 6} />}
-        </section>
+        <StyleQuickPicker
+          styleId={styleId}
+          onSelect={(id) => setStyleId(id)}
+        />
 
+        {config.mode !== 'text' && (
+          <ReferencePanel
+            images={config.refImages}
+            onChange={(refImages) => setConfig((current) => ({ ...current, refImages }))}
+            galleryRecords={results}
+            maxImages={config.mode === 'edit' ? 1 : 6}
+            singleMode={config.mode === 'edit'}
+            maskSummary={config.mode === 'edit' && config.editSelection ? '已框选局部编辑区域' : null}
+            onOpenMaskEditor={() => setToast({ type: 'info', message: '选区工具即将在下一阶段提供, 当前可在原图上重新框选' })}
+          />
+        )}
 
-        <section className="studio-preview">
-          <div className="preview-heading">
-            <div>
-              <span className="eyebrow">Output</span>
-              <h2>{showEditEditor ? '编辑选区' : '当前任务'}</h2>
-            </div>
-            <div className="preview-heading-actions">
-              {showEditToggle && (
-                <Button variant="ghost" onClick={() => setEditorVisible((value) => !value)}>
-                  {editorVisible ? `查看任务 (${submittedIds.length})` : '重新框选'}
-                </Button>
-              )}
-              <span>{showEditEditor ? '矩形框选' : `${currentResults.length}/${submittedIds.length} 完成`}</span>
-            </div>
-          </div>
-          {showEditEditor ? <RegionEditor image={editImage} selection={config.editSelection || null} onSelectionChange={(editSelection) => patch({ editSelection })} /> : <ResultGrid records={currentResults} jobs={currentJobs} pendingIds={pendingIds} onRetry={(jobId, oldPlaceholder) => { void onRetry(jobId).then((job) => {
-            const id = job.clientContext?.placeholderId || job.id;
-            setSubmittedIds((current) => {
-              const without = current.filter((item) => item !== id && item !== oldPlaceholder);
-              return [id, ...without].slice(0, 24);
-            });
-          }).catch((error) => setToast({ type: 'error', message: error instanceof Error ? error.message : '重试失败' }));
-        }} onDismiss={(placeholderId) => setSubmittedIds((current) => current.filter((item) => item !== placeholderId))} />}
-        </section>
+        <ParamsPanel
+          config={config}
+          onChange={patchConfig}
+          onSubmit={() => { void submit(); }}
+          submitting={submitting}
+          promptEmpty={!config.prompt.trim()}
+        />
       </div>
-      {toast && <div className={`toast ${toast.type}`} role="status" aria-live="polite">{toast.message}</div>}
+
+      <section aria-label="生成结果">
+        <div className="result-stream-head">
+          <div className="page-head-copy">
+            <h1 className="t-headline-lg" style={{ margin: 0 }}>创作画卷</h1>
+            <p>{modeLabel} · 提交后按队列顺序出图</p>
+          </div>
+        </div>
+        <ResultStream
+          records={currentResults}
+          jobs={currentJobs}
+          pendingIds={pendingIds}
+          onRetry={(jobId, placeholderId) => { void retryJob(jobId, placeholderId); }}
+          onDismiss={dismiss}
+          onDelete={dismiss}
+        />
+      </section>
+
+      {toast && (
+        <div className={`toast ${toast.type}`} role="status" aria-live="polite">
+          <Sparkles size={15} aria-hidden="true" />
+          {toast.message}
+        </div>
+      )}
     </div>
   );
 }
