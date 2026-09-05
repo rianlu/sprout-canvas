@@ -1,60 +1,83 @@
 import type { PropsWithChildren } from 'react';
-import { Images, LayoutDashboard, Moon, Scissors, Sparkles, Sun } from 'lucide-react';
+import { Images, LayoutDashboard, Loader2, Moon, Palette, Sparkles, Sun } from 'lucide-react';
 import type { PageKey } from '../../app/App';
-import { QueueDock } from '../queue/QueueDock';
-import type { QueueJob } from '../../types/queue';
 import type { Theme } from '../../hooks/useTheme';
+import type { QueueJob } from '../../types/queue';
+
+export type QueueSummary = { active: number; queued: number };
 
 interface AppShellProps {
   page: PageKey;
   onPageChange: (page: PageKey) => void;
-  jobs: QueueJob[];
-  active: number;
-  queued: number;
-  onCancelJob: (jobId: string) => void;
-  onRetryJob: (jobId: string) => void;
+  ready: boolean;
+  queue: QueueSummary;
+  onOpenQueue: () => void;
   theme: Theme;
   onToggleTheme: () => void;
+  children: PropsWithChildren['children'];
 }
 
-const nav = [
-  { key: 'studio' as const, label: '创作台', icon: Sparkles },
-  { key: 'series' as const, label: '批量出图', icon: LayoutDashboard },
-  { key: 'split' as const, label: '切图', icon: Scissors },
-  { key: 'gallery' as const, label: '展馆', icon: Images },
+const NAV_ITEMS: Array<{ key: PageKey; label: string; icon: typeof Sparkles }> = [
+  { key: 'studio', label: '单图创作', icon: Sparkles },
+  { key: 'series', label: '系列策划', icon: LayoutDashboard },
+  { key: 'styles', label: '风格库', icon: Palette },
+  { key: 'gallery', label: '展馆', icon: Images },
 ];
 
-export function AppShell({ page, onPageChange, jobs, active, queued, onCancelJob, onRetryJob, theme, onToggleTheme, children }: PropsWithChildren<AppShellProps>) {
-  const nextThemeLabel = theme === 'dark' ? '切换浅色' : '切换深色';
+export function AppShell({ page, onPageChange, ready, queue, onOpenQueue, theme, onToggleTheme, children }: AppShellProps) {
+  const queueCount = queue.active + queue.queued;
+  const nextThemeLabel = theme === 'dark' ? '切换浅色主题' : '切换深色主题';
+  const statusLabel = ready ? '服务就绪' : '连接异常';
+
   return (
-    <div className="app-shell">
-      <aside className="sidebar">
-        <div className="brand-block" title="芽绘台">
-          <div className="brand-mark">芽</div>
-          <div className="brand-copy">
-            <strong>芽绘台</strong>
-            <span>AI 生图工作台</span>
-          </div>
+    <div className="app-frame">
+      <header className="top-bar">
+        <div className="top-bar-brand" onClick={() => onPageChange('studio')} role="button" tabIndex={0}
+          onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') onPageChange('studio'); }}>
+          <span className="brand-mark" aria-hidden="true">芽</span>
+          <span className="brand-copy">
+            <strong>芽绘台 SproutCanvas</strong>
+            <span>图像生成工作台</span>
+          </span>
         </div>
-        <nav className="nav-list">
-          {nav.map((item) => {
+
+        <nav className="nav-segmented" aria-label="主导航">
+          {NAV_ITEMS.map((item) => {
             const Icon = item.icon;
             return (
-              <button key={item.key} className={`nav-item ${page === item.key ? 'active' : ''}`} data-label={item.label} title={item.label} aria-label={item.label} aria-current={page === item.key ? 'page' : undefined} onClick={() => onPageChange(item.key)}>
-                <Icon size={20} />
-                <span className="nav-label">{item.label}</span>
+              <button key={item.key} type="button" className={page === item.key ? 'active' : ''}
+                aria-current={page === item.key ? 'page' : undefined} onClick={() => onPageChange(item.key)}>
+                <Icon className="nav-icon" size={15} aria-hidden="true" />
+                <span>{item.label}</span>
               </button>
             );
           })}
         </nav>
-        <div className="sidebar-footer">
-          <button className="theme-toggle" onClick={onToggleTheme} title={nextThemeLabel} aria-label={nextThemeLabel}>
-            {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
+
+        <div className="top-bar-actions">
+          <span className={`status-dot ${ready ? '' : 'error'}`} title={ready ? '后端服务就绪' : '后端服务异常'}>{statusLabel}</span>
+          <button type="button" className={`queue-entry ${queueCount ? '' : 'idle'}`} onClick={onOpenQueue}
+            aria-label={`打开任务队列${queueCount ? `, ${queueCount} 个任务` : ''}`}>
+            <Loader2 size={16} className={queue.active ? 'spin' : ''} aria-hidden="true" />
+            <span className="queue-entry-label">任务队列</span>
+            <span className="count">{queueCount}</span>
+          </button>
+          <button type="button" className="icon-btn" onClick={onToggleTheme} title={nextThemeLabel} aria-label={nextThemeLabel}>
+            {theme === 'dark' ? <Sun size={17} /> : <Moon size={17} />}
           </button>
         </div>
-      </aside>
+      </header>
+
       <main className="workspace">{children}</main>
-      <QueueDock jobs={jobs} active={active} queued={queued} onCancelJob={onCancelJob} onRetryJob={onRetryJob} />
+
+      <footer className="app-footer">
+        <div className="app-footer-inner">
+          <span>芽绘台 SproutCanvas · 图像生成工作台</span>
+          <span className="version">UI v3 · Botanical Paper</span>
+        </div>
+      </footer>
     </div>
   );
 }
+
+export type { QueueJob };
