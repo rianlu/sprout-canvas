@@ -2,6 +2,41 @@
  * 系列策划 — 工作流工具条 / 分镜卡网格 (DESIGN §5/§6, PRD §4.3).
  */
 
+/* ===== 页面布局 (2号稿: 侧参数卡 + 分镜网格主体) ===== */
+.series-layout {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  max-width: var(--content-max);
+  margin: 0 auto;
+  width: 100%;
+}
+
+@media (min-width: 1280px) {
+  .series-layout { flex-direction: row; align-items: flex-start; }
+}
+
+.series-side-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: 100%;
+  padding: 20px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-xl);
+  background: var(--panel);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  box-shadow: var(--shadow-soft);
+}
+
+@media (min-width: 1280px) {
+  .series-side-panel { width: 320px; flex-shrink: 0; position: sticky; top: calc(var(--top-bar-h) + 20px); }
+}
+
+.series-param-collapse { border: 1px solid var(--line); border-radius: var(--radius-lg); padding: 10px 12px; background: var(--well); }
+.series-submit-row { margin-top: auto; padding-top: 12px; }
+
 /* ===== 顶部工作流工具条 ===== */
 .series-toolbar {
   display: grid;
@@ -108,9 +143,14 @@
 /* ===== 分镜卡网格 ===== */
 .shot-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 20px;
+  grid-template-columns: 1fr;
+  gap: 24px;
+  min-width: 0;
+  flex: 1;
 }
+
+@media (min-width: 768px) { .shot-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (min-width: 1280px) { .shot-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
 
 .shot-card {
   display: flex;

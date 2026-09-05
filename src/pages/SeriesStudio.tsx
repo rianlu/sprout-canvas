@@ -269,20 +269,29 @@ export function SeriesStudio({ onSubmit, results, jobs }: SeriesStudioProps) {
         </div>
       </section>
 
-      <div className="series-layout" style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 340px) minmax(0, 1fr)', gap: 24, alignItems: 'start' }}>
-        <aside className="control-rail" style={{ position: 'sticky', top: 'calc(var(--top-bar-h) + 20px)' }} aria-label="系列参数">
+      <div className="series-layout">
+        <div className="series-side-panel">
           <StyleQuickPicker styleId={styleId} onSelect={setStyleId} />
           {mode === 'variants' && (
             <ReferencePanel images={refs} onChange={setRefs} galleryRecords={results} maxImages={1} singleMode />
           )}
-          <ParamsPanel
-            config={{ ...config, imageCount: 1, prompt: brief }}
-            onChange={(patch) => setConfig((current) => ({ ...current, ...patch }))}
-            onSubmit={() => { void runAction(submitBatch); }}
-            submitting={submitting}
-            promptEmpty={plannedCount === 0}
-          />
-        </aside>
+          <details className="collapsible series-param-collapse">
+            <summary>生成参数</summary>
+            <ParamsPanel
+              config={{ ...config, imageCount: 1, prompt: brief }}
+              onChange={(patch) => setConfig((current) => ({ ...current, ...patch }))}
+              onSubmit={() => { void runAction(submitBatch); }}
+              submitting={submitting}
+              promptEmpty={plannedCount === 0}
+              hideSubmit
+            />
+          </details>
+          <div className="series-submit-row">
+            <button type="button" className="generate-cta" onClick={() => { void runAction(submitBatch); }} disabled={submitting || plannedCount === 0}>
+              {submitting ? '正在提交...' : `提交 ${plannedCount || 0} 个任务`}
+            </button>
+          </div>
+        </div>
 
         <section aria-label="分镜任务">
           {tasks.length === 0 ? (

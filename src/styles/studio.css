@@ -3,29 +3,50 @@
  */
 
 /* ===== 双栏布局 ===== */
+/* 1号稿: 双栏外层 max-w-[1720px] mx-auto (px-gutter, py-space-lg) */
 .studio-layout {
-  display: grid;
-  grid-template-columns: var(--rail-w) minmax(0, 1fr);
+  display: flex;
+  flex-direction: column;
   gap: 24px;
-  align-items: start;
+  max-width: var(--content-max);
+  margin: 0 auto;
+  width: 100%;
+}
+
+@media (min-width: 1024px) {
+  .studio-layout {
+    flex-direction: row;
+    align-items: flex-start;
+  }
 }
 
 /* ===== 左侧控制轨 ===== */
+/* 1号稿: w-[440px] shrink-0 sticky top-20 (lg 起) */
 .control-rail {
-  position: sticky;
-  top: calc(var(--top-bar-h) + 24px);
-  width: var(--rail-w);
-  max-height: calc(100dvh - var(--top-bar-h) - 48px);
-  overflow-y: auto;
-  display: grid;
-  gap: 16px;
-  padding: 20px;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  width: 100%;
+  flex-shrink: 0;
+  padding: 24px;
   border: 1px solid var(--line);
   border-radius: var(--radius-xl);
   background: var(--panel);
   backdrop-filter: blur(18px);
   -webkit-backdrop-filter: blur(18px);
   box-shadow: var(--shadow-soft);
+}
+
+@media (min-width: 1024px) {
+  .control-rail {
+    position: sticky;
+    top: calc(var(--top-bar-h) + 20px);
+    width: var(--rail-w);
+    max-height: calc(100dvh - var(--top-bar-h) - 44px);
+    overflow-y: auto;
+    z-index: 20;
+  }
 }
 
 /* 子模式 tabs (文生图/参考生成/局部编辑) */
@@ -134,7 +155,8 @@
 .rail-submit {
   display: grid;
   gap: 8px;
-  margin-top: 4px;
+  margin-top: auto;
+  padding-top: 16px;
 }
 
 .generate-cta {
@@ -215,8 +237,12 @@
 
 .result-stream {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: 1fr;
   gap: 24px;
+}
+
+@media (min-width: 1280px) {
+  .result-stream { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
 /* ===== 任务/结果卡 ===== */

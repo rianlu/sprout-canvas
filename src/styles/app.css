@@ -243,16 +243,12 @@
 
 /* ===== 响应式断点: 1280/1024/768/640 (DESIGN §5) ===== */
 @media (max-width: 1279px) {
-  .result-stream { grid-template-columns: 1fr; }
-  .shot-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  /* 网格列数已由各域文件 min-width 控制, 此处只留骨架调整 */
 }
 
 @media (max-width: 1023px) {
-  :root { --rail-w: 0px; }
   .brand-copy span { display: none; }
-  .studio-layout { grid-template-columns: 1fr; }
-  .style-library-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .control-rail { position: static; width: 100%; }
+  /* 双栏在 1024 起改为 flex row, 此处无需额外处理 */
 }
 
 @media (max-width: 767px) {
@@ -280,11 +276,9 @@
   .status-dot { display: none; }
   .queue-entry .queue-entry-label { display: none; }
   .workspace { padding: calc(var(--top-bar-h) + 48px) var(--gutter) 32px; }
-  .shot-grid { grid-template-columns: 1fr; }
   .queue-drawer { width: 100vw; }
 }
 
 @media (max-width: 639px) {
-  .style-library-grid, .gallery-stream-grid { grid-template-columns: 1fr; }
   .top-bar-brand .brand-mark { width: 32px; height: 32px; }
 }

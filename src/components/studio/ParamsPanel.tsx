@@ -43,9 +43,11 @@ interface ParamsPanelProps {
   onSubmit: () => void;
   submitting: boolean;
   promptEmpty: boolean;
+  /** 系列页等场景隐藏内置提交按钮, 由外层提供 */
+  hideSubmit?: boolean;
 }
 
-export function ParamsPanel({ config, onChange, onSubmit, submitting, promptEmpty }: ParamsPanelProps) {
+export function ParamsPanel({ config, onChange, onSubmit, submitting, promptEmpty, hideSubmit }: ParamsPanelProps) {
   const allAspects = [...ASPECT_OPTIONS, ...EXTENDED_ASPECTS, { value: 'auto' as const, label: 'auto', sub: '自动', w: 16, h: 10 }];
   const current = allAspects.find((option) => option.value === config.aspectRatio) || allAspects[0];
 
@@ -162,11 +164,13 @@ export function ParamsPanel({ config, onChange, onSubmit, submitting, promptEmpt
         </div>
       </details>
 
+      {!hideSubmit && (
       <div className="rail-submit">
         <button type="button" className="generate-cta" onClick={onSubmit} disabled={submitting || promptEmpty}>
           {submitting ? (<><Loader2 className="spin" size={18} aria-hidden="true" />正在提交...</>) : (<><Sparkles size={18} aria-hidden="true" />开始绘制<span className="kbd">⌘ ↵</span></>)}
         </button>
       </div>
+      )}
     </div>
   );
 }
