@@ -7,11 +7,11 @@
 
 ## 阶段 0 · 前置还债与基建
 
-- [ ] 0.1 删除旧入口资产: `js/app.js` + `css/styles.css` (服务端已不回退, 仅 test:legacy 引用)
-- [ ] 0.2 `package.json`: 移除 `test:legacy` 脚本, `test` 链去掉对应调用
-- [ ] 0.3 检查 `index.html` 无 `js/app.js` / `css/styles.css` 引用残留 (当前已确认无)
-- [ ] 0.4 下载字体 woff2 到 `public/fonts/` (Outfit 500/600, Inter 400/500, JetBrains Mono 400/500, latin 子集) + 附 OFL license 文件
-- [ ] 0.5 `index.html`: favicon 渐变改 `#9DBEA6 → #597445` (v3 品牌标记), 加字体 preload; 首屏主题内联脚本保持默认 light
+- [x] 0.1 删除旧入口资产: `js/app.js` + `css/styles.css` (服务端已不回退, 仅 test:legacy 引用)
+- [x] 0.2 `package.json`: 移除 `test:legacy` 脚本, `test` 链去掉对应调用
+- [x] 0.3 检查 `index.html` 无 `js/app.js` / `css/styles.css` 引用残留 (当前已确认无)
+- [x] 0.4 下载字体 woff2 到 `public/fonts/` (Outfit 500/600, Inter 400/500, JetBrains Mono 400/500, latin 子集) + 附 OFL license 文件
+- [x] 0.5 `index.html`: favicon 渐变改 `#9DBEA6 → #597445` (v3 品牌标记), 加字体 preload; 首屏主题内联脚本保持默认 light
 - [ ] 0.6 确认 `stitch_sproutcanvas_studio/` 是否入库 (建议入库作为设计参照; 未跟踪)
 - [ ] 0.7 提交: 主题「chore: remove legacy entry assets」
 

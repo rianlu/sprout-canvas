@@ -14,8 +14,9 @@ function readSavedTheme(): Theme | null {
 }
 
 function readInitialTheme(): Theme {
+  // 内联脚本已写入 data-theme (缺省 light), 这里读回并归一化
   const attr = document.documentElement.getAttribute('data-theme');
-  return attr === 'light' ? 'light' : 'dark';
+  return attr === 'dark' ? 'dark' : 'light';
 }
 
 function applyTheme(theme: Theme) {
@@ -31,16 +32,8 @@ export function useTheme() {
     applyTheme(theme);
   }, [theme]);
 
-  useEffect(() => {
-    if (readSavedTheme() !== null) return undefined;
-    const media = window.matchMedia('(prefers-color-scheme: light)');
-    function handler(event: MediaQueryListEvent) {
-      if (readSavedTheme() !== null) return;
-      setTheme(event.matches ? 'light' : 'dark');
-    }
-    media.addEventListener('change', handler);
-    return () => media.removeEventListener('change', handler);
-  }, []);
+  // 默认主题固定为浅色 (品牌基准), 不跟随系统 prefers-color-scheme;
+  // 用户切换后由 localStorage 持久化 (toggle 内写入).
 
   const toggle = useCallback(() => {
     setTheme((current) => {
