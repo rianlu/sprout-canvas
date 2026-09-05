@@ -37,8 +37,8 @@ This file provides guidance to Codex (Codex.ai/code) when working with code in t
 - `server/queue.mjs`: 生图任务队列. **严格单 worker** (`imageConcurrency=1`), 按 `userId` 分桶 FIFO, 用户间公平轮询. 提供 `chooseImageProvider` (自动路由, 跳过不支持当前请求类型的 Provider) + `rewriteImageJobBody` (把客户端发过来的 `model` 字段强行改成所选 Provider 的 `imageModel`) + 熔断 (`PROVIDER_FAILURE_THRESHOLD=3`, 30 分钟 `PROVIDER_CIRCUIT_OPEN_MS`). 任务 TTL 30 分钟, **进程重启即全部丢失**.
 - `server/text-routing.mjs`: 文本提示词优化 Provider 的熔断状态机, 接口与生图类似.
 - `src/app/App.tsx`: React 19 + StrictMode 入口. 顶层挂载 `useAuth` + `useGallery` + `useQueue`, 按 `PageKey` 切 `pages/`.
-- `src/pages/`: `CreativeStudio` (单图), `SeriesStudio` (先调文本拆分→批量入队, 携带 `clientContext.kind='series'`), `SplitTool` (纯前端切图, 不打上游), 展馆在 `components/gallery/GalleryGrid`.
-- **UI v3 (Stitch Botanical Paper 方案, 进行中)**: 信息架构为顶栏导航 + 四页 (单图/系列/风格库/展馆), 队列为右侧滑出抽屉, 局部编辑用画笔蒙版. 设计规范见 `docs/DESIGN.md` v3 (§9 含 Stitch 移植规则), 功能边界见 `docs/PRD.md` v3. 前端改造遵守「逻辑层 (hooks/lib/types) 保留复用, UI 层 (styles.css/pages/components) 重写」的策略.
+- `src/pages/`: `CreativeStudio` (单图三子模式: 文生图/参考/画笔蒙版编辑), `SeriesStudio` (分镜卡网格: 文本拆解→批量入队, `clientContext.kind='series'`), `StylesLibrary` (风格库页: 双 tab+搜索+详情灯箱). 展馆在 `components/gallery/GalleryGrid`, 切图抽屉在 `components/tools/SplitToolDrawer` (纯前端, 不打上游).
+- **UI v3 (Stitch Botanical Paper 方案, 已完成)**: 顶栏导航 + 四页 (单图/系列/风格库/展馆), 队列为右侧滑出抽屉 (QueueDrawer), 局部编辑用画笔蒙版 (MaskEditor + brush-mask.ts), 切图为创作页工具抽屉 (SplitToolDrawer). CSS 为 `src/styles/` 模块化目录 (tokens.css 唯一色值源), 进度计划见 `docs/UI_V3_PLAN.md`.
 - `src/hooks/useQueue.ts`: 有任务时每 2s / 空闲时每 5s 轮询 `/api/jobs/me` (页面隐藏暂停). 命中 `succeeded` 后拉 `/api/jobs/:id/result`, 用 `clientContext.placeholderId` 把结果填回画廊占位.
 - `src/lib/storage/gallery-db.ts`: 展馆只在浏览器 IndexedDB (`img-gen-gallery` v2). 旧 `localStorage` 数据自动迁移. **不在服务端共享**.
 

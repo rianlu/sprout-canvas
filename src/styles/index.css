@@ -41,5 +41,3 @@
 /* 具抽屉 (切图) */
 @import './split-tool.css';
 
-/* ⚠️ 旧页面过渡层 — 阶段 4-8 逐页重写时收缩, 阶段 9 删除 */
-@import './legacy-compat.css';

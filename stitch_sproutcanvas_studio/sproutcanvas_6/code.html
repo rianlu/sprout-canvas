@@ -1,0 +1,1156 @@
+<!DOCTYPE html><html lang="zh-CN"><head>
+<meta charset="utf-8">
+<meta content="width=device-width, initial-scale=1.0" name="viewport">
+<link href="https://fonts.googleapis.com" rel="preconnect">
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=JetBrains+Mono:wght@400;500&amp;family=Outfit:wght@400;500;600;700&amp;family=Noto+Serif+SC:wght@400;500;600&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<style>
+    @layer base {
+      html, body { margin: 0; padding: 0; }
+      body { overscroll-behavior: none; }
+      main > :first-child { margin-top: 0 !important; }
+      main > :last-child { margin-bottom: 0 !important; }
+    }
+    ::-webkit-scrollbar { display: none; }
+    .font-serif-sc { font-family: 'Noto Serif SC', 'Songti SC', serif; }
+  </style>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          colors: {
+            "background": "#faf9f5",
+            "surface": "#faf9f5",
+            "surface-bright": "#ffffff",
+            "surface-container-lowest": "#ffffff",
+            "surface-container-low": "#f4f4f0",
+            "surface-container": "#efeeea",
+            "surface-container-high": "#e9e8e4",
+            "surface-container-highest": "#e3e2df",
+            "surface-dim": "#dbdad6",
+            "primary": "#415b2f",
+            "primary-container": "#597445",
+            "on-primary": "#ffffff",
+            "on-primary-container": "#d9f9be",
+            "primary-fixed": "#cdecb3",
+            "primary-fixed-dim": "#b1d098",
+            "on-primary-fixed": "#0a2000",
+            "on-primary-fixed-variant": "#344d23",
+            "secondary": "#516440",
+            "secondary-container": "#d3eabc",
+            "on-secondary-container": "#576a45",
+            "secondary-fixed": "#d3eabc",
+            "secondary-fixed-dim": "#b8cea1",
+            "tertiary": "#4e5749",
+            "tertiary-container": "#666f60",
+            "on-tertiary-container": "#e9f2e0",
+            "outline": "#74796d",
+            "outline-variant": "#c4c8bb",
+            "on-surface": "#1b1c1a",
+            "on-surface-variant": "#44483e",
+            "inverse-surface": "#2f312e",
+            "inverse-on-surface": "#f2f1ed",
+            "error": "#ba1a1a",
+            "error-container": "#ffdad6"
+          },
+          borderRadius: {
+            DEFAULT: "0.25rem",
+            lg: "0.5rem",
+            xl: "0.75rem",
+            "2xl": "1rem",
+            full: "9999px"
+          },
+          spacing: {
+            "toolbar-height": "3.5rem",
+            "sidebar-width": "22rem",
+            "gutter-canvas": "1.5rem"
+          },
+          fontFamily: {
+            "display-lg": ["Outfit", "sans-serif"],
+            "headline-lg": ["Outfit", "sans-serif"],
+            "headline-md": ["Outfit", "sans-serif"],
+            "headline-sm": ["Outfit", "sans-serif"],
+            "body-lg": ["Inter", "sans-serif"],
+            "body-md": ["Inter", "sans-serif"],
+            "body-sm": ["Inter", "sans-serif"],
+            "meta-md": ["JetBrains Mono", "monospace"],
+            "meta-sm": ["JetBrains Mono", "monospace"]
+          }
+        }
+      }
+    };
+  </script>
+</head>
+<body class="bg-surface font-body-md text-body-md text-on-surface min-h-screen selection:bg-secondary-fixed selection:text-on-surface">
+<!-- Fixed Top Global Header -->
+<header class="fixed top-0 left-0 right-0 w-full z-40 bg-surface/90 backdrop-blur-xl border-b border-outline-variant/30 shadow-[0_1px_8px_rgba(85,95,75,0.04)]">
+<div class="h-16 w-full px-6 flex items-center justify-between gap-4">
+<!-- Logo Brand -->
+<div class="flex items-center gap-3 select-none">
+<img alt="芽绘台 SproutCanvas Logo" class="h-8 w-auto object-contain" src="https://lh3.googleusercontent.com/aida/AEtjO1UdGQYN5OKFazIQJk08paVjuyRk67uy0CfljuOAq07ztmhwt9frVul4FuPx-HDyt-bJG51nEqUOHmkqZlDknxVuThmMnnNBiretQE3KFJAxx9H50006F8SnjFThYojjbocbNOU6EY3Y8-K6QwgVxrFgTW6OpjXFoLfimyy5bPcrBBdhbRiX7db0ck1UOHKTYOwvcYrKfyo-emzTDm317zYWZvZjfR0Pa6Epc7r_LCS5vY9HNZv0SDQN7Mf_">
+<div class="flex flex-col">
+<span class="font-headline-sm text-[17px] font-semibold text-on-surface tracking-tight leading-tight">芽绘台 SproutCanvas</span>
+<span class="font-meta-sm text-[10px] text-on-surface-variant/80 tracking-wider">自然心流 · 灵感绘台</span>
+</div>
+</div>
+<!-- Navigation Chrome -->
+<nav class="hidden md:flex items-center gap-1 p-1 bg-surface-container-low/90 rounded-xl border border-outline-variant/30">
+<a class="text-on-surface-variant hover:text-on-surface hover:bg-surface-container transition-all px-4 py-1.5 rounded-lg text-sm" href="#">单图创作</a>
+<a class="text-on-surface-variant hover:text-on-surface hover:bg-surface-container transition-all px-4 py-1.5 rounded-lg text-sm" href="#">系列策划</a>
+<a class="text-on-surface-variant hover:text-on-surface hover:bg-surface-container transition-all px-4 py-1.5 rounded-lg text-sm" href="#">风格库</a>
+<a aria-current="page" class="transition-all px-4 py-1.5 bg-primary text-on-primary font-medium rounded-lg shadow-[0_2px_8px_rgba(65,91,47,0.22)] text-sm flex items-center gap-1.5" href="#">
+<span class="material-symbols-outlined text-[15px]">photo_library</span>展馆
+        </a>
+</nav>
+<!-- Header Right Utilities -->
+<div class="flex items-center gap-3">
+<div class="hidden lg:flex items-center gap-1.5 px-3 py-1 rounded-full bg-surface-container-low border border-outline-variant/30">
+<span class="w-2 h-2 rounded-full bg-primary animate-pulse"></span>
+<span class="font-meta-sm text-[11px] text-on-surface-variant">全通道就绪</span>
+</div>
+<button class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-surface-container hover:bg-surface-container-high transition-colors text-on-surface border border-outline-variant/20" onclick="document.getElementById('queue-drawer').classList.toggle('translate-x-full')">
+<span class="material-symbols-outlined text-[18px] text-primary">auto_awesome_motion</span>
+<span class="text-xs font-medium">任务队列</span>
+<span class="px-1.5 py-0.2 rounded-full bg-secondary-container text-on-secondary-container font-meta-sm text-[10px] font-semibold">2</span>
+</button>
+<button class="w-8 h-8 rounded-lg bg-surface-container-low hover:bg-surface-container-high flex items-center justify-center text-on-surface-variant hover:text-on-surface transition-colors border border-outline-variant/20" onclick="triggerToast('已切换至温润纸境漫反射模式')" title="明暗与纸感切换">
+<span class="material-symbols-outlined text-[18px]">light_mode</span>
+</button>
+<div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center shadow-[0_2px_6px_rgba(65,91,47,0.25)] text-on-primary cursor-pointer hover:ring-2 hover:ring-primary-fixed transition-all" title="个人中心 · 纸境工坊">
+<span class="material-symbols-outlined text-[18px]">person</span>
+</div>
+</div>
+</div>
+</header>
+<!-- Right Slide Drawer for Queue State -->
+<aside class="fixed top-16 right-0 bottom-0 w-80 sm:w-88 bg-surface-bright/95 backdrop-blur-2xl border-l border-outline-variant/40 shadow-[-12px_0_36px_rgba(85,95,75,0.08)] z-50 transform translate-x-full transition-transform duration-300 ease-out flex flex-col" id="queue-drawer">
+<div class="p-4 flex items-center justify-between bg-surface-container-low/70 border-b border-outline-variant/30">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-primary text-[20px]">timelapse</span>
+<span class="font-headline-sm text-base font-semibold text-on-surface">绘制任务状态</span>
+<span class="px-2 py-0.5 rounded-full bg-primary-fixed text-on-primary-fixed font-meta-sm text-[10px]">2 运行中</span>
+</div>
+<button class="w-7 h-7 rounded-lg hover:bg-surface-container text-on-surface-variant hover:text-on-surface flex items-center justify-center transition-colors" onclick="document.getElementById('queue-drawer').classList.add('translate-x-full')">
+<span class="material-symbols-outlined text-[18px]">close</span>
+</button>
+</div>
+<div class="flex-1 overflow-y-auto p-4 space-y-3">
+<!-- Task 1 -->
+<div class="p-3.5 rounded-xl bg-surface-container-lowest border border-outline-variant/30 shadow-[0_2px_12px_rgba(85,95,75,0.04)]">
+<div class="flex items-start justify-between gap-2 mb-2">
+<div class="flex-1 min-w-0">
+<h4 class="text-xs font-medium text-on-surface truncate">青苔木质庭院 · 晨光写生</h4>
+<p class="font-meta-sm text-[11px] text-on-surface-variant truncate">1024×1024 · 步数 32 · 50%</p>
+</div>
+<span class="material-symbols-outlined text-primary animate-spin text-[18px]">sync</span>
+</div>
+<div class="w-full h-1.5 bg-surface-container rounded-full overflow-hidden mb-2">
+<div class="h-full bg-primary rounded-full transition-all duration-300 w-1/2"></div>
+</div>
+<div class="flex justify-between items-center text-on-surface-variant">
+<span class="font-meta-sm text-[11px]">剩余约 12 秒</span>
+<button class="font-meta-sm text-[11px] hover:text-error transition-colors">取消</button>
+</div>
+</div>
+<!-- Task 2 -->
+<div class="p-3.5 rounded-xl bg-surface-container-lowest border border-outline-variant/30 shadow-[0_2px_12px_rgba(85,95,75,0.04)]">
+<div class="flex items-start justify-between gap-2 mb-2">
+<div class="flex-1 min-w-0">
+<h4 class="text-xs font-medium text-on-surface truncate">枯山水禅意植株 · 矿物颜彩</h4>
+<p class="font-meta-sm text-[11px] text-on-surface-variant truncate">等待队列中 · 序号 #1</p>
+</div>
+<span class="material-symbols-outlined text-on-surface-variant text-[18px]">hourglass_empty</span>
+</div>
+<div class="w-full h-1.5 bg-surface-container rounded-full overflow-hidden mb-2">
+<div class="h-full bg-secondary-fixed rounded-full w-0"></div>
+</div>
+<div class="flex justify-between items-center text-on-surface-variant">
+<span class="font-meta-sm text-[11px]">等待分配计算节点</span>
+<button class="font-meta-sm text-[11px] hover:text-primary transition-colors">置顶调度</button>
+</div>
+</div>
+</div>
+<div class="p-3 bg-surface-container-low/70 border-t border-outline-variant/30 flex items-center justify-between text-on-surface-variant">
+<span class="font-meta-sm text-[11px] flex items-center gap-1">
+<span class="w-1.5 h-1.5 rounded-full bg-primary"></span>草木生息 · 持续守护
+      </span>
+<button class="font-meta-sm text-[11px] text-primary hover:underline" onclick="triggerToast('已清空已完成记录')">清空已完成</button>
+</div>
+</aside>
+<!-- Notification Toast Container -->
+<div class="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex flex-col items-center gap-2 pointer-events-none" id="toast-container"></div>
+<!-- Main Canvas Content Area -->
+<main class="w-full pt-16 bg-surface min-h-[calc(100vh-4rem)]">
+<!-- Subtle Ambient Natural Paper Glow -->
+<div class="relative w-full overflow-hidden">
+<div class="absolute -top-36 -left-20 w-[420px] h-[420px] bg-primary-fixed/20 rounded-full blur-3xl pointer-events-none"></div>
+<div class="absolute top-10 right-10 w-[380px] h-[380px] bg-secondary-fixed/25 rounded-full blur-3xl pointer-events-none"></div>
+<div class="max-w-[1560px] mx-auto px-4 sm:px-6 lg:px-8 pt-7 pb-12 flex flex-col gap-6">
+<!-- 1. Eyebrow, Main Title & Atmospheric Summary -->
+<div class="flex flex-col lg:flex-row lg:items-end justify-between gap-4 border-b border-outline-variant/30 pb-6">
+<div class="flex flex-col">
+<!-- Eyebrow -->
+<div class="flex items-center gap-2 text-primary font-meta-sm text-[11px] tracking-widest uppercase">
+<span class="w-2 h-2 rounded-full bg-primary/70"></span>
+<span class="">自然心流 · 展馆档案 · 沉淀灵感画作</span>
+</div>
+<!-- Main Title & Subtitle -->
+<div class="mt-2 flex flex-wrap items-baseline gap-3">
+<h1 class="font-headline-lg font-serif-sc text-2xl sm:text-3xl lg:text-[34px] text-on-surface tracking-tight font-medium">
+                纸境画廊 · 灵感沉淀
+              </h1>
+<span class="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full bg-surface-container text-secondary text-xs font-meta-sm border border-outline-variant/30">
+<span class="w-1.5 h-1.5 rounded-full bg-primary"></span>
+                已归档 36 幅画作 · 无损高保真原画
+              </span>
+</div>
+<p class="mt-2 text-sm text-on-surface-variant max-w-3xl leading-relaxed">
+              收录每一次笔触迸发的灵感成果，支持单图与系列归档、高保真无损查看与画作批处理。
+            </p>
+</div>
+<!-- Top Quick Meta Strip -->
+
+</div>
+<!-- 2. Re-engineered Filter & Search Workspace Toolbar -->
+<div class="flex flex-col gap-3.5 bg-surface-container-low/70 border border-outline-variant/35 p-4 rounded-2xl shadow-[0_2px_12px_rgba(85,95,75,0.03)] backdrop-blur-sm">
+<!-- Top Row: Type Pills & Search Bar -->
+<div class="flex flex-col xl:flex-row items-stretch xl:items-center justify-between gap-3.5">
+<!-- Creation Type Switcher Capsules -->
+<div class="flex items-center gap-1.5 p-1 bg-surface-container rounded-xl overflow-x-auto select-none border border-outline-variant/30">
+<button class="type-filter-btn flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-medium bg-primary text-on-primary shadow-sm transition-all whitespace-nowrap" data-type="all" onclick="setTypeFilter('all', this)">
+<span class="material-symbols-outlined text-[15px]">auto_stories</span>
+                全部画作 <span class="px-1.5 py-0.2 rounded-full bg-white/20 font-meta-sm text-[10px]">36</span>
+</button>
+<button class="type-filter-btn flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-medium text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-all whitespace-nowrap" data-type="studio" onclick="setTypeFilter('studio', this)">
+<span class="material-symbols-outlined text-[15px]">brush</span>
+                单图创作 <span class="font-meta-sm text-[10px] opacity-75">22</span>
+</button>
+<button class="type-filter-btn flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-medium text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-all whitespace-nowrap" data-type="storyboard" onclick="setTypeFilter('storyboard', this)">
+<span class="material-symbols-outlined text-[15px]">view_carousel</span>
+                系列策划 <span class="font-meta-sm text-[10px] opacity-75">14</span>
+</button>
+
+</div>
+<!-- Soft Textured Search Bar with ⌘K -->
+<div class="relative flex-1 max-w-xl">
+<div class="flex items-center bg-surface-container-lowest border border-outline-variant/50 rounded-xl px-3.5 py-2 shadow-sm focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/20 transition-all">
+<span class="material-symbols-outlined text-[19px] text-primary mr-2">search</span>
+<input class="w-full bg-transparent border-none p-0 text-xs text-on-surface placeholder:text-on-surface-variant/60 focus:outline-none focus:ring-0" id="gallery-search" placeholder="检索画面描述、提示词、种子号或系列名称..." type="text">
+<div class="flex items-center gap-1 pl-2 border-l border-outline-variant/30 text-outline text-[11px] font-meta-sm">
+<kbd class="px-1.5 py-0.5 rounded bg-surface-container font-mono text-[10px]">⌘</kbd>
+<kbd class="px-1.5 py-0.5 rounded bg-surface-container font-mono text-[10px]">K</kbd>
+</div>
+</div>
+</div>
+</div>
+<!-- Bottom Row: Multi-dimensional Selectors & Action Bar -->
+<div class="flex flex-wrap items-center justify-between gap-3 pt-1 border-t border-outline-variant/20">
+<!-- Dropdown Filters: Source, Ratio, Time Sort -->
+<div class="flex flex-wrap items-center gap-2.5 text-xs">
+<!-- Source Filter -->
+<div class="relative">
+<select class="appearance-none bg-surface-container-lowest border border-outline-variant/40 hover:border-outline text-on-surface text-xs py-1.5 pl-3 pr-7 rounded-xl cursor-pointer shadow-xs transition-colors focus:ring-1 focus:ring-primary" id="source-select" onchange="applyFilters()">
+<option value="all">来源：全部来源</option>
+<option value="quick-studio">来源：快捷单图</option>
+<option value="storyboard-stream">来源：系列分镜流</option>
+<option value="picture-book">来源：绘本画册</option>
+</select>
+<span class="material-symbols-outlined absolute right-2 top-2 pointer-events-none text-on-surface-variant text-[15px]">expand_more</span>
+</div>
+<!-- Aspect Ratio Filter -->
+<div class="relative">
+<select class="appearance-none bg-surface-container-lowest border border-outline-variant/40 hover:border-outline text-on-surface text-xs py-1.5 pl-3 pr-7 rounded-xl cursor-pointer shadow-xs transition-colors focus:ring-1 focus:ring-primary" id="ratio-select" onchange="applyFilters()">
+<option value="all">画幅：全部比例</option>
+<option value="1:1">画幅：1:1 方形</option>
+<option value="16:9">画幅：16:9 宽屏</option>
+<option value="9:16">画幅：9:16 竖屏</option>
+<option value="4:3">画幅：4:3 典雅</option>
+</select>
+<span class="material-symbols-outlined absolute right-2 top-2 pointer-events-none text-on-surface-variant text-[15px]">expand_more</span>
+</div>
+<!-- Time Sorting -->
+<div class="relative">
+<select class="appearance-none bg-surface-container-lowest border border-outline-variant/40 hover:border-outline text-on-surface text-xs py-1.5 pl-3 pr-7 rounded-xl cursor-pointer shadow-xs transition-colors focus:ring-1 focus:ring-primary" id="sort-select" onchange="applyFilters()">
+<option value="newest">排序：生成时间 (最新优先)</option>
+<option value="oldest">排序：生成时间 (最早创作)</option>
+<option value="seeds">排序：按种子序列编号</option>
+</select>
+<span class="material-symbols-outlined absolute right-2 top-2 pointer-events-none text-on-surface-variant text-[15px]">sort</span>
+</div>
+<!-- Timeline Jump Tabs -->
+<div class="hidden md:flex items-center gap-1 ml-1 pl-2 border-l border-outline-variant/30 text-on-surface-variant">
+<span class="text-[11px] text-outline">跳转:</span>
+<a class="px-2 py-0.5 rounded-md hover:bg-surface-container text-xs hover:text-primary transition-colors" href="#group-today">今日</a>
+<a class="px-2 py-0.5 rounded-md hover:bg-surface-container text-xs hover:text-primary transition-colors" href="#group-week">近7天</a>
+<a class="px-2 py-0.5 rounded-md hover:bg-surface-container text-xs hover:text-primary transition-colors" href="#group-earlier">更早</a>
+</div>
+</div>
+<!-- Batch Action Shelf (Polished & Contextual) -->
+<div class="flex items-center gap-1.5 bg-surface-container-lowest border border-outline-variant/40 px-2.5 py-1 rounded-xl shadow-xs ml-auto">
+<label class="flex items-center gap-1.5 px-1.5 py-0.5 cursor-pointer select-none">
+<input class="w-3.5 h-3.5 rounded accent-primary text-primary focus:ring-primary cursor-pointer" id="select-all-checkbox" onchange="handleSelectAll(this)" type="checkbox">
+<span class="text-xs text-on-surface font-medium">全选</span>
+</label>
+<div class="w-px h-3.5 bg-outline-variant/40 mx-0.5"></div>
+<button class="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-primary-fixed/50 hover:bg-primary-fixed text-on-primary-fixed text-xs font-medium transition-colors" onclick="batchDownload()">
+<span class="material-symbols-outlined text-[15px] text-primary">download</span>
+<span class="">批量下载原图 (<span id="batch-count" class="">2</span>)</span>
+</button>
+
+<button class="flex items-center gap-1 px-2 py-1 rounded-lg hover:bg-error-container text-error text-xs transition-colors" onclick="triggerToast('已将选中作品移至回收站（保留30天）')" title="批量归档/移至回收站">
+<span class="material-symbols-outlined text-[15px]">delete</span>
+</button>
+</div>
+</div>
+</div>
+<!-- 3. Gallery Display & Waterfall Paper Frame Cards -->
+<div class="flex flex-col gap-10">
+<!-- ================= GROUP 1: 今日 (Today · 4 Items) ================= -->
+<section class="flex flex-col gap-4" id="group-today">
+<!-- Timeline Section Header -->
+<div class="flex items-center justify-between border-b border-outline-variant/30 pb-2.5">
+<div class="flex items-center gap-2.5">
+<div class="w-6 h-6 rounded-lg bg-primary-fixed flex items-center justify-center text-primary">
+<span class="material-symbols-outlined text-[16px]">wb_sunny</span>
+</div>
+<h2 class="font-headline-sm font-serif-sc text-lg font-medium text-on-surface">今日 (Today)</h2>
+<span class="px-2.5 py-0.5 rounded-full bg-secondary-container text-on-secondary-container font-meta-sm text-[11px]">4 幅新作</span>
+</div>
+<span class="font-meta-sm text-xs text-on-surface-variant/70">2024.10.28 · 笔触生机盎然</span>
+</div>
+<!-- Cards Grid -->
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+<!-- Card 1: 晨露嫩芽 -->
+<article class="gallery-card group relative bg-surface-container-lowest border border-outline-variant/40 rounded-2xl p-2.5 shadow-[0_2px_10px_rgba(70,80,60,0.04)] hover:shadow-[0_12px_28px_rgba(70,80,60,0.12)] hover:-translate-y-1 transition-all duration-300 flex flex-col" data-source="studio" data-starred="true">
+<!-- Image Wrapper with Paper-Mount Framing -->
+<div class="relative overflow-hidden rounded-xl aspect-square bg-[#f5f3ec] border border-outline-variant/25">
+<img alt="A delicate botanical sprout unfurling in gentle morning dew, soft watercolor texture on off-white raw paper, subtle sage green and moss tones with amber sunlight rim lighting, fine art botanical illustration, studio composition." class="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBCEE66V2st69K3sOwj8JgBWtWK7mSBO17k1mp8wyxNKL7urCc0UMM5iPFKp97K_gWeiSSUt_zwMwQPEQQiZAeglTIBgyY209OzDetVOOGHMp5Ez4IutDerubaZFBZh1_RIFYeQurR5a67nJJebAW-K9YBjv0dRrRuq0MY3T1UTZv9-byuvgIB6wzGfn0wu_x-lP7wDRZq3Z3mqZtlbZHepE6SSA150WAXH6eE9EJDzP_CrHaOsG_q1Ew">
+<!-- Top Badge & Checkbox / Star Controls -->
+<div class="absolute top-2.5 left-2.5 right-2.5 flex items-center justify-between pointer-events-none z-10">
+<span class="pointer-events-auto px-2 py-0.5 rounded-md bg-surface-container-lowest/90 backdrop-blur-md text-on-surface-variant font-meta-sm text-[10px] border border-outline-variant/30 shadow-xs">
+                      单图创作
+                    </span>
+<div class="flex items-center gap-1.5 pointer-events-auto">
+
+<input checked="" class="card-checkbox w-4 h-4 rounded accent-primary border-outline-variant/60 shadow-xs cursor-pointer" onchange="updateCounter()" type="checkbox">
+</div>
+</div>
+<!-- Hover Action Overlay -->
+<div class="absolute inset-0 bg-gradient-to-t from-on-surface/65 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-end p-2.5">
+<div class="w-full grid grid-cols-2 gap-1.5">
+<button class="py-1.5 bg-surface-container-lowest/95 backdrop-blur-md hover:bg-surface-container-lowest text-on-surface rounded-lg text-xs font-medium shadow-sm flex items-center justify-center gap-1 transition-colors" onclick="openLightbox(0)">
+<span class="material-symbols-outlined text-[14px] text-primary">visibility</span> 检视原图
+                      </button>
+<button class="py-1.5 bg-primary/95 backdrop-blur-md hover:bg-primary text-on-primary rounded-lg text-xs font-medium shadow-sm flex items-center justify-center gap-1 transition-colors" onclick="quickRemix(0)">
+<span class="material-symbols-outlined text-[14px]">tune</span> 复用参数
+                      </button>
+</div>
+</div>
+</div>
+<!-- Card Metadata & Information -->
+<div class="pt-2.5 px-1 flex flex-col gap-1.5">
+<div class="flex items-center justify-between text-[11px] text-on-surface-variant">
+<span class="font-meta-sm text-outline">1024×1024 · PNG无损</span>
+<span class="font-meta-sm text-primary flex items-center gap-0.5">
+<span class="w-1.5 h-1.5 rounded-full bg-primary"></span>Seed 8472910
+                    </span>
+</div>
+<h3 class="font-medium text-xs text-on-surface line-clamp-1 leading-snug group-hover:text-primary transition-colors">
+                    晨露嫩芽在柔和曦光中舒展
+                  </h3>
+<p class="text-[11px] text-on-surface-variant/70 line-clamp-1">
+                    水珠凝聚在初生叶脉，极淡水彩质感，米白水彩纸肌理...
+                  </p>
+<div class="flex items-center justify-between text-[11px] text-on-surface-variant/75 pt-1 border-t border-outline-variant/20 mt-0.5">
+<span class="font-meta-sm">今天 14:28</span>
+<div class="flex items-center gap-2">
+<button class="hover:text-primary transition-colors" onclick="triggerToast('正在下载 PNG 24-bit 无损文件...')" title="单张下载">
+<span class="material-symbols-outlined text-[15px]">download</span>
+</button>
+<button class="hover:text-primary transition-colors" onclick="openLightbox(0)" title="查看详情">
+<span class="material-symbols-outlined text-[15px]">info</span>
+</button>
+</div>
+</div>
+</div>
+</article>
+<!-- Card 2: 温暖复古书桌 -->
+<article class="gallery-card group relative bg-surface-container-lowest border border-outline-variant/40 rounded-2xl p-2.5 shadow-[0_2px_10px_rgba(70,80,60,0.04)] hover:shadow-[0_12px_28px_rgba(70,80,60,0.12)] hover:-translate-y-1 transition-all duration-300 flex flex-col" data-source="studio" data-starred="true">
+<div class="relative overflow-hidden rounded-xl aspect-square bg-[#f5f3ec] border border-outline-variant/25">
+<img alt="Warm cozy artist studio desk with a wooden easel, botanical dried plants in stoneware vases, textured canvas boards, soft afternoon ambient sunlight streaming through linen curtains, warm paper tactility aesthetic." class="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAeQxT0HOfga0C6RmcmPYrDYFZzmdzC4KMo1wWugofnuImvSoiLM1HOsm45owqjtLZstvysjWpp5DYB9NEITcb2Vo3_ZUZy8lLB3J4rGYibheb4r8vO6ra-i_4wdAMVDcS3ARuMPRM5Mt0mNI3g4Uq2_lnM9zQJFmk3_DkUvpCb7iUiv101hW42nimbX7UobR6qDIUMmeAbSFZ57fCUdKkuozDdDTtPHQHYkexSVA85yZCaCgnnYVk-0A">
+<div class="absolute top-2.5 left-2.5 right-2.5 flex items-center justify-between pointer-events-none z-10">
+<span class="pointer-events-auto px-2 py-0.5 rounded-md bg-surface-container-lowest/90 backdrop-blur-md text-on-surface-variant font-meta-sm text-[10px] border border-outline-variant/30 shadow-xs">
+                      单图创作
+                    </span>
+<div class="flex items-center gap-1.5 pointer-events-auto">
+
+<input checked="" class="card-checkbox w-4 h-4 rounded accent-primary border-outline-variant/60 shadow-xs cursor-pointer" onchange="updateCounter()" type="checkbox">
+</div>
+</div>
+<div class="absolute inset-0 bg-gradient-to-t from-on-surface/65 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-end p-2.5">
+<div class="w-full grid grid-cols-2 gap-1.5">
+<button class="py-1.5 bg-surface-container-lowest/95 backdrop-blur-md hover:bg-surface-container-lowest text-on-surface rounded-lg text-xs font-medium shadow-sm flex items-center justify-center gap-1 transition-colors" onclick="openLightbox(1)">
+<span class="material-symbols-outlined text-[14px] text-primary">visibility</span> 检视原图
+                      </button>
+<button class="py-1.5 bg-primary/95 backdrop-blur-md hover:bg-primary text-on-primary rounded-lg text-xs font-medium shadow-sm flex items-center justify-center gap-1 transition-colors" onclick="quickRemix(1)">
+<span class="material-symbols-outlined text-[14px]">tune</span> 复用参数
+                      </button>
+</div>
+</div>
+</div>
+<div class="pt-2.5 px-1 flex flex-col gap-1.5">
+<div class="flex items-center justify-between text-[11px] text-on-surface-variant">
+<span class="font-meta-sm text-outline">1792×1024 · PNG无损</span>
+<span class="font-meta-sm text-primary flex items-center gap-0.5">
+<span class="w-1.5 h-1.5 rounded-full bg-primary"></span>Seed 9310482
+                    </span>
+</div>
+<h3 class="font-medium text-xs text-on-surface line-clamp-1 leading-snug group-hover:text-primary transition-colors">
+                    温暖复古的书桌与画板，静谧手作空间
+                  </h3>
+<p class="text-[11px] text-on-surface-variant/70 line-clamp-1">
+                    画板上夹着未完成植物插画，陶器笔筒插满水彩笔...
+                  </p>
+<div class="flex items-center justify-between text-[11px] text-on-surface-variant/75 pt-1 border-t border-outline-variant/20 mt-0.5">
+<span class="font-meta-sm">今天 11:15</span>
+<div class="flex items-center gap-2">
+<button class="hover:text-primary transition-colors" onclick="triggerToast('正在下载 PNG 24-bit 无损文件...')" title="单张下载">
+<span class="material-symbols-outlined text-[15px]">download</span>
+</button>
+<button class="hover:text-primary transition-colors" onclick="openLightbox(1)" title="查看详情">
+<span class="material-symbols-outlined text-[15px]">info</span>
+</button>
+</div>
+</div>
+</div>
+</article>
+<!-- Card 3: 狐之林 Scene 01 -->
+<article class="gallery-card group relative bg-surface-container-lowest border border-outline-variant/40 rounded-2xl p-2.5 shadow-[0_2px_10px_rgba(70,80,60,0.04)] hover:shadow-[0_12px_28px_rgba(70,80,60,0.12)] hover:-translate-y-1 transition-all duration-300 flex flex-col" data-source="storyboard" data-starred="false">
+<div class="relative overflow-hidden rounded-xl aspect-square bg-[#f5f3ec] border border-outline-variant/25">
+<img alt="A curious rust-orange fox stepping softly upon mossy stones in an autumn misty pine forest, cinematic storybook gouache painting, tranquil quiet atmosphere, scattered golden maple leaves." class="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDY-UFi56MaSWIEnnKBJ9ZBBW8LxmtRUpFA_f1cVsPKWr44bgbXB6qn1cKisCdPH3Irtrr8M6MWXvq31FZKKcXKYnp0auIbOBffzL9w8eGeePOZ40baKoTnwRwUbIy8j4UydA10euKGpoYeLnWBmEU7-fefFOBiWkODNmVeSVeH9AYx_P4bd4N0KAJzKlkrm0oObn2encTruVQbLFQbZW8othKpJ58aJHpal76a2RMWOWeMWIA0RZIePQ">
+<div class="absolute top-2.5 left-2.5 right-2.5 flex items-center justify-between pointer-events-none z-10">
+<span class="pointer-events-auto px-2 py-0.5 rounded-md bg-secondary-container/90 backdrop-blur-md text-on-secondary-container font-meta-sm text-[10px] border border-outline-variant/30 shadow-xs">
+                      系列 · 狐之林 Scene 01
+                    </span>
+<div class="flex items-center gap-1.5 pointer-events-auto">
+
+<input class="card-checkbox w-4 h-4 rounded accent-primary border-outline-variant/60 shadow-xs cursor-pointer" onchange="updateCounter()" type="checkbox">
+</div>
+</div>
+<div class="absolute inset-0 bg-gradient-to-t from-on-surface/65 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-end p-2.5">
+<div class="w-full grid grid-cols-2 gap-1.5">
+<button class="py-1.5 bg-surface-container-lowest/95 backdrop-blur-md hover:bg-surface-container-lowest text-on-surface rounded-lg text-xs font-medium shadow-sm flex items-center justify-center gap-1 transition-colors" onclick="openLightbox(2)">
+<span class="material-symbols-outlined text-[14px] text-primary">visibility</span> 检视原图
+                      </button>
+<button class="py-1.5 bg-primary/95 backdrop-blur-md hover:bg-primary text-on-primary rounded-lg text-xs font-medium shadow-sm flex items-center justify-center gap-1 transition-colors" onclick="quickRemix(2)">
+<span class="material-symbols-outlined text-[14px]">tune</span> 复用参数
+                      </button>
+</div>
+</div>
+</div>
+<div class="pt-2.5 px-1 flex flex-col gap-1.5">
+<div class="flex items-center justify-between text-[11px] text-on-surface-variant">
+<span class="font-meta-sm text-outline">1792×1024 · 16:9</span>
+<span class="font-meta-sm text-primary flex items-center gap-0.5">
+<span class="w-1.5 h-1.5 rounded-full bg-primary"></span>Seed 1048821
+                    </span>
+</div>
+<h3 class="font-medium text-xs text-on-surface line-clamp-1 leading-snug group-hover:text-primary transition-colors">
+                    秋林深处的初见，雾气漫过青苔岩石
+                  </h3>
+<p class="text-[11px] text-on-surface-variant/70 line-clamp-1">
+                    赤狐缓步涉过覆满青苔的岩石，林间漫着青岚薄雾...
+                  </p>
+<div class="flex items-center justify-between text-[11px] text-on-surface-variant/75 pt-1 border-t border-outline-variant/20 mt-0.5">
+<span class="font-meta-sm">今天 09:40</span>
+<div class="flex items-center gap-2">
+<button class="hover:text-primary transition-colors" onclick="triggerToast('正在下载 PNG 24-bit 无损文件...')" title="单张下载">
+<span class="material-symbols-outlined text-[15px]">download</span>
+</button>
+<button class="hover:text-primary transition-colors" onclick="openLightbox(2)" title="查看详情">
+<span class="material-symbols-outlined text-[15px]">info</span>
+</button>
+</div>
+</div>
+</div>
+</article>
+<!-- Card 4: 狐之林 Scene 02 -->
+<article class="gallery-card group relative bg-surface-container-lowest border border-outline-variant/40 rounded-2xl p-2.5 shadow-[0_2px_10px_rgba(70,80,60,0.04)] hover:shadow-[0_12px_28px_rgba(70,80,60,0.12)] hover:-translate-y-1 transition-all duration-300 flex flex-col" data-source="storyboard" data-starred="false">
+<div class="relative overflow-hidden rounded-xl aspect-square bg-[#f5f3ec] border border-outline-variant/25">
+<img alt="Close up portrait of an elegant wild fox curled up beside ancient gnarled tree roots, resting peacefully on soft fallen ginkgo leaves, storybook gouache aesthetic, warm golden hour palette." class="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCfNMouxixSTqVaKSdI36WPBGS7gu0VJuhbz79AlTpSiSjvRyjLb7rD_A4YgnqkHjRtan-z2wdn5sReq3SUwdIVSwq-Y78TTwxxqqAyPI4dtItzp17Q8cwK24sXN1FbttZR851-N_EpitxMhAfeaFrVgzeDeu0iMqaiQ1QK3424ZzYmBcb2TgctkWVgtMFx6O6act45ZNQkczpCZsNIkfuO9GCFvq1u3XkUDdX0M3NX1EnjMDG1fG2sag">
+<div class="absolute top-2.5 left-2.5 right-2.5 flex items-center justify-between pointer-events-none z-10">
+<span class="pointer-events-auto px-2 py-0.5 rounded-md bg-secondary-container/90 backdrop-blur-md text-on-secondary-container font-meta-sm text-[10px] border border-outline-variant/30 shadow-xs">
+                      系列 · 狐之林 Scene 02
+                    </span>
+<div class="flex items-center gap-1.5 pointer-events-auto">
+
+<input class="card-checkbox w-4 h-4 rounded accent-primary border-outline-variant/60 shadow-xs cursor-pointer" onchange="updateCounter()" type="checkbox">
+</div>
+</div>
+<div class="absolute inset-0 bg-gradient-to-t from-on-surface/65 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-end p-2.5">
+<div class="w-full grid grid-cols-2 gap-1.5">
+<button class="py-1.5 bg-surface-container-lowest/95 backdrop-blur-md hover:bg-surface-container-lowest text-on-surface rounded-lg text-xs font-medium shadow-sm flex items-center justify-center gap-1 transition-colors" onclick="openLightbox(3)">
+<span class="material-symbols-outlined text-[14px] text-primary">visibility</span> 检视原图
+                      </button>
+<button class="py-1.5 bg-primary/95 backdrop-blur-md hover:bg-primary text-on-primary rounded-lg text-xs font-medium shadow-sm flex items-center justify-center gap-1 transition-colors" onclick="quickRemix(3)">
+<span class="material-symbols-outlined text-[14px]">tune</span> 复用参数
+                      </button>
+</div>
+</div>
+</div>
+<div class="pt-2.5 px-1 flex flex-col gap-1.5">
+<div class="flex items-center justify-between text-[11px] text-on-surface-variant">
+<span class="font-meta-sm text-outline">1792×1024 · 16:9</span>
+<span class="font-meta-sm text-primary flex items-center gap-0.5">
+<span class="w-1.5 h-1.5 rounded-full bg-primary"></span>Seed 1048822
+                    </span>
+</div>
+<h3 class="font-medium text-xs text-on-surface line-clamp-1 leading-snug group-hover:text-primary transition-colors">
+                    银杏叶下的休憩瞬间，神态安然澄澈
+                  </h3>
+<p class="text-[11px] text-on-surface-variant/70 line-clamp-1">
+                    银杏树根下的安睡狐狸，金黄落叶堆积如被，阳光斑驳...
+                  </p>
+<div class="flex items-center justify-between text-[11px] text-on-surface-variant/75 pt-1 border-t border-outline-variant/20 mt-0.5">
+<span class="font-meta-sm">今天 08:22</span>
+<div class="flex items-center gap-2">
+<button class="hover:text-primary transition-colors" onclick="triggerToast('正在下载 PNG 24-bit 无损文件...')" title="单张下载">
+<span class="material-symbols-outlined text-[15px]">download</span>
+</button>
+<button class="hover:text-primary transition-colors" onclick="openLightbox(3)" title="查看详情">
+<span class="material-symbols-outlined text-[15px]">info</span>
+</button>
+</div>
+</div>
+</div>
+</article>
+</div>
+</section>
+<!-- ================= GROUP 2: 近 7 天 (Past 7 Days · 18 Items) ================= -->
+<section class="flex flex-col gap-4" id="group-week">
+<div class="flex items-center justify-between border-b border-outline-variant/30 pb-2.5">
+<div class="flex items-center gap-2.5">
+<div class="w-6 h-6 rounded-lg bg-surface-container-high flex items-center justify-center text-tertiary">
+<span class="material-symbols-outlined text-[16px]">date_range</span>
+</div>
+<h2 class="font-headline-sm font-serif-sc text-lg font-medium text-on-surface">近 7 天 (Past 7 Days)</h2>
+<span class="px-2.5 py-0.5 rounded-full bg-surface-container-high text-on-surface-variant font-meta-sm text-[11px]">18 幅作品</span>
+</div>
+<button class="font-meta-sm text-xs text-primary hover:underline flex items-center gap-1" onclick="triggerToast('已展开近 7 天全部 18 张作品视图')">
+<span class="">展开全部 18 幅</span>
+<span class="material-symbols-outlined text-[14px]">arrow_forward</span>
+</button>
+</div>
+<!-- Masonry Grid for Past 7 Days -->
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+<!-- Card 5: 枯山水禅意 -->
+<article class="gallery-card group relative bg-surface-container-lowest border border-outline-variant/40 rounded-2xl p-2.5 shadow-[0_2px_10px_rgba(70,80,60,0.04)] hover:shadow-[0_12px_28px_rgba(70,80,60,0.12)] hover:-translate-y-1 transition-all duration-300 flex flex-col" data-source="studio" data-starred="false">
+<div class="relative overflow-hidden rounded-xl aspect-[4/3] bg-[#f5f3ec] border border-outline-variant/25">
+<img alt="Minimalist Japanese karesansui zen garden, raked gravel patterns in concentric circles, dark volcanic stones covered with velvet moss, soft morning haze, wabi sabi aesthetic." class="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" src="https://lh3.googleusercontent.com/aida-public/AB6AXuD6yoN0aQFs7eYL7ONoWfr3AqzGIV5clpA4DfPSFlR_Vjfeny2hjZFaQM57vFCJrc6RKMh7o2FvUAORsYxWJVoh6mYdS4U-hlc93mBFyxnJSd5mm1w0xxlEj2LvGJhTsEHTnm-GN9IZiGs7bBq_ENow8-H8-5FL1h73a26_SstBwDlUo_DH35gkOnKfqyUn9_M7EU-vyR6uq0COOwAkfuuXni6Q9RhquFZ3LjST8L85GSy_6buet3aqrA">
+<div class="absolute top-2.5 left-2.5 right-2.5 flex items-center justify-between pointer-events-none z-10">
+<span class="pointer-events-auto px-2 py-0.5 rounded-md bg-surface-container-lowest/90 backdrop-blur-md text-on-surface-variant font-meta-sm text-[10px] border border-outline-variant/30 shadow-xs">
+                      单图创作
+                    </span>
+<div class="flex items-center gap-1.5 pointer-events-auto">
+
+<input class="card-checkbox w-4 h-4 rounded accent-primary border-outline-variant/60 shadow-xs cursor-pointer" onchange="updateCounter()" type="checkbox">
+</div>
+</div>
+<div class="absolute inset-0 bg-gradient-to-t from-on-surface/65 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-end p-2.5">
+<div class="w-full grid grid-cols-2 gap-1.5">
+<button class="py-1.5 bg-surface-container-lowest/95 backdrop-blur-md hover:bg-surface-container-lowest text-on-surface rounded-lg text-xs font-medium shadow-sm flex items-center justify-center gap-1 transition-colors" onclick="openLightbox(4)">
+<span class="material-symbols-outlined text-[14px] text-primary">visibility</span> 检视原图
+                      </button>
+<button class="py-1.5 bg-primary/95 backdrop-blur-md hover:bg-primary text-on-primary rounded-lg text-xs font-medium shadow-sm flex items-center justify-center gap-1 transition-colors" onclick="quickRemix(4)">
+<span class="material-symbols-outlined text-[14px]">tune</span> 复用参数
+                      </button>
+</div>
+</div>
+</div>
+<div class="pt-2.5 px-1 flex flex-col gap-1.5">
+<div class="flex items-center justify-between text-[11px] text-on-surface-variant">
+<span class="font-meta-sm text-outline">1024×768 · 4:3</span>
+<span class="font-meta-sm text-outline">Seed 5509211</span>
+</div>
+<h3 class="font-medium text-xs text-on-surface line-clamp-1 leading-snug group-hover:text-primary transition-colors">
+                    枯山水砂纹与墨黑火山石的禅意构想
+                  </h3>
+<p class="text-[11px] text-on-surface-variant/70 line-clamp-1">
+                    同心圆同轴波纹，晨雾缭绕，火山岩与青苔侘寂美学...
+                  </p>
+<div class="flex items-center justify-between text-[11px] text-on-surface-variant/75 pt-1 border-t border-outline-variant/20 mt-0.5">
+<span class="font-meta-sm">10月26日 16:10</span>
+<div class="flex items-center gap-2">
+<button class="hover:text-primary transition-colors" onclick="triggerToast('正在下载 PNG 24-bit 无损文件...')" title="单张下载">
+<span class="material-symbols-outlined text-[15px]">download</span>
+</button>
+<button class="hover:text-primary transition-colors" onclick="openLightbox(4)" title="查看详情">
+<span class="material-symbols-outlined text-[15px]">info</span>
+</button>
+</div>
+</div>
+</div>
+</article>
+<!-- Card 6: 本草植物标本 -->
+<article class="gallery-card group relative bg-surface-container-lowest border border-outline-variant/40 rounded-2xl p-2.5 shadow-[0_2px_10px_rgba(70,80,60,0.04)] hover:shadow-[0_12px_28px_rgba(70,80,60,0.12)] hover:-translate-y-1 transition-all duration-300 flex flex-col" data-source="studio" data-starred="true">
+<div class="relative overflow-hidden rounded-xl aspect-[4/3] bg-[#f5f3ec] border border-outline-variant/25">
+<img alt="Pressed botanical herbarium specimen on raw fibrous deckle edge paper, dried fern fronds and medicinal flora, calligraphic Latin botanical annotations in archival sepia ink." class="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCiAw2x4o6C1U9HFpW9DajAiABgKpjpdCiZrQGajc_Zaf-5-1qrjMoym9HkZhJTVHrBq0hKyfqgltsG0s3W9-LILl6q7bFQnSqHP3XAUPLySLBEPNngvUavS7lFrviCXb8UeFn_UFNx_OjaIlAhXRgSG--MQY3u7Esl2dniF4WtYJHch-2FVmvgOd3FoPxWpfySoMsDroHezkjSMunRCtuspwDvDHpdc8tGUJqqU2edVOBgBOeO1WQfkw">
+<div class="absolute top-2.5 left-2.5 right-2.5 flex items-center justify-between pointer-events-none z-10">
+<span class="pointer-events-auto px-2 py-0.5 rounded-md bg-surface-container-lowest/90 backdrop-blur-md text-on-surface-variant font-meta-sm text-[10px] border border-outline-variant/30 shadow-xs">
+                      单图创作
+                    </span>
+<div class="flex items-center gap-1.5 pointer-events-auto">
+
+<input class="card-checkbox w-4 h-4 rounded accent-primary border-outline-variant/60 shadow-xs cursor-pointer" onchange="updateCounter()" type="checkbox">
+</div>
+</div>
+<div class="absolute inset-0 bg-gradient-to-t from-on-surface/65 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-end p-2.5">
+<div class="w-full grid grid-cols-2 gap-1.5">
+<button class="py-1.5 bg-surface-container-lowest/95 backdrop-blur-md hover:bg-surface-container-lowest text-on-surface rounded-lg text-xs font-medium shadow-sm flex items-center justify-center gap-1 transition-colors" onclick="openLightbox(5)">
+<span class="material-symbols-outlined text-[14px] text-primary">visibility</span> 检视原图
+                      </button>
+<button class="py-1.5 bg-primary/95 backdrop-blur-md hover:bg-primary text-on-primary rounded-lg text-xs font-medium shadow-sm flex items-center justify-center gap-1 transition-colors" onclick="quickRemix(5)">
+<span class="material-symbols-outlined text-[14px]">tune</span> 复用参数
+                      </button>
+</div>
+</div>
+</div>
+<div class="pt-2.5 px-1 flex flex-col gap-1.5">
+<div class="flex items-center justify-between text-[11px] text-on-surface-variant">
+<span class="font-meta-sm text-outline">1024×1024 · RAW</span>
+<span class="font-meta-sm text-outline">Seed 6214981</span>
+</div>
+<h3 class="font-medium text-xs text-on-surface line-clamp-1 leading-snug group-hover:text-primary transition-colors">
+                    本草标本画谱 · 蕨类与野生药草标本
+                  </h3>
+<p class="text-[11px] text-on-surface-variant/70 line-clamp-1">
+                    手工纸压花标本，拉丁文工整手写注释，复古植物学图谱...
+                  </p>
+<div class="flex items-center justify-between text-[11px] text-on-surface-variant/75 pt-1 border-t border-outline-variant/20 mt-0.5">
+<span class="font-meta-sm">10月24日 09:12</span>
+<div class="flex items-center gap-2">
+<button class="hover:text-primary transition-colors" onclick="triggerToast('正在下载 PNG 24-bit 无损文件...')" title="单张下载">
+<span class="material-symbols-outlined text-[15px]">download</span>
+</button>
+<button class="hover:text-primary transition-colors" onclick="openLightbox(5)" title="查看详情">
+<span class="material-symbols-outlined text-[15px]">info</span>
+</button>
+</div>
+</div>
+</div>
+</article>
+<!-- Card 7: 溪山茶寮 -->
+<article class="gallery-card group relative bg-surface-container-lowest border border-outline-variant/40 rounded-2xl p-2.5 shadow-[0_2px_10px_rgba(70,80,60,0.04)] hover:shadow-[0_12px_28px_rgba(70,80,60,0.12)] hover:-translate-y-1 transition-all duration-300 flex flex-col" data-source="storyboard" data-starred="false">
+<div class="relative overflow-hidden rounded-xl aspect-[4/3] bg-[#f5f3ec] border border-outline-variant/25">
+<img alt="Architectural conceptual pavilion built with timber and bamboo, cantilevered over a reflective lotus pond, soft rainy twilight, ethereal green landscape architecture rendering." class="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBWl4E2-9sIRXJYVgsl0x-NdSjFtvskVV9yAxmRclR7Vgvds15uJjjYDFPoTUWkE0zj0hrw7kFMvTjAeEpY9VBRCA_lFtewRCK03s0hY9uD0I18rawxhkloCe05_lsE-3nCmq6iVgYiFIVESdRs4AOaKOIUTdYttI4D2OLDHSIz93_Z-iEn_cCBSu2gXuJ_rIYMEyV3Fttdf-fTwB319-9od-KOoFIcBqlfM970G8MI3O-rD4Lc5holbQ">
+<div class="absolute top-2.5 left-2.5 right-2.5 flex items-center justify-between pointer-events-none z-10">
+<span class="pointer-events-auto px-2 py-0.5 rounded-md bg-secondary-container/90 backdrop-blur-md text-on-secondary-container font-meta-sm text-[10px] border border-outline-variant/30 shadow-xs">
+                      系列 · 溪山茶寮 Scene 03
+                    </span>
+<div class="flex items-center gap-1.5 pointer-events-auto">
+
+<input class="card-checkbox w-4 h-4 rounded accent-primary border-outline-variant/60 shadow-xs cursor-pointer" onchange="updateCounter()" type="checkbox">
+</div>
+</div>
+<div class="absolute inset-0 bg-gradient-to-t from-on-surface/65 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-end p-2.5">
+<div class="w-full grid grid-cols-2 gap-1.5">
+<button class="py-1.5 bg-surface-container-lowest/95 backdrop-blur-md hover:bg-surface-container-lowest text-on-surface rounded-lg text-xs font-medium shadow-sm flex items-center justify-center gap-1 transition-colors" onclick="openLightbox(6)">
+<span class="material-symbols-outlined text-[14px] text-primary">visibility</span> 检视原图
+                      </button>
+<button class="py-1.5 bg-primary/95 backdrop-blur-md hover:bg-primary text-on-primary rounded-lg text-xs font-medium shadow-sm flex items-center justify-center gap-1 transition-colors" onclick="quickRemix(6)">
+<span class="material-symbols-outlined text-[14px]">tune</span> 复用参数
+                      </button>
+</div>
+</div>
+</div>
+<div class="pt-2.5 px-1 flex flex-col gap-1.5">
+<div class="flex items-center justify-between text-[11px] text-on-surface-variant">
+<span class="font-meta-sm text-outline">1920×1080 · 16:9</span>
+<span class="font-meta-sm text-outline">Seed 7748190</span>
+</div>
+<h3 class="font-medium text-xs text-on-surface line-clamp-1 leading-snug group-hover:text-primary transition-colors">
+                    悬挑竹木茶亭，倒映于微雨荷塘
+                  </h3>
+<p class="text-[11px] text-on-surface-variant/70 line-clamp-1">
+                    幽深山谷与青翠竹林掩映，建筑水彩概念渲染图...
+                  </p>
+<div class="flex items-center justify-between text-[11px] text-on-surface-variant/75 pt-1 border-t border-outline-variant/20 mt-0.5">
+<span class="font-meta-sm">10月22日 17:45</span>
+<div class="flex items-center gap-2">
+<button class="hover:text-primary transition-colors" onclick="triggerToast('正在下载 PNG 24-bit 无损文件...')" title="单张下载">
+<span class="material-symbols-outlined text-[15px]">download</span>
+</button>
+<button class="hover:text-primary transition-colors" onclick="openLightbox(6)" title="查看详情">
+<span class="material-symbols-outlined text-[15px]">info</span>
+</button>
+</div>
+</div>
+</div>
+</article>
+</div>
+</section>
+<!-- ================= GROUP 3: 更早归档 (Earlier · 14 Items Summary Card) ================= -->
+<section class="flex flex-col gap-4" id="group-earlier">
+<div class="flex items-center justify-between border-b border-outline-variant/30 pb-2.5">
+<div class="flex items-center gap-2.5">
+<div class="w-6 h-6 rounded-lg bg-surface-container-high flex items-center justify-center text-outline">
+<span class="material-symbols-outlined text-[16px]">history_toggle_off</span>
+</div>
+<h2 class="font-headline-sm font-serif-sc text-lg font-medium text-on-surface">更早归档 (Earlier)</h2>
+<span class="px-2.5 py-0.5 rounded-full bg-surface-container-high text-on-surface-variant font-meta-sm text-[11px]">14 幅沉淀画作</span>
+</div>
+<span class="font-meta-sm text-xs text-on-surface-variant/60">2024.09 ~ 2024.10 上旬</span>
+</div>
+<div class="p-6 rounded-2xl bg-surface-container-lowest border border-outline-variant/35 flex flex-col md:flex-row items-center justify-between gap-4 shadow-xs">
+<div class="flex items-center gap-4">
+<div class="w-12 h-12 rounded-xl bg-surface-container flex items-center justify-center text-secondary">
+<span class="material-symbols-outlined text-[24px]">inventory_2</span>
+</div>
+<div class="flex flex-col">
+<h4 class="text-sm font-medium text-on-surface">早期创作已自动封存至自然冷存储仓</h4>
+<p class="text-xs text-on-surface-variant mt-0.5">包含《青岚草木志》《岩生茶舍初探》等 14 幅无损绘卷，随时可解封调入绘台。</p>
+</div>
+</div>
+<div class="flex items-center gap-2">
+<button class="px-3.5 py-1.5 rounded-xl bg-surface-container hover:bg-surface-container-high text-on-surface text-xs font-medium transition-colors" onclick="triggerToast('正在载入更早归档画作...')">
+                  展开更早 14 幅
+                </button>
+<button class="px-3.5 py-1.5 rounded-xl bg-primary/10 hover:bg-primary/20 text-primary text-xs font-medium transition-colors" onclick="triggerToast('历史档案备份已打包生成')">
+                  一键批量导出
+                </button>
+</div>
+</div>
+</section>
+<!-- 4. Storage Quota & Safe Sync Module -->
+<section class="mt-2 p-5 sm:p-6 rounded-2xl bg-surface-container-low border border-outline-variant/40 flex flex-col lg:flex-row items-center justify-between gap-5 shadow-xs">
+<div class="flex items-center gap-4 w-full lg:w-auto">
+<div class="w-12 h-12 rounded-xl bg-primary-fixed flex items-center justify-center text-primary shadow-xs shrink-0">
+<span class="material-symbols-outlined text-[26px]">cloud_done</span>
+</div>
+<div class="flex flex-col">
+<div class="flex items-center gap-2">
+<h3 class="font-serif-sc font-medium text-sm sm:text-base text-on-surface">云端画纸仓储安全同步中</h3>
+<span class="px-2 py-0.2 rounded-full bg-secondary-container text-on-secondary-container font-meta-sm text-[10px]">加密固化</span>
+</div>
+<p class="text-xs text-on-surface-variant mt-0.5">
+                  已存储 36 幅无损 RAW 原作 · 已分配 2.4 GB / 10 GB 永续空间
+                </p>
+</div>
+</div>
+<div class="flex flex-col sm:flex-row items-center gap-4 w-full lg:w-auto">
+<div class="flex flex-col gap-1 w-full sm:w-60">
+<div class="flex justify-between font-meta-sm text-[11px] text-on-surface-variant">
+<span class="">空间占用率</span>
+<span class="text-primary font-medium">24% (2.4 GB)</span>
+</div>
+<div class="w-full h-2 bg-surface-container-high rounded-full overflow-hidden">
+<div class="h-full bg-primary rounded-full" style="width: 24%;"></div>
+</div>
+</div>
+<button class="w-full sm:w-auto px-4 py-2 rounded-xl bg-surface-container-lowest hover:bg-surface-container text-on-surface text-xs font-medium border border-outline-variant/40 shadow-xs transition-colors whitespace-nowrap flex items-center justify-center gap-1.5" onclick="triggerToast('正在打包并下载全量 36 幅画作高清归档包 (2.4GB)...')">
+<span class="material-symbols-outlined text-[16px] text-primary">archive</span>
+                下载全量档案包
+              </button>
+</div>
+</section>
+</div>
+</div>
+</div>
+<!-- 5. High-fidelity Fullscreen Lightbox Modal -->
+<div class="fixed inset-0 z-50 bg-inverse-surface/85 backdrop-blur-xl hidden opacity-0 transition-opacity duration-300 flex" id="lightbox-modal">
+<!-- Close Button -->
+<button class="absolute top-4 right-4 z-30 w-10 h-10 rounded-full bg-surface-container-lowest/80 text-on-surface hover:bg-surface-container-lowest flex items-center justify-center shadow-md transition-transform hover:scale-105" onclick="closeLightbox()" title="关闭检视 (ESC)">
+<span class="material-symbols-outlined text-[20px]">close</span>
+</button>
+<div class="flex flex-col lg:flex-row w-full h-full overflow-hidden">
+<!-- Left: Image Viewport -->
+<div class="relative flex-1 h-[55vh] lg:h-full flex items-center justify-center p-4 lg:p-12 select-none">
+<button class="absolute left-4 lg:left-8 top-1/2 -translate-y-1/2 w-11 h-11 rounded-full bg-surface-container-lowest/80 backdrop-blur-md hover:bg-surface-container-lowest text-on-surface flex items-center justify-center shadow-lg transition-transform hover:scale-105 z-20" onclick="stepLightbox(-1)" title="上一张">
+<span class="material-symbols-outlined text-[22px]">chevron_left</span>
+</button>
+<div class="relative max-w-full max-h-full flex items-center justify-center p-2.5 bg-surface-container-lowest/30 rounded-2xl shadow-2xl backdrop-blur-sm border border-outline-variant/30">
+<img alt="预览大图" class="max-w-full max-h-[48vh] lg:max-h-[82vh] object-contain rounded-xl shadow-inner" id="lightbox-img" src="">
+<span class="absolute bottom-4 left-4 px-3 py-1 rounded-full bg-inverse-surface/80 text-inverse-on-surface font-meta-sm text-[11px] backdrop-blur-md" id="lightbox-counter-pill">
+              1 / 7 · 展品
+            </span>
+</div>
+<button class="absolute right-4 lg:right-8 top-1/2 -translate-y-1/2 w-11 h-11 rounded-full bg-surface-container-lowest/80 backdrop-blur-md hover:bg-surface-container-lowest text-on-surface flex items-center justify-center shadow-lg transition-transform hover:scale-105 z-20" onclick="stepLightbox(1)" title="下一张">
+<span class="material-symbols-outlined text-[22px]">chevron_right</span>
+</button>
+</div>
+<!-- Right: Inspector Side-panel -->
+<div class="w-full lg:w-[28rem] h-[45vh] lg:h-full bg-surface-bright flex flex-col shadow-[-8px_0_32px_rgba(40,50,30,0.15)] overflow-y-auto border-l border-outline-variant/30">
+<div class="p-5 pb-3 bg-surface-container-low/50 border-b border-outline-variant/20 flex flex-col gap-1">
+<div class="flex items-center justify-between">
+<span class="px-2.5 py-0.5 rounded-full bg-primary-fixed text-on-primary-fixed font-meta-sm text-[11px]" id="lightbox-source-badge">
+                单图创作
+              </span>
+<span class="font-meta-sm text-[11px] text-on-surface-variant" id="lightbox-date">2024.10.28 14:28</span>
+</div>
+<h3 class="font-headline-sm font-serif-sc text-base font-semibold text-on-surface mt-1" id="lightbox-title">
+              晨露嫩芽在柔和曦光中舒展
+            </h3>
+<span class="font-meta-sm text-[10px] text-outline">已固化于区块链式创作日志 #8472910</span>
+</div>
+<!-- Prompt Details -->
+<div class="p-5 flex flex-col gap-2">
+<div class="flex items-center justify-between">
+<span class="text-xs font-medium text-on-surface flex items-center gap-1.5">
+<span class="material-symbols-outlined text-primary text-[17px]">format_quote</span>
+                正向提示词 (Prompt)
+              </span>
+<button class="flex items-center gap-1 px-2.5 py-0.5 rounded-lg bg-surface-container hover:bg-surface-container-high font-meta-sm text-[11px] text-on-surface-variant hover:text-on-surface transition-colors" onclick="copyPromptText()">
+<span class="material-symbols-outlined text-[13px]">content_copy</span>
+<span class="">复制提示词</span>
+</button>
+</div>
+<div class="p-3.5 rounded-xl bg-surface-container-lowest border border-outline-variant/30 text-on-surface text-xs leading-relaxed" id="lightbox-prompt-box"></div>
+<div class="flex flex-wrap gap-1.5 mt-1">
+<span class="px-2 py-0.5 rounded-md bg-secondary-fixed-dim/30 text-on-secondary-container font-meta-sm text-[10px]">#植物写生</span>
+<span class="px-2 py-0.5 rounded-md bg-secondary-fixed-dim/30 text-on-secondary-container font-meta-sm text-[10px]">#纸本水彩</span>
+<span class="px-2 py-0.5 rounded-md bg-secondary-fixed-dim/30 text-on-secondary-container font-meta-sm text-[10px]">#晨光晨露</span>
+<span class="px-2 py-0.5 rounded-md bg-secondary-fixed-dim/30 text-on-secondary-container font-meta-sm text-[10px]">#自然呼吸感</span>
+</div>
+</div>
+<!-- Engine Parameters -->
+<div class="px-5 py-2 flex flex-col gap-2">
+<span class="text-xs font-medium text-on-surface flex items-center gap-1.5">
+<span class="material-symbols-outlined text-primary text-[17px]">tune</span>
+              工坊生成参数 (Parameters)
+            </span>
+<div class="grid grid-cols-2 gap-2 bg-surface-container-lowest border border-outline-variant/30 p-3 rounded-xl">
+<div class="flex flex-col">
+<span class="font-meta-sm text-[10px] text-outline">Seed (种子)</span>
+<span class="font-meta-md text-xs text-on-surface font-medium" id="param-seed">8472910</span>
+</div>
+<div class="flex flex-col">
+<span class="font-meta-sm text-[10px] text-outline">渲染引擎</span>
+<span class="font-meta-md text-xs text-on-surface font-medium" id="param-model">Natural HD v2.4</span>
+</div>
+<div class="flex flex-col">
+<span class="font-meta-sm text-[10px] text-outline">画幅比例</span>
+<span class="font-meta-md text-xs text-on-surface font-medium" id="param-ratio">1:1 (正方形)</span>
+</div>
+<div class="flex flex-col">
+<span class="font-meta-sm text-[10px] text-outline">解析度</span>
+<span class="font-meta-md text-xs text-on-surface font-medium" id="param-size">1024 × 1024 px</span>
+</div>
+<div class="flex flex-col">
+<span class="font-meta-sm text-[10px] text-outline">CFG 引导尺度</span>
+<span class="font-meta-md text-xs text-on-surface font-medium">6.5</span>
+</div>
+<div class="flex flex-col">
+<span class="font-meta-sm text-[10px] text-outline">采样步数 (Steps)</span>
+<span class="font-meta-md text-xs text-on-surface font-medium">32</span>
+</div>
+</div>
+</div>
+<!-- Lineage info -->
+<div class="px-5 py-2 flex flex-col gap-2">
+<span class="text-xs font-medium text-on-surface flex items-center gap-1.5">
+<span class="material-symbols-outlined text-secondary text-[17px]">account_tree</span>
+              衍生血统 (Lineage)
+            </span>
+<div class="p-3 rounded-xl bg-surface-container-low border border-outline-variant/30 flex items-center gap-3">
+<div class="w-9 h-9 rounded-lg bg-surface-container flex items-center justify-center text-on-surface-variant">
+<span class="material-symbols-outlined text-[18px]">draw</span>
+</div>
+<div class="flex flex-col">
+<span class="text-xs font-medium text-on-surface">基于参考草稿重绘完成</span>
+<span class="font-meta-sm text-[10px] text-on-surface-variant">重绘噪点强度 0.42 · 笔触保真度 94%</span>
+</div>
+</div>
+</div>
+<!-- Bottom CTAs -->
+<div class="mt-auto p-5 bg-surface-container-lowest/90 backdrop-blur-md border-t border-outline-variant/30 flex flex-col gap-2">
+<button class="w-full py-2.5 rounded-xl bg-primary hover:bg-primary-container text-on-primary text-xs font-medium shadow-sm transition-all flex items-center justify-center gap-2" onclick="remixCurrent()">
+<span class="material-symbols-outlined text-[17px]">brush</span>
+<span class="">复刻参数并在画台创作 (Remix)</span>
+</button>
+<div class="flex items-center gap-2">
+<button class="flex-1 py-2 rounded-xl bg-surface-container hover:bg-surface-container-high text-on-surface text-xs transition-colors flex items-center justify-center gap-1.5" onclick="triggerToast('正在下载 100% 无损原画 (PNG)...')">
+<span class="material-symbols-outlined text-[15px]">download</span>
+<span class="">下载无损原图</span>
+</button>
+
+</div>
+</div>
+</div>
+</div>
+</div>
+</main>
+<!-- Global Footer -->
+<footer class="w-full bg-surface-container-low border-t border-outline-variant/30 py-8 mt-auto">
+<div class="max-w-[1560px] mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-4 text-on-surface-variant text-xs">
+<div class="flex items-center gap-2">
+<span class="font-medium text-on-surface">芽绘台 SproutCanvas</span>
+<span class="">· 自然生机 AI 创作工作室 · 纸境美学实验室</span>
+</div>
+<div class="flex items-center gap-6">
+<a class="hover:text-on-surface transition-colors" href="#">创作守则</a>
+<a class="hover:text-on-surface transition-colors" href="#">算力公约</a>
+<a class="hover:text-on-surface transition-colors" href="#">生态更新</a>
+<span class="font-meta-sm text-[11px] text-outline">v2.4.0-botanical-archive</span>
+</div>
+</div>
+</footer>
+<script>
+    // Gallery Dataset
+    const galleryItems = [
+      {
+        title: "晨露嫩芽在柔和曦光中舒展",
+        prompt: "晨露嫩芽在柔和曦光中舒展，细微水珠凝聚在初生叶脉，极淡水彩质感，米白粗面水彩纸肌理，鼠尾草绿与苔藓色系，柔和暖金晨光轮廓光，自然光影氛围，高精细度植物写生。",
+        source: "单图创作 (Studio)",
+        date: "今天 14:28",
+        seed: "8472910",
+        model: "Natural HD v2.4",
+        ratio: "1:1 (正方形)",
+        size: "1024 × 1024 px",
+        imgSrc: "https://lh3.googleusercontent.com/aida-public/AB6AXuBCEE66V2st69K3sOwj8JgBWtWK7mSBO17k1mp8wyxNKL7urCc0UMM5iPFKp97K_gWeiSSUt_zwMwQPEQQiZAeglTIBgyY209OzDetVOOGHMp5Ez4IutDerubaZFBZh1_RIFYeQurR5a67nJJebAW-K9YBjv0dRrRuq0MY3T1UTZv9-byuvgIB6wzGfn0wu_x-lP7wDRZq3Z3mqZtlbZHepE6SSA150WAXH6eE9EJDzP_CrHaOsG_q1Ew"
+      },
+      {
+        title: "温暖复古的书桌与画板，静谧手作空间",
+        prompt: "温暖复古的书桌与画板，静谧手作空间，画板上夹着未完成的植物插画，陶器笔筒插满水彩笔，窗边洒入温润的下午阳光，温润纸感，安静专注的气氛。",
+        source: "单图创作 (Studio)",
+        date: "今天 11:15",
+        seed: "9310482",
+        model: "Natural HD v2.4",
+        ratio: "16:9 (宽画幅)",
+        size: "1792 × 1024 px",
+        imgSrc: "https://lh3.googleusercontent.com/aida-public/AB6AXuAeQxT0HOfga0C6RmcmPYrDYFZzmdzC4KMo1wWugofnuImvSoiLM1HOsm45owqjtLZstvysjWpp5DYB9NEITcb2Vo3_ZUZy8lLB3J4rGYibheb4r8vO6ra-i_4wdAMVDcS3ARuMPRM5Mt0mNI3g4Uq2_lnM9zQJFmk3_DkUvpCb7iUiv101hW42nimbX7UobR6qDIUMmeAbSFZ57fCUdKkuozDdDTtPHQHYkexSVA85yZCaCgnnYVk-0A"
+      },
+      {
+        title: "秋林深处的初见，雾气漫过青苔岩石",
+        prompt: "秋林深处的初见，一只赤狐缓步涉过覆满青苔的岩石，林间漫着青岚薄雾，落叶泛金，绘本水粉质感，恬静深远。",
+        source: "系列策划 · 狐之林 Scene 01",
+        date: "今天 09:40",
+        seed: "1048821",
+        model: "Botanical Story v1.8",
+        ratio: "16:9 (宽画幅)",
+        size: "1792 × 1024 px",
+        imgSrc: "https://lh3.googleusercontent.com/aida-public/AB6AXuDY-UFi56MaSWIEnnKBJ9ZBBW8LxmtRUpFA_f1cVsPKWr44bgbXB6qn1cKisCdPH3Irtrr8M6MWXvq31FZKKcXKYnp0auIbOBffzL9w8eGeePOZ40baKoTnwRwUbIy8j4UydA10euKGpoYeLnWBmEU7-fefFOBiWkODNmVeSVeH9AYx_P4bd4N0KAJzKlkrm0oObn2encTruVQbLFQbZW8othKpJ58aJHpal76a2RMWOWeMWIA0RZIePQ"
+      },
+      {
+        title: "银杏叶下的休憩瞬间，神态安然澄澈",
+        prompt: "银杏树根下的安睡狐狸，金黄落叶堆积如被，阳光斑驳，童话绘本插画风格，温润柔和，细节生动。",
+        source: "系列策划 · 狐之林 Scene 02",
+        date: "今天 08:22",
+        seed: "1048822",
+        model: "Botanical Story v1.8",
+        ratio: "16:9 (宽画幅)",
+        size: "1792 × 1024 px",
+        imgSrc: "https://lh3.googleusercontent.com/aida-public/AB6AXuCfNMouxixSTqVaKSdI36WPBGS7gu0VJuhbz79AlTpSiSjvRyjLb7rD_A4YgnqkHjRtan-z2wdn5sReq3SUwdIVSwq-Y78TTwxxqqAyPI4dtItzp17Q8cwK24sXN1FbttZR851-N_EpitxMhAfeaFrVgzeDeu0iMqaiQ1QK3424ZzYmBcb2TgctkWVgtMFx6O6act45ZNQkczpCZsNIkfuO9GCFvq1u3XkUDdX0M3NX1EnjMDG1fG2sag"
+      },
+      {
+        title: "枯山水砂纹与墨黑火山石的禅意构想",
+        prompt: "枯山水砂纹与墨黑火山石的禅意构想，同心圆波纹，晨雾缭绕，侘寂美学。",
+        source: "单图创作 (Studio)",
+        date: "10月26日 16:10",
+        seed: "5509211",
+        model: "Zen Space HD",
+        ratio: "4:3 (典雅)",
+        size: "1024 × 768 px",
+        imgSrc: "https://lh3.googleusercontent.com/aida-public/AB6AXuD6yoN0aQFs7eYL7ONoWfr3AqzGIV5clpA4DfPSFlR_Vjfeny2hjZFaQM57vFCJrc6RKMh7o2FvUAORsYxWJVoh6mYdS4U-hlc93mBFyxnJSd5mm1w0xxlEj2LvGJhTsEHTnm-GN9IZiGs7bBq_ENow8-H8-5FL1h73a26_SstBwDlUo_DH35gkOnKfqyUn9_M7EU-vyR6uq0COOwAkfuuXni6Q9RhquFZ3LjST8L85GSy_6buet3aqrA"
+      },
+      {
+        title: "本草标本画谱 · 蕨类与野生药草标本",
+        prompt: "手工纸本草植物压花标本，蕨类舒展叶片与拉丁文工整手写注释，复古植物学图谱。",
+        source: "单图创作 (Studio)",
+        date: "10月24日 09:12",
+        seed: "6214981",
+        model: "Herbarium Raw",
+        ratio: "1:1 (正方形)",
+        size: "1024 × 1024 px",
+        imgSrc: "https://lh3.googleusercontent.com/aida-public/AB6AXuCiAw2x4o6C1U9HFpW9DajAiABgKpjpdCiZrQGajc_Zaf-5-1qrjMoym9HkZhJTVHrBq0hKyfqgltsG0s3W9-LILl6q7bFQnSqHP3XAUPLySLBEPNngvUavS7lFrviCXb8UeFn_UFNx_OjaIlAhXRgSG--MQY3u7Esl2dniF4WtYJHch-2FVmvgOd3FoPxWpfySoMsDroHezkjSMunRCtuspwDvDHpdc8tGUJqqU2edVOBgBOeO1WQfkw"
+      },
+      {
+        title: "悬挑竹木茶亭，倒映于微雨荷塘",
+        prompt: "悬挑竹木茶亭设计，倒映在细雨涟漪的荷塘中，幽深山谷与青翠竹林掩映，建筑水彩概念渲染图。",
+        source: "系列策划 · 溪山茶寮 Scene 03",
+        date: "10月22日 17:45",
+        seed: "7748190",
+        model: "Architectural Organic",
+        ratio: "16:9 (宽画幅)",
+        size: "1920 × 1080 px",
+        imgSrc: "https://lh3.googleusercontent.com/aida-public/AB6AXuBWl4E2-9sIRXJYVgsl0x-NdSjFtvskVV9yAxmRclR7Vgvds15uJjjYDFPoTUWkE0zj0hrw7kFMvTjAeEpY9VBRCA_lFtewRCK03s0hY9uD0I18rawxhkloCe05_lsE-3nCmq6iVgYiFIVESdRs4AOaKOIUTdYttI4D2OLDHSIz93_Z-iEn_cCBSu2gXuJ_rIYMEyV3Fttdf-fTwB319-9od-KOoFIcBqlfM970G8MI3O-rD4Lc5holbQ"
+      }
+    ];
+
+    let currentLightboxIndex = 0;
+
+    function openLightbox(index) {
+      currentLightboxIndex = index;
+      renderLightboxContent();
+      const modal = document.getElementById('lightbox-modal');
+      modal.classList.remove('hidden');
+      requestAnimationFrame(() => {
+        modal.classList.remove('opacity-0');
+      });
+    }
+
+    function closeLightbox() {
+      const modal = document.getElementById('lightbox-modal');
+      modal.classList.add('opacity-0');
+      setTimeout(() => {
+        modal.classList.add('hidden');
+      }, 300);
+    }
+
+    function stepLightbox(delta) {
+      currentLightboxIndex = (currentLightboxIndex + delta + galleryItems.length) % galleryItems.length;
+      renderLightboxContent();
+    }
+
+    function renderLightboxContent() {
+      const item = galleryItems[currentLightboxIndex];
+      if (!item) return;
+
+      const img = document.getElementById('lightbox-img');
+      img.src = item.imgSrc;
+
+      document.getElementById('lightbox-title').textContent = item.title;
+      document.getElementById('lightbox-prompt-box').textContent = item.prompt;
+      document.getElementById('lightbox-source-badge').textContent = item.source;
+      document.getElementById('lightbox-date').textContent = item.date;
+      document.getElementById('lightbox-counter-pill').textContent = `${currentLightboxIndex + 1} / ${galleryItems.length} · 展品`;
+
+      document.getElementById('param-seed').textContent = item.seed;
+      document.getElementById('param-model').textContent = item.model;
+      document.getElementById('param-ratio').textContent = item.ratio;
+      document.getElementById('param-size').textContent = item.size;
+    }
+
+    function copyPromptText() {
+      const promptText = document.getElementById('lightbox-prompt-box').textContent.trim();
+      navigator.clipboard?.writeText(promptText);
+      triggerToast('提示词已复制到剪贴板！');
+    }
+
+    function remixCurrent() {
+      triggerToast('已将当前参数与参考图推入创作工坊！');
+      setTimeout(() => closeLightbox(), 600);
+    }
+
+    function quickRemix(index) {
+      const item = galleryItems[index];
+      triggerToast(`已载入种子 #${item.seed} 到创作绘台`);
+    }
+
+    // Keyboard Shortcuts
+    window.addEventListener('keydown', (e) => {
+      const modal = document.getElementById('lightbox-modal');
+      if (!modal.classList.contains('hidden')) {
+        if (e.key === 'Escape') closeLightbox();
+        if (e.key === 'ArrowLeft') stepLightbox(-1);
+        if (e.key === 'ArrowRight') stepLightbox(1);
+      }
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        document.getElementById('gallery-search')?.focus();
+      }
+    });
+
+    // Checkbox and batch handling
+    function updateCounter() {
+      const checkboxes = document.querySelectorAll('.card-checkbox');
+      let count = 0;
+      checkboxes.forEach(cb => {
+        if (cb.checked) count++;
+      });
+      document.getElementById('batch-count').textContent = count;
+      document.getElementById('select-all-checkbox').checked = (count === checkboxes.length && count > 0);
+    }
+
+    function handleSelectAll(master) {
+      const checkboxes = document.querySelectorAll('.card-checkbox');
+      checkboxes.forEach(cb => {
+        cb.checked = master.checked;
+      });
+      updateCounter();
+    }
+
+    function batchDownload() {
+      const count = document.getElementById('batch-count').textContent;
+      triggerToast(`正在打包下载选中的 ${count} 幅高分辨率原画...`);
+    }
+
+    function toggleStar(btn) {
+      const icon = btn.querySelector('.material-symbols-outlined');
+      if (icon.classList.contains('fill-current')) {
+        icon.classList.remove('fill-current');
+        btn.classList.remove('text-amber-600');
+        btn.classList.add('text-outline');
+        triggerToast('已取消星标收藏');
+      } else {
+        icon.classList.add('fill-current');
+        btn.classList.remove('text-outline');
+        btn.classList.add('text-amber-600');
+        triggerToast('已添加至星标收藏');
+      }
+    }
+
+    // Type Filter Logic
+    let currentType = 'all';
+    function setTypeFilter(type, btn) {
+      currentType = type;
+      document.querySelectorAll('.type-filter-btn').forEach(b => {
+        b.classList.remove('bg-primary', 'text-on-primary', 'shadow-sm');
+        b.classList.add('text-on-surface-variant');
+      });
+      btn.classList.add('bg-primary', 'text-on-primary', 'shadow-sm');
+      btn.classList.remove('text-on-surface-variant');
+      applyFilters();
+    }
+
+    function applyFilters() {
+      const searchVal = document.getElementById('gallery-search')?.value.toLowerCase().trim() || '';
+      const cards = document.querySelectorAll('.gallery-card');
+
+      cards.forEach(card => {
+        const source = card.getAttribute('data-source');
+        const starred = card.getAttribute('data-starred') === 'true';
+        const text = card.textContent.toLowerCase();
+
+        let typeMatch = true;
+        if (currentType === 'studio') typeMatch = (source === 'studio');
+        else if (currentType === 'storyboard') typeMatch = (source === 'storyboard');
+        else if (currentType === 'starred') typeMatch = starred;
+
+        const searchMatch = !searchVal || text.includes(searchVal);
+
+        if (typeMatch && searchMatch) {
+          card.style.display = 'flex';
+        } else {
+          card.style.display = 'none';
+        }
+      });
+    }
+
+    document.getElementById('gallery-search')?.addEventListener('input', applyFilters);
+
+    // Toast Generator
+    function triggerToast(message) {
+      const container = document.getElementById('toast-container');
+      if (!container) return;
+
+      const toast = document.createElement('div');
+      toast.className = 'pointer-events-auto px-4 py-2 rounded-full bg-inverse-surface/90 text-inverse-on-surface text-xs font-medium backdrop-blur-md shadow-[0_8px_24px_rgba(85,95,75,0.18)] flex items-center gap-2 transition-all duration-300 transform translate-y-2 opacity-0';
+      toast.innerHTML = `<span class="material-symbols-outlined text-primary-fixed-dim text-[16px]">eco</span><span>${message}</span>`;
+
+      container.appendChild(toast);
+      requestAnimationFrame(() => {
+        toast.classList.remove('translate-y-2', 'opacity-0');
+      });
+
+      setTimeout(() => {
+        toast.classList.add('opacity-0', 'translate-y-2');
+        setTimeout(() => toast.remove(), 300);
+      }, 2600);
+    }
+  </script>
+
+
+</body></html>

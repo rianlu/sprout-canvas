@@ -1,0 +1,464 @@
+<!DOCTYPE html><html lang="zh-CN" style=""><head><meta charset="utf-8"><meta content="width=device-width, initial-scale=1.0" name="viewport"><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"><link href="https://fonts.googleapis.com" rel="preconnect"><link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=JetBrains+Mono:wght@400;500&amp;family=Outfit:wght@400;500;600&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"><style>@layer base{html,body{margin:0;padding:0;}body{overscroll-behavior:none;}main>:first-child{margin-top:0!important;}main>:last-child{margin-bottom:0!important;}}::-webkit-scrollbar{display:none;}</style><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config={darkMode:"class",theme:{extend:{"colors":{"background":"#faf9f5","primary-fixed":"#cdecb3","secondary-fixed":"#d3eabc","on-surface-variant":"#44483e","error-container":"#ffdad6","inverse-on-surface":"#f2f1ed","tertiary-fixed-dim":"#c0c9b8","secondary-container":"#d3eabc","secondary-fixed-dim":"#b8cea1","outline":"#74796d","on-background":"#1b1c1a","outline-variant":"#c4c8bb","on-tertiary":"#ffffff","surface-tint":"#4b6638","on-primary-container":"#d9f9be","surface-bright":"#faf9f5","primary-container":"#597445","tertiary-container":"#666f60","surface":"#faf9f5","tertiary":"#4e5749","on-surface":"#1b1c1a","surface-container-lowest":"#ffffff","on-error-container":"#93000a","surface-container-high":"#e9e8e4","on-primary-fixed":"#0a2000","surface-dim":"#dbdad6","secondary":"#516440","on-secondary-container":"#576a45","on-tertiary-fixed-variant":"#41493c","on-error":"#ffffff","on-tertiary-container":"#e9f2e0","surface-variant":"#e3e2df","on-primary":"#ffffff","on-primary-fixed-variant":"#344d23","inverse-primary":"#b1d098","surface-container-highest":"#e3e2df","surface-container-low":"#f4f4f0","error":"#ba1a1a","on-secondary-fixed-variant":"#3a4c2a","on-secondary":"#ffffff","tertiary-fixed":"#dce5d3","on-secondary-fixed":"#0f2004","primary":"#415b2f","inverse-surface":"#2f312e","on-tertiary-fixed":"#161e13","primary-fixed-dim":"#b1d098","surface-container":"#efeeea"},"borderRadius":{"DEFAULT":"0.25rem","lg":"0.5rem","xl":"0.75rem","full":"9999px"},"spacing":{"space-2xs":"0.25rem","space-xl":"2rem","space-lg":"1.5rem","gutter-canvas":"1.5rem","sidebar-width":"22rem","space-md":"1rem","toolbar-height":"3.5rem","space-2xl":"3rem","space-xs":"0.5rem","space-sm":"0.75rem"},"fontFamily":{"body-sm":["Inter"],"headline-sm":["Outfit"],"body-md":["Inter"],"headline-lg":["Outfit"],"display-lg":["Outfit"],"headline-md":["Outfit"],"headline-lg-mobile":["Outfit"],"body-lg":["Inter"],"meta-md":["JetBrains Mono"],"meta-sm":["JetBrains Mono"]},"fontSize":{"body-sm":["12px",{"lineHeight":"18px","fontWeight":"400"}],"headline-sm":["18px",{"lineHeight":"26px","fontWeight":"500"}],"body-md":["14px",{"lineHeight":"22px","fontWeight":"400"}],"headline-lg":["32px",{"lineHeight":"40px","letterSpacing":"-0.015em","fontWeight":"600"}],"display-lg":["48px",{"lineHeight":"56px","letterSpacing":"-0.02em","fontWeight":"600"}],"headline-md":["24px",{"lineHeight":"32px","letterSpacing":"-0.01em","fontWeight":"500"}],"headline-lg-mobile":["26px",{"lineHeight":"34px","letterSpacing":"-0.01em","fontWeight":"600"}],"body-lg":["16px",{"lineHeight":"26px","fontWeight":"400"}],"meta-md":["12px",{"lineHeight":"16px","letterSpacing":"0.02em","fontWeight":"500"}],"meta-sm":["10px",{"lineHeight":"14px","letterSpacing":"0.04em","fontWeight":"400"}]}}}};</script></head><body class="bg-surface font-body-md text-body-md text-on-surface min-h-screen"><header class="fixed top-0 left-0 right-0 w-full z-40 bg-surface/90 backdrop-blur-xl shadow-[0_1px_8px_rgba(85,95,75,0.06)]"><div class="h-16 w-full px-gutter-canvas flex items-center justify-between gap-space-md"><div class="flex items-center gap-space-sm select-none"><img alt="芽绘台 SproutCanvas Logo" class="h-8 w-auto object-contain" src="https://lh3.googleusercontent.com/aida/AEtjO1UdGQYN5OKFazIQJk08paVjuyRk67uy0CfljuOAq07ztmhwt9frVul4FuPx-HDyt-bJG51nEqUOHmkqZlDknxVuThmMnnNBiretQE3KFJAxx9H50006F8SnjFThYojjbocbNOU6EY3Y8-K6QwgVxrFgTW6OpjXFoLfimyy5bPcrBBdhbRiX7db0ck1UOHKTYOwvcYrKfyo-emzTDm317zYWZvZjfR0Pa6Epc7r_LCS5vY9HNZv0SDQN7Mf_"><div class="flex flex-col"><span class="font-headline-sm text-headline-sm text-on-surface tracking-tight leading-none">芽绘台 SproutCanvas</span><span class="font-meta-sm text-meta-sm text-on-surface-variant tracking-wider mt-0.5">自然心流·灵感绘台</span></div></div><nav class="hidden md:flex items-center gap-space-xs p-1 bg-surface-container-low rounded-xl" data-active-classes="bg-primary text-on-primary font-medium rounded-lg shadow-[0_2px_8px_rgba(65,91,47,0.2)]"><a class="text-on-surface-variant hover:text-on-surface hover:bg-surface-container transition-all px-space-md py-1.5 rounded-lg font-body-md text-body-md" data-path="studio" href="#">单图创作</a><a class="text-on-surface-variant hover:text-on-surface hover:bg-surface-container transition-all px-space-md py-1.5 rounded-lg font-body-md text-body-md" data-path="storyboards" href="#">系列策划</a><a aria-current="page" class="transition-all px-space-md py-1.5 bg-primary text-on-primary font-medium rounded-lg shadow-[0_2px_8px_rgba(65,91,47,0.2)]" data-path="style-library" href="#">风格库</a><a class="text-on-surface-variant hover:text-on-surface hover:bg-surface-container transition-all px-space-md py-1.5 rounded-lg font-body-md text-body-md" data-path="gallery" href="#">展馆</a></nav><div class="flex items-center gap-space-sm"><div class="hidden lg:flex items-center gap-1.5 px-space-sm py-1 rounded-full bg-surface-container-low"><span class="w-2 h-2 rounded-full bg-primary animate-pulse"></span><span class="font-meta-sm text-meta-sm text-on-surface-variant">全通道就绪</span></div><button class="flex items-center gap-1.5 px-space-sm py-1.5 rounded-lg bg-surface-container hover:bg-surface-container-high transition-colors text-on-surface" onclick="document.getElementById('queue-drawer').classList.toggle('translate-x-full')"><span class="material-symbols-outlined text-[18px] text-primary">auto_awesome_motion</span><span class="font-body-sm text-body-sm font-medium">任务队列</span><span class="px-1.5 py-0.5 rounded-full bg-secondary-container text-on-secondary-container font-meta-sm text-meta-sm">2</span></button><button class="w-8 h-8 rounded-lg bg-surface-container-low hover:bg-surface-container-high flex items-center justify-center text-on-surface-variant hover:text-on-surface transition-colors" title="切换主题"><span class="material-symbols-outlined text-[18px]">light_mode</span></button><div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center shadow-[0_2px_6px_rgba(65,91,47,0.25)]"><span class="material-symbols-outlined text-on-primary text-[18px]">person</span></div></div></div></header><div class="fixed top-16 right-0 bottom-0 w-sidebar-width bg-surface-bright/95 backdrop-blur-2xl shadow-[-8px_0_32px_rgba(85,95,75,0.08)] z-50 transform translate-x-full transition-transform duration-300 ease-out flex flex-col" id="queue-drawer"><div class="p-space-lg flex items-center justify-between bg-surface-container-low/60"><div class="flex items-center gap-space-xs"><span class="material-symbols-outlined text-primary text-[20px]">timelapse</span><span class="font-headline-sm text-headline-sm text-on-surface">绘绘任务</span><span class="px-2 py-0.5 rounded-full bg-primary-fixed text-on-primary-fixed font-meta-sm text-meta-sm">2 运行中</span></div><button class="w-7 h-7 rounded-lg hover:bg-surface-container-high text-on-surface-variant hover:text-on-surface flex items-center justify-center transition-colors" onclick="document.getElementById('queue-drawer').classList.add('translate-x-full')"><span class="material-symbols-outlined text-[18px]">close</span></button></div><div class="flex-1 overflow-y-auto p-space-lg space-y-space-md"><div class="p-space-md rounded-xl bg-surface-container-lowest shadow-[0_2px_12px_rgba(85,95,75,0.04)]"><div class="flex items-start justify-between gap-space-xs mb-space-xs"><div class="flex-1 min-w-0"><h4 class="font-body-sm text-body-sm font-medium text-on-surface truncate">青苔木质庭院 · 晨光写生</h4><p class="font-meta-sm text-meta-sm text-on-surface-variant truncate">1024×1024 · 步数 32 · 50%</p></div><span class="material-symbols-outlined text-primary animate-spin text-[18px]">sync</span></div><div class="w-full h-1.5 bg-surface-container rounded-full overflow-hidden mb-space-xs"><div class="h-full bg-primary rounded-full transition-all duration-300 w-1/2"></div></div><div class="flex justify-between items-center text-on-surface-variant"><span class="font-meta-sm text-meta-sm">剩余约 12 秒</span><button class="font-meta-sm text-meta-sm hover:text-error transition-colors">取消</button></div></div><div class="p-space-md rounded-xl bg-surface-container-lowest shadow-[0_2px_12px_rgba(85,95,75,0.04)]"><div class="flex items-start justify-between gap-space-xs mb-space-xs"><div class="flex-1 min-w-0"><h4 class="font-body-sm text-body-sm font-medium text-on-surface truncate">枯山水禅意植株</h4><p class="font-meta-sm text-meta-sm text-on-surface-variant truncate">等待队列中 · 序号 #1</p></div><span class="material-symbols-outlined text-on-surface-variant text-[18px]">hourglass_empty</span></div><div class="w-full h-1.5 bg-surface-container rounded-full overflow-hidden mb-space-xs"><div class="h-full bg-secondary-fixed rounded-full w-0"></div></div><div class="flex justify-between items-center text-on-surface-variant"><span class="font-meta-sm text-meta-sm">等待分配计算节点</span><button class="font-meta-sm text-meta-sm hover:text-primary transition-colors">置顶</button></div></div></div><div class="p-space-md bg-surface-container-low/60 flex items-center justify-between text-on-surface-variant"><span class="font-meta-sm text-meta-sm">草木生息 · 持续守护</span><button class="font-meta-sm text-meta-sm text-primary hover:underline">清空已完成</button></div></div><div class="fixed bottom-space-lg left-1/2 -translate-x-1/2 z-50 flex flex-col items-center gap-space-xs pointer-events-none" id="toast-container"><div class="pointer-events-auto px-space-md py-space-xs rounded-full bg-inverse-surface/90 text-inverse-on-surface backdrop-blur-md shadow-[0_12px_36px_rgba(85,95,75,0.15)] flex items-center gap-2"><span class="material-symbols-outlined text-primary-fixed-dim text-[16px]">spa</span><span class="font-body-sm text-body-sm">画布环境已就绪，享受创作心流</span></div></div><main class="w-full pt-16 bg-surface min-h-[calc(100vh-4rem)]"><div class="flex flex-col w-full">
+<!-- Subtle Ambient Glow Element -->
+<div class="relative w-full overflow-hidden">
+<div class="absolute -top-24 left-1/4 w-96 h-96 bg-primary-fixed/20 rounded-full blur-3xl pointer-events-none -z-10"></div>
+<div class="absolute top-48 right-10 w-80 h-80 bg-secondary-fixed-dim/20 rounded-full blur-3xl pointer-events-none -z-10"></div>
+<!-- Header Banner & Curated Philosophy Statement -->
+<section class="w-full px-gutter-canvas pt-space-lg pb-space-md">
+<div class="flex flex-col md:flex-row md:items-end justify-between gap-space-lg">
+<div>
+<div class="flex items-center gap-2 mb-space-2xs text-secondary">
+<span class="material-symbols-outlined text-[18px]">palette</span>
+<span class="font-meta-sm text-meta-sm tracking-wider uppercase font-medium">自然心流 · 风格预设 · 48 款原生画风</span>
+</div>
+<h1 class="font-headline-lg text-headline-lg text-on-surface tracking-tight">自然生机画风库 · 艺术画风与质感</h1>
+<p class="font-body-md text-body-md text-on-surface-variant max-w-4xl mt-1 leading-relaxed">精选矿物颜料、手作纸质与植物光影肌理，一键固化画面风格与质感基底，赋予作品呼吸般的自然温润感。</p>
+</div>
+<!-- Metric badges -->
+
+</div>
+</section>
+<!-- Interactive Search & Filtering Bar -->
+<section class="w-full px-gutter-canvas py-space-xs sticky top-16 z-30 bg-surface/90 backdrop-blur-xl shadow-[0_1px_8px_rgba(85,95,75,0.04)]"><div class="flex flex-col gap-space-xs"><!-- Row 1: Search & Controls --><div class="flex flex-col lg:flex-row lg:items-center justify-between gap-space-xs"><div class="relative flex-1 max-w-2xl"><span class="material-symbols-outlined absolute left-space-md top-1/2 -translate-y-1/2 text-on-surface-variant text-[20px]">search</span><input class="w-full pl-11 pr-16 py-2 rounded-xl bg-surface-container-lowest text-on-surface placeholder:text-on-surface-variant/60 font-body-md text-body-md focus:outline-none focus:bg-surface-container-lowest transition-all shadow-sm" id="style-search" placeholder="搜索风格、流派、材质、调色或艺术家..." type="text"><span class="absolute right-3 top-1/2 -translate-y-1/2 px-2 py-0.5 rounded bg-surface-container font-meta-sm text-meta-sm text-on-surface-variant hidden sm:inline-block">⌘ K</span></div><div class="flex items-center gap-space-xs self-end lg:self-auto"><div class="flex items-center p-1 rounded-xl bg-surface-container-low"><button class="px-2.5 py-1 rounded-lg bg-surface-container-lowest text-on-surface font-body-sm text-body-sm shadow-sm transition-all flex items-center gap-1"><span class="material-symbols-outlined text-[16px] text-primary">view_quilt</span><span class="">全览</span></button><button class="px-2.5 py-1 rounded-lg text-on-surface-variant hover:text-on-surface font-body-sm text-body-sm transition-all flex items-center gap-1"><span class="material-symbols-outlined text-[16px]">auto_awesome</span><span class="">典藏推荐</span></button><button class="px-2.5 py-1 rounded-lg text-on-surface-variant hover:text-on-surface font-body-sm text-body-sm transition-all flex items-center gap-1"><span class="material-symbols-outlined text-[16px]">palette</span><span class="">材质质感</span></button></div><div class="flex items-center p-0.5 rounded-xl bg-surface-container-low"><button class="w-8 h-8 rounded-lg bg-surface-container-lowest text-primary shadow-sm flex items-center justify-center transition-colors" title="舒适网格"><span class="material-symbols-outlined text-[18px]">grid_view</span></button><button class="w-8 h-8 rounded-lg text-on-surface-variant hover:text-on-surface flex items-center justify-center transition-colors" title="精简密格"><span class="material-symbols-outlined text-[18px]">view_module</span></button></div></div></div><!-- Row 2: Deep Category Pills Horizontal Carousel --><div class="relative flex items-center w-full group/carousel"><div class="flex items-center gap-2 overflow-x-auto py-1 scrollbar-none w-full pr-12" id="category-scroll-container"><button class="filter-pill active px-3.5 py-1.5 rounded-xl bg-primary text-on-primary font-body-sm text-body-sm font-medium shadow-sm transition-all shrink-0 flex items-center gap-1.5"><span class="">全部</span><span class="text-on-primary/80 font-meta-sm text-meta-sm">48</span></button><button class="filter-pill px-3 py-1.5 rounded-xl bg-surface-container-low text-on-surface-variant hover:bg-surface-container-high font-body-sm text-body-sm transition-all shrink-0 flex items-center gap-1.5"><span class="">水彩与纸本</span><span class="font-meta-sm text-meta-sm">12</span></button><button class="filter-pill px-3 py-1.5 rounded-xl bg-surface-container-low text-on-surface-variant hover:bg-surface-container-high font-body-sm text-body-sm transition-all shrink-0 flex items-center gap-1.5"><span class="">复古胶片与摄影</span><span class="font-meta-sm text-meta-sm">8</span></button><button class="filter-pill px-3 py-1.5 rounded-xl bg-surface-container-low text-on-surface-variant hover:bg-surface-container-high font-body-sm text-body-sm transition-all shrink-0 flex items-center gap-1.5"><span class="">质感油画与厚涂</span><span class="font-meta-sm text-meta-sm">7</span></button><button class="filter-pill px-3 py-1.5 rounded-xl bg-surface-container-low text-on-surface-variant hover:bg-surface-container-high font-body-sm text-body-sm transition-all shrink-0 flex items-center gap-1.5"><span class="">现代极简矢量</span><span class="font-meta-sm text-meta-sm">6</span></button><button class="filter-pill px-3 py-1.5 rounded-xl bg-surface-container-low text-on-surface-variant hover:bg-surface-container-high font-body-sm text-body-sm transition-all shrink-0 flex items-center gap-1.5"><span class="">黏土与定格三维</span><span class="font-meta-sm text-meta-sm">5</span></button><button class="filter-pill px-3 py-1.5 rounded-xl bg-surface-container-low text-on-surface-variant hover:bg-surface-container-high font-body-sm text-body-sm transition-all shrink-0 flex items-center gap-1.5"><span class="">东方工笔与水墨</span><span class="font-meta-sm text-meta-sm">6</span></button><button class="filter-pill px-3 py-1.5 rounded-xl bg-surface-container-low text-on-surface-variant hover:bg-surface-container-high font-body-sm text-body-sm transition-all shrink-0 flex items-center gap-1.5"><span class="">商业海报与排版</span><span class="font-meta-sm text-meta-sm">8</span></button><button class="filter-pill px-3 py-1.5 rounded-xl bg-surface-container-low text-on-surface-variant hover:bg-surface-container-high font-body-sm text-body-sm transition-all shrink-0 flex items-center gap-1.5"><span class="">植物标本与手作</span><span class="font-meta-sm text-meta-sm">4</span></button><button class="filter-pill px-3 py-1.5 rounded-xl bg-surface-container-low text-on-surface-variant hover:bg-surface-container-high font-body-sm text-body-sm transition-all shrink-0 flex items-center gap-1.5"><span class="">炭笔与铅笔素描</span><span class="font-meta-sm text-meta-sm">5</span></button><button class="filter-pill px-3 py-1.5 rounded-xl bg-surface-container-low text-on-surface-variant hover:bg-surface-container-high font-body-sm text-body-sm transition-all shrink-0 flex items-center gap-1.5"><span class="">动漫与分镜故事</span><span class="font-meta-sm text-meta-sm">6</span></button><button class="filter-pill px-3 py-1.5 rounded-xl bg-surface-container-low text-on-surface-variant hover:bg-surface-container-high font-body-sm text-body-sm transition-all shrink-0 flex items-center gap-1.5"><span class="">像素艺术与微缩</span><span class="font-meta-sm text-meta-sm">4</span></button></div><div class="absolute right-0 top-0 bottom-0 flex items-center pointer-events-none pl-6 pr-0.5"><button class="pointer-events-auto w-7 h-7 rounded-full bg-surface-container-lowest shadow-md flex items-center justify-center text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-all" onclick="const c=document.getElementById('category-scroll-container');c.scrollBy({left:200,behavior:'smooth'});"><span class="material-symbols-outlined text-[16px]">chevron_right</span></button></div></div></div></section>
+<!-- Main Content: Style Cards Mosaic Grid -->
+<main class="w-full px-gutter-canvas py-space-md">
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-space-lg">
+<!-- CARD 1: Featured Selected Style (温润纸本水彩) -->
+<article class="group rounded-2xl bg-surface-container-lowest p-space-md shadow-[0_4px_20px_rgba(85,95,75,0.06)] hover:shadow-[0_12px_32px_rgba(85,95,75,0.12)] transition-all duration-300 flex flex-col justify-between">
+<div>
+<!-- Image Frame -->
+<div class="relative w-full h-64 rounded-xl overflow-hidden bg-surface-container-low mb-space-md cursor-pointer" onclick="openStyleModal(1)">
+<img class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700 ease-out" data-alt="A tranquil botanical watercolor study of blooming wild olive branches and morning mist, painted on heavy handmade cotton rag paper with deckled edges. Translucent organic wash, delicate sap green, warm raw umber pigments, soft diffused window lighting, fine artisanal illustration style with tactile watercolor bleed." src="https://lh3.googleusercontent.com/aida-public/AB6AXuAo8Dp6yGS0CGCa2l_lhKRvvMwi8R1DassDagvRCleKtC3_O-CQEidb3A0WQ9EVoHkzAFVRARfJf1JPjvFJFYRpbKqrX4CIqlzVWjLbdUFGxEzhevQuFxuSJh3JNlhwKNXhayy0pdhdtFNSGkb4r8xaxvJel3woU9oetQDyKIhx5USd24kfT5Byar0LczYf60llY_4mp7InTOMZViWeu3x66N9LmLqJofVpP8jjQWvn1YtViiXsJr3oHg">
+<div class="absolute top-3 left-3 px-2.5 py-1 rounded-full bg-surface/90 backdrop-blur-md font-meta-sm text-meta-sm text-primary font-medium flex items-center gap-1 shadow-sm">
+<span class="w-1.5 h-1.5 rounded-full bg-primary animate-pulse"></span>
+<span class="">主理人精选 · 特别推介</span>
+</div>
+<button class="absolute bottom-3 right-3 w-8 h-8 rounded-full bg-surface-bright/95 backdrop-blur-md flex items-center justify-center text-on-surface hover:bg-primary hover:text-on-primary shadow-md transition-all" onclick="event.stopPropagation(); openStyleModal(1)">
+<span class="material-symbols-outlined text-[18px]">fullscreen</span>
+</button>
+</div>
+<!-- Header Info -->
+<div class="flex items-baseline justify-between mb-1">
+<h3 class="font-headline-sm text-headline-sm text-on-surface">温润纸本水彩</h3>
+<span class="font-meta-sm text-meta-sm text-secondary font-medium">CFG 6.5 · 30 步</span>
+</div>
+<p class="font-meta-sm text-meta-sm text-on-surface-variant font-normal mb-space-xs">Botanical Paper Watercolor · Organic Wash</p>
+<p class="font-body-sm text-body-sm text-on-surface-variant line-clamp-2 mb-space-md">
+              以重磅未涂布水彩纸为底色，边缘呈现自然水痕毛边与半透明矿物晕染，呈现草木呼吸般的恬淡光感。
+            </p>
+<!-- Tags -->
+<div class="flex flex-wrap gap-1.5 mb-space-lg">
+<span class="px-2.5 py-1 rounded-lg bg-surface-container-low text-on-surface-variant font-meta-sm text-meta-sm">#纸质肌理</span>
+<span class="px-2.5 py-1 rounded-lg bg-surface-container-low text-on-surface-variant font-meta-sm text-meta-sm">#柔和光感</span>
+<span class="px-2.5 py-1 rounded-lg bg-surface-container-low text-on-surface-variant font-meta-sm text-meta-sm">#低饱和度</span>
+</div>
+</div>
+<!-- Bottom Action Buttons -->
+<div class="pt-space-sm bg-surface-container-lowest flex items-center gap-space-xs">
+<button class="flex-1 py-2 px-3 rounded-xl bg-surface-container hover:bg-surface-container-high text-on-surface font-body-sm text-body-sm font-medium transition-colors flex items-center justify-center gap-1.5" onclick="copyPromptText('botanical watercolor on heavy handmade cotton rag paper, deckled edges, organic olive sap wash, raw umber, warm daylight studio')">
+<span class="material-symbols-outlined text-[16px] text-primary">content_copy</span>
+<span class="">复制模版</span>
+</button>
+<a class="flex-1 py-2 px-3 rounded-xl bg-primary hover:bg-primary-container text-on-primary font-body-sm text-body-sm font-medium transition-all shadow-sm flex items-center justify-center gap-1.5 group/btn" data-path="studio" href="#">
+<span class="">发送到单图</span>
+<span class="material-symbols-outlined text-[16px] group-hover/btn:translate-x-0.5 group-hover/btn:-translate-y-0.5 transition-transform">north_east</span>
+</a>
+</div>
+</article>
+<!-- CARD 2: 莫兰迪静物油画 (Morandi Still Life) -->
+<article class="group rounded-2xl bg-surface-container-lowest p-space-md shadow-[0_4px_20px_rgba(85,95,75,0.06)] hover:shadow-[0_12px_32px_rgba(85,95,75,0.12)] transition-all duration-300 flex flex-col justify-between">
+<div>
+<div class="relative w-full h-64 rounded-xl overflow-hidden bg-surface-container-low mb-space-md cursor-pointer" onclick="openStyleModal(2)">
+<img class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700 ease-out" data-alt="An exquisite quiet still life oil painting in the style of Giorgio Morandi. Muted ceramic vases, dry seed pods, chalky earthen pigments, soft dusty sage and muted terracottas. Matte texture with knife impasto gestures, peaceful studio shelf in natural diffused overcast light." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBce1hlcDRnOOsbA47kOuRgZvt6UsC1EsJh4Q5YWVlefX5nFormFDsRG6fdU66rXN45iACCBIwb2Du05ojxvaROsSdRYSjakODVQN6dDvJe7S6-hbq6DBBdCtYshLikvPIG84lCYAnfD85KRxHlUDzERedD7KL_FhVSXwx02abgQFe3xlYvqlzNEIaYSOhvGOnR80g0rgMdHoRLxjmXeTeMloIteICkprH1eQA0yaFg14mdHrQ88zce9Q">
+<div class="absolute top-3 left-3 px-2.5 py-1 rounded-full bg-surface/90 backdrop-blur-md font-meta-sm text-meta-sm text-on-surface font-medium flex items-center gap-1 shadow-sm">
+<span class="material-symbols-outlined text-primary text-[14px]">brush</span>
+<span class="">静谧美学</span>
+</div>
+<button class="absolute bottom-3 right-3 w-8 h-8 rounded-full bg-surface-bright/95 backdrop-blur-md flex items-center justify-center text-on-surface hover:bg-primary hover:text-on-primary shadow-md transition-all" onclick="event.stopPropagation(); openStyleModal(2)">
+<span class="material-symbols-outlined text-[18px]">fullscreen</span>
+</button>
+</div>
+<div class="flex items-baseline justify-between mb-1">
+<h3 class="font-headline-sm text-headline-sm text-on-surface">莫兰迪静物油画</h3>
+<span class="font-meta-sm text-meta-sm text-secondary font-medium">CFG 7.0 · 35 步</span>
+</div>
+<p class="font-meta-sm text-meta-sm text-on-surface-variant font-normal mb-space-xs">Morandi Still Life · Chalky Impasto</p>
+<p class="font-body-sm text-body-sm text-on-surface-variant line-clamp-2 mb-space-md">
+              蒙上一层灰调的粉质油彩触感，几何陶罐与干枯植物之间的空间默契，极具沉思与平静气质。
+            </p>
+<div class="flex flex-wrap gap-1.5 mb-space-lg">
+<span class="px-2.5 py-1 rounded-lg bg-surface-container-low text-on-surface-variant font-meta-sm text-meta-sm">#粉质油彩</span>
+<span class="px-2.5 py-1 rounded-lg bg-surface-container-low text-on-surface-variant font-meta-sm text-meta-sm">#灰调空间</span>
+<span class="px-2.5 py-1 rounded-lg bg-surface-container-low text-on-surface-variant font-meta-sm text-meta-sm">#陶器陶质</span>
+</div>
+</div>
+<div class="pt-space-sm bg-surface-container-lowest flex items-center gap-space-xs">
+<button class="flex-1 py-2 px-3 rounded-xl bg-surface-container hover:bg-surface-container-high text-on-surface font-body-sm text-body-sm font-medium transition-colors flex items-center justify-center gap-1.5" onclick="copyPromptText('fine oil painting in the style of Giorgio Morandi, muted chalky ceramics, dried botanicals, soft dust sage, raw linen canvas texture')">
+<span class="material-symbols-outlined text-[16px] text-primary">content_copy</span>
+<span class="">复制模版</span>
+</button>
+<a class="flex-1 py-2 px-3 rounded-xl bg-primary hover:bg-primary-container text-on-primary font-body-sm text-body-sm font-medium transition-all shadow-sm flex items-center justify-center gap-1.5 group/btn" data-path="studio" href="#">
+<span class="">发送到单图</span>
+<span class="material-symbols-outlined text-[16px] group-hover/btn:translate-x-0.5 group-hover/btn:-translate-y-0.5 transition-transform">north_east</span>
+</a>
+</div>
+</article>
+<!-- CARD 3: 北欧极简矢量 (Nordic Minimalist Vector) -->
+<article class="group rounded-2xl bg-surface-container-lowest p-space-md shadow-[0_4px_20px_rgba(85,95,75,0.06)] hover:shadow-[0_12px_32px_rgba(85,95,75,0.12)] transition-all duration-300 flex flex-col justify-between">
+<div>
+<div class="relative w-full h-64 rounded-xl overflow-hidden bg-surface-container-low mb-space-md cursor-pointer" onclick="openStyleModal(3)">
+<img class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700 ease-out" data-alt="Modern Scandinavian minimalist graphic art poster, clean flat vector composition with abstract monstera leaves, pinecones, geometric arches in terracotta, warm mustard ochre, and deep spruce green. Crisp edges, high negative space, subtle warm paper grain." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDBOw4c8QKEYL0wD_DZ7JN-rgvZjCjai6T29as1o4qaZNmBdkyw9XR8lSemDw9qYwlk1VyB2PlZd6alNqcVMasKYbX7_1HOx8S44t3fPn_isG5dL-LhglY42Z75ATFnxmiEcQwa-sGd_0KGf6v_Ceoh_D41mpupA01ZxgYkvQjRG5cCeacnZsFj-roeibB8_jiEdvPyUDWqBA6NXExRPSJVvCTkbrAtr1PKGE1BkLUNoO07QRgHM7ZRBQ">
+<div class="absolute top-3 left-3 px-2.5 py-1 rounded-full bg-surface/90 backdrop-blur-md font-meta-sm text-meta-sm text-on-surface font-medium flex items-center gap-1 shadow-sm">
+<span class="material-symbols-outlined text-primary text-[14px]">interests</span>
+<span class="">设计排版</span>
+</div>
+<button class="absolute bottom-3 right-3 w-8 h-8 rounded-full bg-surface-bright/95 backdrop-blur-md flex items-center justify-center text-on-surface hover:bg-primary hover:text-on-primary shadow-md transition-all" onclick="event.stopPropagation(); openStyleModal(3)">
+<span class="material-symbols-outlined text-[18px]">fullscreen</span>
+</button>
+</div>
+<div class="flex items-baseline justify-between mb-1">
+<h3 class="font-headline-sm text-headline-sm text-on-surface">北欧极简矢量</h3>
+<span class="font-meta-sm text-meta-sm text-secondary font-medium">CFG 5.5 · 24 步</span>
+</div>
+<p class="font-meta-sm text-meta-sm text-on-surface-variant font-normal mb-space-xs">Nordic Minimalist Vector · Bauhaus Curves</p>
+<p class="font-body-sm text-body-sm text-on-surface-variant line-clamp-2 mb-space-md">
+              利落的几何剪影结合森林绿与暖赭石色块，具备高度克制的构图排布与明快现代家居感。
+            </p>
+<div class="flex flex-wrap gap-1.5 mb-space-lg">
+<span class="px-2.5 py-1 rounded-lg bg-surface-container-low text-on-surface-variant font-meta-sm text-meta-sm">#平涂矢量</span>
+<span class="px-2.5 py-1 rounded-lg bg-surface-container-low text-on-surface-variant font-meta-sm text-meta-sm">#包豪斯留白</span>
+<span class="px-2.5 py-1 rounded-lg bg-surface-container-low text-on-surface-variant font-meta-sm text-meta-sm">#版画印刷</span>
+</div>
+</div>
+<div class="pt-space-sm bg-surface-container-lowest flex items-center gap-space-xs">
+<button class="flex-1 py-2 px-3 rounded-xl bg-surface-container hover:bg-surface-container-high text-on-surface font-body-sm text-body-sm font-medium transition-colors flex items-center justify-center gap-1.5" onclick="copyPromptText('Scandinavian minimalist vector poster, botanical geometric silhouette, ochre and spruce green palette, clean matte print')">
+<span class="material-symbols-outlined text-[16px] text-primary">content_copy</span>
+<span class="">复制模版</span>
+</button>
+<a class="flex-1 py-2 px-3 rounded-xl bg-primary hover:bg-primary-container text-on-primary font-body-sm text-body-sm font-medium transition-all shadow-sm flex items-center justify-center gap-1.5 group/btn" data-path="studio" href="#">
+<span class="">发送到单图</span>
+<span class="material-symbols-outlined text-[16px] group-hover/btn:translate-x-0.5 group-hover/btn:-translate-y-0.5 transition-transform">north_east</span>
+</a>
+</div>
+</article>
+<!-- CARD 4: 复古胶片颗粒 (35mm Ektachrome Film) -->
+<article class="group rounded-2xl bg-surface-container-lowest p-space-md shadow-[0_4px_20px_rgba(85,95,75,0.06)] hover:shadow-[0_12px_32px_rgba(85,95,75,0.12)] transition-all duration-300 flex flex-col justify-between">
+<div>
+<div class="relative w-full h-64 rounded-xl overflow-hidden bg-surface-container-low mb-space-md cursor-pointer" onclick="openStyleModal(4)">
+<img class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700 ease-out" data-alt="An authentic 35mm film photograph of a greenhouse conservatory bathed in late golden-hour sunlight. Visible fine chemical film grain, gentle optical halation around glass edges, warm kodak tone curve, slight chromatic lens aberration, deeply nostalgic and poetic atmosphere." src="https://lh3.googleusercontent.com/aida-public/AB6AXuAJuEsWL-xfj8J_NrhvpmurWxiyDMM9__vYkJLscStwBz4ndLgMMFwsoyF1DJsf_rwHoKs1S3lvvAsDg0ZDtp2u8n4mA1zen9ENj6qn3d6YTamJqt6fP9_fYmFqeEvvqSOYmrfnhjdZsWNTjH3R921BTx9FdtXZ3I0qLkGzUpI90iYzJVKBBTMZD4SGXq2xMfyiMLB4F50YooIgnBwtszUOFZu6sJHoS7Y2mOTVTE7FbdDW6sOxxHIAbg">
+<div class="absolute top-3 left-3 px-2.5 py-1 rounded-full bg-surface/90 backdrop-blur-md font-meta-sm text-meta-sm text-on-surface font-medium flex items-center gap-1 shadow-sm">
+<span class="material-symbols-outlined text-primary text-[14px]">photo_camera</span>
+<span class="">胶片光学</span>
+</div>
+<button class="absolute bottom-3 right-3 w-8 h-8 rounded-full bg-surface-bright/95 backdrop-blur-md flex items-center justify-center text-on-surface hover:bg-primary hover:text-on-primary shadow-md transition-all" onclick="event.stopPropagation(); openStyleModal(4)">
+<span class="material-symbols-outlined text-[18px]">fullscreen</span>
+</button>
+</div>
+<div class="flex items-baseline justify-between mb-1">
+<h3 class="font-headline-sm text-headline-sm text-on-surface">复古胶片颗粒</h3>
+<span class="font-meta-sm text-meta-sm text-secondary font-medium">CFG 6.0 · 28 步</span>
+</div>
+<p class="font-meta-sm text-meta-sm text-on-surface-variant font-normal mb-space-xs">35mm Ektachrome Film · Halation &amp; Grain</p>
+<p class="font-body-sm text-body-sm text-on-surface-variant line-clamp-2 mb-space-md">
+              模拟经典日光反转片的化学质感，高光边缘微红晕光（Halation）与银盐颗粒带来温热回忆感。
+            </p>
+<div class="flex flex-wrap gap-1.5 mb-space-lg">
+<span class="px-2.5 py-1 rounded-lg bg-surface-container-low text-on-surface-variant font-meta-sm text-meta-sm">#银盐颗粒</span>
+<span class="px-2.5 py-1 rounded-lg bg-surface-container-low text-on-surface-variant font-meta-sm text-meta-sm">#镜头晕光</span>
+<span class="px-2.5 py-1 rounded-lg bg-surface-container-low text-on-surface-variant font-meta-sm text-meta-sm">#模拟暖调</span>
+</div>
+</div>
+<div class="pt-space-sm bg-surface-container-lowest flex items-center gap-space-xs">
+<button class="flex-1 py-2 px-3 rounded-xl bg-surface-container hover:bg-surface-container-high text-on-surface font-body-sm text-body-sm font-medium transition-colors flex items-center justify-center gap-1.5" onclick="copyPromptText('35mm vintage photograph, Ektachrome film stock, natural organic sunlight, organic halation glow, fine optical grain, nostalgic warmth')">
+<span class="material-symbols-outlined text-[16px] text-primary">content_copy</span>
+<span class="">复制模版</span>
+</button>
+<a class="flex-1 py-2 px-3 rounded-xl bg-primary hover:bg-primary-container text-on-primary font-body-sm text-body-sm font-medium transition-all shadow-sm flex items-center justify-center gap-1.5 group/btn" data-path="studio" href="#">
+<span class="">发送到单图</span>
+<span class="material-symbols-outlined text-[16px] group-hover/btn:translate-x-0.5 group-hover/btn:-translate-y-0.5 transition-transform">north_east</span>
+</a>
+</div>
+</article>
+<!-- CARD 5: 粘土定格微缩 (Claymation Miniature 3D) -->
+<article class="group rounded-2xl bg-surface-container-lowest p-space-md shadow-[0_4px_20px_rgba(85,95,75,0.06)] hover:shadow-[0_12px_32px_rgba(85,95,75,0.12)] transition-all duration-300 flex flex-col justify-between">
+<div>
+<div class="relative w-full h-64 rounded-xl overflow-hidden bg-surface-container-low mb-space-md cursor-pointer" onclick="openStyleModal(5)">
+<img class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700 ease-out" data-alt="A whimsical claymation diorama scene featuring a small cozy forest mushroom cottage with tactile clay trees. Matte soft polymer clay textures, subtle thumbprint marks, miniature macro depth-of-field, warm cozy ambient studio miniature spotlighting." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDXZzUbwKREs3ZJzVkQ_ACZZnx16mzsxsewFPlkHvybmwq9MHGCMyeVQ38-1V5iXXxX7oAc5ivU7dqKZKHSfZNELxhiNdxairoOrSiFRZ6Sl3HCeZ6DMgkWCC4XMyJVYeq1ZDbs-0anyrSTxpcd1UMJQgLo7E1VUZLld_SkQUQsN9nZk5urKRvgJe8nhTO-u-RL4zjFcwi6iC3jXAk0-p1Zoe6Y5WENZLI1fILAXEj02FYJIGLlMiRlHw">
+<div class="absolute top-3 left-3 px-2.5 py-1 rounded-full bg-surface/90 backdrop-blur-md font-meta-sm text-meta-sm text-on-surface font-medium flex items-center gap-1 shadow-sm">
+<span class="material-symbols-outlined text-primary text-[14px]">view_in_ar</span>
+<span class="">触觉定格</span>
+</div>
+<button class="absolute bottom-3 right-3 w-8 h-8 rounded-full bg-surface-bright/95 backdrop-blur-md flex items-center justify-center text-on-surface hover:bg-primary hover:text-on-primary shadow-md transition-all" onclick="event.stopPropagation(); openStyleModal(5)">
+<span class="material-symbols-outlined text-[18px]">fullscreen</span>
+</button>
+</div>
+<div class="flex items-baseline justify-between mb-1">
+<h3 class="font-headline-sm text-headline-sm text-on-surface">粘土定格微缩</h3>
+<span class="font-meta-sm text-meta-sm text-secondary font-medium">CFG 7.5 · 32 步</span>
+</div>
+<p class="font-meta-sm text-meta-sm text-on-surface-variant font-normal mb-space-xs">Claymation Miniature 3D · Tactile Craft</p>
+<p class="font-body-sm text-body-sm text-on-surface-variant line-clamp-2 mb-space-md">
+              哑光软陶手捏塑性质地，保留手作指纹痕迹与微距景深，生动而富有童话手作意趣。
+            </p>
+<div class="flex flex-wrap gap-1.5 mb-space-lg">
+<span class="px-2.5 py-1 rounded-lg bg-surface-container-low text-on-surface-variant font-meta-sm text-meta-sm">#软陶指纹</span>
+<span class="px-2.5 py-1 rounded-lg bg-surface-container-low text-on-surface-variant font-meta-sm text-meta-sm">#微距景深</span>
+<span class="px-2.5 py-1 rounded-lg bg-surface-container-low text-on-surface-variant font-meta-sm text-meta-sm">#定格动画感</span>
+</div>
+</div>
+<div class="pt-space-sm bg-surface-container-lowest flex items-center gap-space-xs">
+<button class="flex-1 py-2 px-3 rounded-xl bg-surface-container hover:bg-surface-container-high text-on-surface font-body-sm text-body-sm font-medium transition-colors flex items-center justify-center gap-1.5" onclick="copyPromptText('charming claymation miniature diorama, hand-sculpted matte polymer clay texture, subtle organic thumbprints, tilt-shift macro lens, warm soft studio rim light')">
+<span class="material-symbols-outlined text-[16px] text-primary">content_copy</span>
+<span class="">复制模版</span>
+</button>
+<a class="flex-1 py-2 px-3 rounded-xl bg-primary hover:bg-primary-container text-on-primary font-body-sm text-body-sm font-medium transition-all shadow-sm flex items-center justify-center gap-1.5 group/btn" data-path="studio" href="#">
+<span class="">发送到单图</span>
+<span class="material-symbols-outlined text-[16px] group-hover/btn:translate-x-0.5 group-hover/btn:-translate-y-0.5 transition-transform">north_east</span>
+</a>
+</div>
+</article>
+<!-- CARD 6: 宋代工笔花鸟 (Song Dynasty Fine Brushwork) -->
+<article class="group rounded-2xl bg-surface-container-lowest p-space-md shadow-[0_4px_20px_rgba(85,95,75,0.06)] hover:shadow-[0_12px_32px_rgba(85,95,75,0.12)] transition-all duration-300 flex flex-col justify-between">
+<div>
+<div class="relative w-full h-64 rounded-xl overflow-hidden bg-surface-container-low mb-space-md cursor-pointer" onclick="openStyleModal(6)">
+<img class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700 ease-out" data-alt="A masterwork traditional Chinese gongbi fine-brush painting inspired by Song Dynasty court art. Delicately outlined white magnolia blossoms and a resting bluebird on aged silk scroll texture. Natural mineral malachite and cinnabar pigments, subtle ink tea wash aging, serene and transcendent scholarly atmosphere." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCPDq7Sa_OFiQM5lVV8CnOfUb1cEkBthQQV6zWQEDRfRx75zKnqBSO1HduWuZJiYdmHDXtEbDOhdBEtH5rb0YJgPAVqWWMboSrE4Tk2D20yFOqYtkZ52h7EFuj6w2nYMtZ7lVKiPIqZqThGafawsDloWG3aAue2LpimmWt3N-1YOMCkgOsZItLy3EQY6brwpVyrsCnOKGft__1VZX-MTgv_hDxTVNpA8kxarj-PaJuE0TC-cLdF4XLZMA">
+<div class="absolute top-3 left-3 px-2.5 py-1 rounded-full bg-surface/90 backdrop-blur-md font-meta-sm text-meta-sm text-on-surface font-medium flex items-center gap-1 shadow-sm">
+<span class="material-symbols-outlined text-primary text-[14px]">history_edu</span>
+<span class="">古绢矿物</span>
+</div>
+<button class="absolute bottom-3 right-3 w-8 h-8 rounded-full bg-surface-bright/95 backdrop-blur-md flex items-center justify-center text-on-surface hover:bg-primary hover:text-on-primary shadow-md transition-all" onclick="event.stopPropagation(); openStyleModal(6)">
+<span class="material-symbols-outlined text-[18px]">fullscreen</span>
+</button>
+</div>
+<div class="flex items-baseline justify-between mb-1">
+<h3 class="font-headline-sm text-headline-sm text-on-surface">宋代工笔花鸟</h3>
+<span class="font-meta-sm text-meta-sm text-secondary font-medium">CFG 6.8 · 36 步</span>
+</div>
+<p class="font-meta-sm text-meta-sm text-on-surface-variant font-normal mb-space-xs">Song Dynasty Fine Brushwork · Aged Silk</p>
+<p class="font-body-sm text-body-sm text-on-surface-variant line-clamp-2 mb-space-md">
+              游丝铁线勾勒配以矿物石绿石青分染，依托泛黄绢本底纹，尽显清雅幽邃的东方气韵。
+            </p>
+<div class="flex flex-wrap gap-1.5 mb-space-lg">
+<span class="px-2.5 py-1 rounded-lg bg-surface-container-low text-on-surface-variant font-meta-sm text-meta-sm">#绢本古色</span>
+<span class="px-2.5 py-1 rounded-lg bg-surface-container-low text-on-surface-variant font-meta-sm text-meta-sm">#矿物分染</span>
+<span class="px-2.5 py-1 rounded-lg bg-surface-container-low text-on-surface-variant font-meta-sm text-meta-sm">#高古雅致</span>
+</div>
+</div>
+<div class="pt-space-sm bg-surface-container-lowest flex items-center gap-space-xs">
+<button class="flex-1 py-2 px-3 rounded-xl bg-surface-container hover:bg-surface-container-high text-on-surface font-body-sm text-body-sm font-medium transition-colors flex items-center justify-center gap-1.5" onclick="copyPromptText('Song dynasty court gongbi painting, delicate brush linework, aged silk scroll texture, mineral pigments, serene bird and blossom, tea-stained vintage finish')">
+<span class="material-symbols-outlined text-[16px] text-primary">content_copy</span>
+<span class="">复制模版</span>
+</button>
+<a class="flex-1 py-2 px-3 rounded-xl bg-primary hover:bg-primary-container text-on-primary font-body-sm text-body-sm font-medium transition-all shadow-sm flex items-center justify-center gap-1.5 group/btn" data-path="studio" href="#">
+<span class="">发送到单图</span>
+<span class="material-symbols-outlined text-[16px] group-hover/btn:translate-x-0.5 group-hover/btn:-translate-y-0.5 transition-transform">north_east</span>
+</a>
+</div>
+</article>
+</div>
+</main>
+<!-- Atelier Style Crafting Tips Callout Section -->
+
+</div>
+<!-- Interactive Style Detail Lightbox / Modal -->
+<div class="fixed inset-0 z-50 bg-inverse-surface/40 backdrop-blur-md hidden items-center justify-center p-4" id="style-modal">
+<div class="relative w-full max-w-4xl bg-surface rounded-2xl shadow-[0_24px_60px_rgba(85,95,75,0.22)] overflow-hidden flex flex-col md:flex-row max-h-[90vh]">
+<!-- Modal Close Button -->
+<button class="absolute top-4 right-4 z-20 w-8 h-8 rounded-full bg-surface-container-high/80 hover:bg-surface-container-highest flex items-center justify-center text-on-surface transition-colors" onclick="closeStyleModal()">
+<span class="material-symbols-outlined text-[18px]">close</span>
+</button>
+<!-- Modal Image Column -->
+<div class="w-full md:w-1/2 h-72 md:h-auto relative bg-surface-container-low">
+<img class="w-full h-full object-cover" data-alt="Detailed close-up texture inspection of organic watercolor bleeding over deckled 300gsm cold-press rag paper. Pigment particles gathering organically in micro-crevices, authentic damp paper texture, natural golden sunlight." id="modal-image" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDkQ3eUnJY6pl1rLl4O7Uei-TsfryK0OK8AaxgkJTcgpUCTpjr1n80BI_ZFxvX8wnCJJx3HxkmXY0Y5o1yzkwNciO_33XHm07tVx4908aQDHQHfYKwqp74BZN6ZIoYfwSuyfoD8KA0mTnQ3KUT8_2yRzcP8Yn2ykQzox4Infr5ohgKZRqc4W5jRM9AUVqTF32WqOchfFL5Izf4R2y_2nuDgcNsN2ehnFbtuVshslMJDog7ythp0PXCS8w">
+<div class="absolute bottom-4 left-4 right-4 px-space-md py-space-xs rounded-xl bg-surface/90 backdrop-blur-md shadow-sm flex items-center justify-between text-on-surface">
+<span class="font-meta-sm text-meta-sm">高清纹理采样 · 2048px</span>
+<span class="font-meta-sm text-meta-sm text-primary font-medium">无损 LoRA 权重 0.85</span>
+</div>
+</div>
+<!-- Modal Info & Controls Column -->
+<div class="w-full md:w-1/2 p-space-lg overflow-y-auto flex flex-col justify-between">
+<div>
+<!-- Tags & Category -->
+<div class="flex items-center gap-2 mb-2">
+<span class="px-2.5 py-0.5 rounded-full bg-primary-fixed text-on-primary-fixed font-meta-sm text-meta-sm font-medium" id="modal-category">基础水彩</span>
+<span class="font-meta-sm text-meta-sm text-on-surface-variant">收藏 1,420 次</span>
+</div>
+<h2 class="font-headline-lg text-headline-lg text-on-surface mb-1" id="modal-title">温润纸本水彩</h2>
+<p class="font-meta-sm text-meta-sm text-secondary mb-space-md" id="modal-subtitle">Botanical Paper Watercolor (Deckled Wash)</p>
+<!-- Prompt Formula Container -->
+<div class="mb-space-md">
+<label class="block font-meta-sm text-meta-sm text-on-surface-variant mb-1 font-medium">核心正面提示词模版 (Prompt Formula)</label>
+<div class="p-space-md rounded-xl bg-surface-container-low text-on-surface font-meta-sm text-meta-sm leading-relaxed relative group">
+<span id="modal-prompt" class="">masterpiece, botanical study of {subject}, delicate watercolor wash on raw heavy deckled cotton rag paper, translucent pigment layering, olive and ochre pigments, diffuse morning sunlight, artisanal hand-painted texture</span>
+<button class="mt-space-xs px-2.5 py-1 rounded bg-surface hover:bg-surface-container-high text-primary font-meta-sm text-meta-sm flex items-center gap-1 transition-colors shadow-sm" onclick="copyPromptText(document.getElementById('modal-prompt').innerText)">
+<span class="material-symbols-outlined text-[14px]">content_copy</span>
+<span class="">复制完整词串</span>
+</button>
+</div>
+</div>
+<!-- Parameter Recipe Grid -->
+<div class="grid grid-cols-3 gap-2 mb-space-md">
+<div class="p-2.5 rounded-xl bg-surface-container-low text-center">
+<span class="block font-meta-sm text-meta-sm text-on-surface-variant">推荐画幅</span>
+<span class="font-meta-md text-meta-md text-on-surface font-semibold mt-0.5 block">4:5 / 1:1</span>
+</div>
+<div class="p-2.5 rounded-xl bg-surface-container-low text-center">
+<span class="block font-meta-sm text-meta-sm text-on-surface-variant">CFG Scale</span>
+<span class="font-meta-md text-meta-md text-on-surface font-semibold mt-0.5 block">6.0 ~ 7.0</span>
+</div>
+<div class="p-2.5 rounded-xl bg-surface-container-low text-center">
+<span class="block font-meta-sm text-meta-sm text-on-surface-variant">采样步数</span>
+<span class="font-meta-md text-meta-md text-on-surface font-semibold mt-0.5 block">28 ~ 32 步</span>
+</div>
+</div>
+<!-- Seed Consistency Tip -->
+<div class="p-3 rounded-xl bg-secondary-container/40 flex items-start gap-2 mb-space-md">
+<span class="material-symbols-outlined text-secondary text-[18px] shrink-0 mt-0.5">tips_and_updates</span>
+<p class="font-body-sm text-body-sm text-on-secondary-container">
+              若需在连续画面中保持相同水痕边缘，请固定采样种子（Seed），并将 Denoising 保持在 0.45 以内。
+            </p>
+</div>
+</div>
+<!-- Modal Bottom Actions -->
+<div class="pt-space-sm flex items-center gap-space-sm">
+<button class="py-2.5 px-4 rounded-xl bg-surface-container hover:bg-surface-container-high text-on-surface font-body-sm text-body-sm font-medium transition-colors" onclick="closeStyleModal()">
+            关闭预览
+          </button>
+<a class="flex-1 py-2.5 px-4 rounded-xl bg-primary hover:bg-primary-container text-on-primary font-body-sm text-body-sm font-medium transition-all shadow-sm flex items-center justify-center gap-2" data-path="studio" href="#">
+<span class="">载入并前往单图创作</span>
+<span class="material-symbols-outlined text-[16px]">north_east</span>
+</a>
+</div>
+</div>
+</div>
+</div>
+<!-- Notification Toast for Copy actions -->
+<div class="fixed bottom-8 left-1/2 -translate-x-1/2 z-50 bg-inverse-surface/90 text-inverse-on-surface px-4 py-2 rounded-full shadow-lg font-body-sm text-body-sm backdrop-blur-md flex items-center gap-2 opacity-0 pointer-events-none transition-opacity duration-300" id="copy-toast">
+<span class="material-symbols-outlined text-primary-fixed text-[18px]">check_circle</span>
+<span class="">提示词模版已复制到剪贴板</span>
+</div>
+<script>
+    // Style Data Presets for Lightbox detail viewing
+    const stylesDatabase = {
+      1: {
+        title: "温润纸本水彩",
+        subtitle: "Botanical Paper Watercolor (Deckled Wash)",
+        category: "基础水彩",
+        prompt: "masterpiece, botanical study of {subject}, delicate watercolor wash on raw heavy deckled cotton rag paper, translucent pigment layering, olive and ochre pigments, diffuse morning sunlight, artisanal hand-painted texture",
+        alt: "A tranquil botanical watercolor study of blooming wild olive branches and morning mist, painted on heavy handmade cotton rag paper with deckled edges. Translucent organic wash, delicate sap green, warm raw umber pigments, soft diffused window lighting, fine artisanal illustration style with tactile watercolor bleed."
+      },
+      2: {
+        title: "莫兰迪静物油画",
+        subtitle: "Morandi Still Life (Chalky Impasto)",
+        category: "艺术流派",
+        prompt: "Giorgio Morandi fine art still life, {subject}, muted earthen ceramics, chalky impasto dry brush strokes, dusty sage and warm clay tones, balanced quiet negative space, diffused soft window shade",
+        alt: "An exquisite quiet still life oil painting in the style of Giorgio Morandi. Muted ceramic vases, dry seed pods, chalky earthen pigments, soft dusty sage and muted terracottas. Matte texture with knife impasto gestures, peaceful studio shelf in natural diffused overcast light."
+      },
+      3: {
+        title: "北欧极简矢量",
+        subtitle: "Nordic Minimalist Vector (Bauhaus Curves)",
+        category: "概念设计",
+        prompt: "modern Scandinavian graphic art print, clean vector silhouettes of {subject}, organic arch forms, deep forest spruce green, burnt orange ochre, matte heavy cardstock texture, minimalist rhythm",
+        alt: "Modern Scandinavian minimalist graphic art poster, clean flat vector composition with abstract monstera leaves, pinecones, geometric arches in terracotta, warm mustard ochre, and deep spruce green. Crisp edges, high negative space, subtle warm paper grain."
+      },
+      4: {
+        title: "复古胶片颗粒",
+        subtitle: "35mm Ektachrome Film (Halation & Grain)",
+        category: "材质微距",
+        prompt: "35mm analog photograph of {subject}, shot on vintage Ektachrome, gentle optical red halation, fine silver halide film grain, rich warm tone curve, gentle vignette, tender nostalgic afternoon",
+        alt: "An authentic 35mm film photograph of a greenhouse conservatory bathed in late golden-hour sunlight. Visible fine chemical film grain, gentle optical halation around glass edges, warm kodak tone curve, slight chromatic lens aberration, deeply nostalgic and poetic atmosphere."
+      },
+      5: {
+        title: "粘土定格微缩",
+        subtitle: "Claymation Miniature 3D (Tactile Craft)",
+        category: "概念设计",
+        prompt: "whimsical claymation diorama, hand-sculpted matte polymer clay {subject}, visible handmade thumbprint textures, shallow depth of field, tilt-shift macro, warm ambient studio lamp lighting",
+        alt: "A whimsical claymation diorama scene featuring a small cozy forest mushroom cottage with tactile clay trees. Matte soft polymer clay textures, subtle thumbprint marks, miniature macro depth-of-field, warm cozy ambient studio miniature spotlighting."
+      },
+      6: {
+        title: "宋代工笔花鸟",
+        subtitle: "Song Dynasty Fine Brushwork (Aged Silk)",
+        category: "艺术流派",
+        prompt: "Song Dynasty court gongbi fine-line painting, {subject}, gossamer iron-wire line art, mineral azurite and malachite tea dye washes, vintage aged silk scroll background, transcendent classical Chinese tranquility",
+        alt: "A masterwork traditional Chinese gongbi fine-brush painting inspired by Song Dynasty court art. Delicately outlined white magnolia blossoms and a resting bluebird on aged silk scroll texture. Natural mineral malachite and cinnabar pigments, subtle ink tea wash aging, serene and transcendent scholarly atmosphere."
+      }
+    };
+
+    function openStyleModal(id) {
+      const data = stylesDatabase[id];
+      if (!data) return;
+
+      document.getElementById('modal-title').innerText = data.title;
+      document.getElementById('modal-subtitle').innerText = data.subtitle;
+      document.getElementById('modal-category').innerText = data.category;
+      document.getElementById('modal-prompt').innerText = data.prompt;
+      
+      const imgElem = document.getElementById('modal-image');
+      imgElem.setAttribute('data-alt', data.alt);
+
+      const modal = document.getElementById('style-modal');
+      modal.classList.remove('hidden');
+      modal.classList.add('flex');
+    }
+
+    function closeStyleModal() {
+      const modal = document.getElementById('style-modal');
+      modal.classList.add('hidden');
+      modal.classList.remove('flex');
+    }
+
+    function copyPromptText(text) {
+      if (navigator.clipboard) {
+        navigator.clipboard.writeText(text).then(() => {
+          showCopyToast();
+        });
+      } else {
+        showCopyToast();
+      }
+    }
+
+    function showCopyToast() {
+      const toast = document.getElementById('copy-toast');
+      toast.classList.remove('opacity-0', 'pointer-events-none');
+      toast.classList.add('opacity-100');
+      setTimeout(() => {
+        toast.classList.remove('opacity-100');
+        toast.classList.add('opacity-0', 'pointer-events-none');
+      }, 2000);
+    }
+
+    // Interactive Pill Switcher
+    document.querySelectorAll('.filter-pill').forEach(btn => {
+      btn.addEventListener('click', function() {
+        document.querySelectorAll('.filter-pill').forEach(el => {
+          el.classList.remove('active', 'bg-primary', 'text-on-primary');
+          el.classList.add('bg-surface', 'text-on-surface');
+          const badge = el.querySelector('span:last-child');
+          if (badge) badge.classList.replace('text-on-primary/80', 'text-on-surface-variant');
+        });
+
+        this.classList.add('active', 'bg-primary', 'text-on-primary');
+        this.classList.remove('bg-surface', 'text-on-surface');
+        const activeBadge = this.querySelector('span:last-child');
+        if (activeBadge) activeBadge.classList.replace('text-on-surface-variant', 'text-on-primary/80');
+      });
+    });
+
+    // Close on escape key
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        closeStyleModal();
+      }
+    });
+
+    // Close modal on click outside content
+    document.getElementById('style-modal').addEventListener('click', function(e) {
+      if (e.target === this) {
+        closeStyleModal();
+      }
+    });
+  </script>
+</div></main><footer class="w-full bg-surface-container-low py-space-xl mt-auto"><div class="w-full px-gutter-canvas flex flex-col sm:flex-row items-center justify-between gap-space-md text-on-surface-variant font-body-sm text-body-sm"><div class="flex items-center gap-space-xs"><span class="font-meta-md text-meta-md text-on-surface">芽绘台 SproutCanvas</span><span class="">· 自然生机 AI 创作工作室</span></div><div class="flex items-center gap-space-lg"><a class="hover:text-on-surface transition-colors" href="#">创作守则</a><a class="hover:text-on-surface transition-colors" href="#">算力公约</a><a class="hover:text-on-surface transition-colors" href="#">生态更新</a><span class="font-meta-sm text-meta-sm text-outline">v2.4.0-botanical</span></div></div></footer>
+
+</body></html>

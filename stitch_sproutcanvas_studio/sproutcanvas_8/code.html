@@ -1,0 +1,637 @@
+<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8"><meta content="width=device-width, initial-scale=1.0" name="viewport"><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"><link href="https://fonts.googleapis.com" rel="preconnect"><link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=JetBrains+Mono:wght@400;500&amp;family=Outfit:wght@400;500;600&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"><style>@layer base{html,body{margin:0;padding:0;}body{overscroll-behavior:none;}main>:first-child{margin-top:0!important;}main>:last-child{margin-bottom:0!important;}}::-webkit-scrollbar{display:none;}</style><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config={darkMode:"class",theme:{extend:{"colors":{"background":"#faf9f5","primary-fixed":"#cdecb3","secondary-fixed":"#d3eabc","on-surface-variant":"#44483e","error-container":"#ffdad6","inverse-on-surface":"#f2f1ed","tertiary-fixed-dim":"#c0c9b8","secondary-container":"#d3eabc","secondary-fixed-dim":"#b8cea1","outline":"#74796d","on-background":"#1b1c1a","outline-variant":"#c4c8bb","on-tertiary":"#ffffff","surface-tint":"#4b6638","on-primary-container":"#d9f9be","surface-bright":"#faf9f5","primary-container":"#597445","tertiary-container":"#666f60","surface":"#faf9f5","tertiary":"#4e5749","on-surface":"#1b1c1a","surface-container-lowest":"#ffffff","on-error-container":"#93000a","surface-container-high":"#e9e8e4","on-primary-fixed":"#0a2000","surface-dim":"#dbdad6","secondary":"#516440","on-secondary-container":"#576a45","on-tertiary-fixed-variant":"#41493c","on-error":"#ffffff","on-tertiary-container":"#e9f2e0","surface-variant":"#e3e2df","on-primary":"#ffffff","on-primary-fixed-variant":"#344d23","inverse-primary":"#b1d098","surface-container-highest":"#e3e2df","surface-container-low":"#f4f4f0","error":"#ba1a1a","on-secondary-fixed-variant":"#3a4c2a","on-secondary":"#ffffff","tertiary-fixed":"#dce5d3","on-secondary-fixed":"#0f2004","primary":"#415b2f","inverse-surface":"#2f312e","on-tertiary-fixed":"#161e13","primary-fixed-dim":"#b1d098","surface-container":"#efeeea"},"borderRadius":{"DEFAULT":"0.25rem","lg":"0.5rem","xl":"0.75rem","full":"9999px"},"spacing":{"space-2xs":"0.25rem","space-xl":"2rem","space-lg":"1.5rem","gutter-canvas":"1.5rem","sidebar-width":"22rem","space-md":"1rem","toolbar-height":"3.5rem","space-2xl":"3rem","space-xs":"0.5rem","space-sm":"0.75rem"},"fontFamily":{"body-sm":["Inter"],"headline-sm":["Outfit"],"body-md":["Inter"],"headline-lg":["Outfit"],"display-lg":["Outfit"],"headline-md":["Outfit"],"headline-lg-mobile":["Outfit"],"body-lg":["Inter"],"meta-md":["JetBrains Mono"],"meta-sm":["JetBrains Mono"]},"fontSize":{"body-sm":["12px",{"lineHeight":"18px","fontWeight":"400"}],"headline-sm":["18px",{"lineHeight":"26px","fontWeight":"500"}],"body-md":["14px",{"lineHeight":"22px","fontWeight":"400"}],"headline-lg":["32px",{"lineHeight":"40px","letterSpacing":"-0.015em","fontWeight":"600"}],"display-lg":["48px",{"lineHeight":"56px","letterSpacing":"-0.02em","fontWeight":"600"}],"headline-md":["24px",{"lineHeight":"32px","letterSpacing":"-0.01em","fontWeight":"500"}],"headline-lg-mobile":["26px",{"lineHeight":"34px","letterSpacing":"-0.01em","fontWeight":"600"}],"body-lg":["16px",{"lineHeight":"26px","fontWeight":"400"}],"meta-md":["12px",{"lineHeight":"16px","letterSpacing":"0.02em","fontWeight":"500"}],"meta-sm":["10px",{"lineHeight":"14px","letterSpacing":"0.04em","fontWeight":"400"}]}}}};</script></head><body class="bg-surface font-body-md text-body-md text-on-surface min-h-screen"><header class="fixed top-0 left-0 right-0 w-full z-40 bg-surface/90 backdrop-blur-xl shadow-[0_1px_8px_rgba(85,95,75,0.06)]"><div class="h-16 w-full px-gutter-canvas flex items-center justify-between gap-space-md"><div class="flex items-center gap-space-sm select-none"><img alt="芽绘台 SproutCanvas Logo" class="h-8 w-auto object-contain" src="https://lh3.googleusercontent.com/aida/AEtjO1UdGQYN5OKFazIQJk08paVjuyRk67uy0CfljuOAq07ztmhwt9frVul4FuPx-HDyt-bJG51nEqUOHmkqZlDknxVuThmMnnNBiretQE3KFJAxx9H50006F8SnjFThYojjbocbNOU6EY3Y8-K6QwgVxrFgTW6OpjXFoLfimyy5bPcrBBdhbRiX7db0ck1UOHKTYOwvcYrKfyo-emzTDm317zYWZvZjfR0Pa6Epc7r_LCS5vY9HNZv0SDQN7Mf_"><div class="flex flex-col"><span class="font-headline-sm text-headline-sm text-on-surface tracking-tight leading-none">芽绘台 SproutCanvas</span><span class="font-meta-sm text-meta-sm text-on-surface-variant tracking-wider mt-0.5">自然心流·灵感绘台</span></div></div><nav class="hidden md:flex items-center gap-space-xs p-1 bg-surface-container-low rounded-xl" data-active-classes="bg-primary text-on-primary font-medium rounded-lg shadow-[0_2px_8px_rgba(65,91,47,0.2)]"><a class="text-on-surface-variant hover:text-on-surface hover:bg-surface-container transition-all px-space-md py-1.5 rounded-lg font-body-md text-body-md" data-path="studio" href="#">单图创作</a><a class="text-on-surface-variant hover:text-on-surface hover:bg-surface-container transition-all px-space-md py-1.5 rounded-lg font-body-md text-body-md" data-path="storyboards" href="#">系列策划</a><a class="text-on-surface-variant hover:text-on-surface hover:bg-surface-container transition-all px-space-md py-1.5 rounded-lg font-body-md text-body-md" data-path="style-library" href="#">风格库</a><a aria-current="page" class="transition-all px-space-md py-1.5 bg-primary text-on-primary font-medium rounded-lg shadow-[0_2px_8px_rgba(65,91,47,0.2)]" data-path="gallery" href="#">展馆</a></nav><div class="flex items-center gap-space-sm"><div class="hidden lg:flex items-center gap-1.5 px-space-sm py-1 rounded-full bg-surface-container-low"><span class="w-2 h-2 rounded-full bg-primary animate-pulse"></span><span class="font-meta-sm text-meta-sm text-on-surface-variant">全通道就绪</span></div><button class="flex items-center gap-1.5 px-space-sm py-1.5 rounded-lg bg-surface-container hover:bg-surface-container-high transition-colors text-on-surface" onclick="document.getElementById('queue-drawer').classList.toggle('translate-x-full')"><span class="material-symbols-outlined text-[18px] text-primary">auto_awesome_motion</span><span class="font-body-sm text-body-sm font-medium">任务队列</span><span class="px-1.5 py-0.5 rounded-full bg-secondary-container text-on-secondary-container font-meta-sm text-meta-sm">2</span></button><button class="w-8 h-8 rounded-lg bg-surface-container-low hover:bg-surface-container-high flex items-center justify-center text-on-surface-variant hover:text-on-surface transition-colors" title="切换主题"><span class="material-symbols-outlined text-[18px]">light_mode</span></button><div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center shadow-[0_2px_6px_rgba(65,91,47,0.25)]"><span class="material-symbols-outlined text-on-primary text-[18px]">person</span></div></div></div></header><div class="fixed top-16 right-0 bottom-0 w-sidebar-width bg-surface-bright/95 backdrop-blur-2xl shadow-[-8px_0_32px_rgba(85,95,75,0.08)] z-50 transform translate-x-full transition-transform duration-300 ease-out flex flex-col" id="queue-drawer"><div class="p-space-lg flex items-center justify-between bg-surface-container-low/60"><div class="flex items-center gap-space-xs"><span class="material-symbols-outlined text-primary text-[20px]">timelapse</span><span class="font-headline-sm text-headline-sm text-on-surface">绘绘任务</span><span class="px-2 py-0.5 rounded-full bg-primary-fixed text-on-primary-fixed font-meta-sm text-meta-sm">2 运行中</span></div><button class="w-7 h-7 rounded-lg hover:bg-surface-container-high text-on-surface-variant hover:text-on-surface flex items-center justify-center transition-colors" onclick="document.getElementById('queue-drawer').classList.add('translate-x-full')"><span class="material-symbols-outlined text-[18px]">close</span></button></div><div class="flex-1 overflow-y-auto p-space-lg space-y-space-md"><div class="p-space-md rounded-xl bg-surface-container-lowest shadow-[0_2px_12px_rgba(85,95,75,0.04)]"><div class="flex items-start justify-between gap-space-xs mb-space-xs"><div class="flex-1 min-w-0"><h4 class="font-body-sm text-body-sm font-medium text-on-surface truncate">青苔木质庭院 · 晨光写生</h4><p class="font-meta-sm text-meta-sm text-on-surface-variant truncate">16:9 · 高清 HD · 柔和自然</p></div><span class="material-symbols-outlined text-primary animate-spin text-[18px]">sync</span></div><div class="w-full h-1.5 bg-surface-container rounded-full overflow-hidden mb-space-xs"><div class="h-full bg-primary rounded-full transition-all duration-300 w-1/2"></div></div><div class="flex justify-between items-center text-on-surface-variant"><span class="font-meta-sm text-meta-sm text-primary font-medium">正在构思渲染 · 68% (约 12 秒)</span><button class="font-meta-sm text-meta-sm hover:text-error transition-colors">取消</button></div></div><div class="p-space-md rounded-xl bg-surface-container-lowest shadow-[0_2px_12px_rgba(85,95,75,0.04)]"><div class="flex items-start justify-between gap-space-xs mb-space-xs"><div class="flex-1 min-w-0"><h4 class="font-body-sm text-body-sm font-medium text-on-surface truncate">枯山水禅意植株</h4><p class="font-meta-sm text-meta-sm text-on-surface-variant truncate">等待队列中 · 预计 20 秒后开始</p></div><span class="material-symbols-outlined text-on-surface-variant text-[18px]">hourglass_empty</span></div><div class="w-full h-1.5 bg-surface-container rounded-full overflow-hidden mb-space-xs"><div class="h-full bg-secondary-fixed rounded-full w-0"></div></div><div class="flex justify-between items-center text-on-surface-variant"><span class="font-meta-sm text-meta-sm text-on-surface-variant">画布预备就绪</span><button class="font-meta-sm text-meta-sm hover:text-primary transition-colors">置顶</button></div></div></div><div class="p-space-md bg-surface-container-low/60 flex items-center justify-between text-on-surface-variant"><span class="font-meta-sm text-meta-sm">草木生息 · 持续守护</span><button class="font-meta-sm text-meta-sm text-primary hover:underline">清空已完成</button></div></div><div class="fixed bottom-space-lg left-1/2 -translate-x-1/2 z-50 flex flex-col items-center gap-space-xs pointer-events-none" id="toast-container"><div class="pointer-events-auto px-space-md py-space-xs rounded-full bg-inverse-surface/90 text-inverse-on-surface backdrop-blur-md shadow-[0_12px_36px_rgba(85,95,75,0.15)] flex items-center gap-2"><span class="material-symbols-outlined text-primary-fixed-dim text-[16px]">spa</span><span class="font-body-sm text-body-sm">画布环境已就绪，享受创作心流</span></div></div><main class="w-full pt-16 bg-surface min-h-[calc(100vh-4rem)]"><div class="flex flex-col w-full relative select-none">
+<!-- 底层画展展馆背景区 (Underlying Gallery Viewport) -->
+<div class="w-full px-gutter-canvas py-space-lg">
+<!-- 展馆顶部过滤与状态栏 -->
+<div class="flex flex-col md:flex-row md:items-end justify-between gap-space-md mb-space-xl">
+<div class="space-y-space-2xs">
+<div class="flex items-center gap-space-xs text-secondary">
+<span class="material-symbols-outlined text-[18px]">photo_library</span>
+<span class="font-meta-sm text-meta-sm tracking-wider uppercase">Atelier Archive · 展馆典藏</span>
+</div>
+<h2 class="font-headline-lg text-headline-lg text-on-surface">灵感绘卷与单作珍藏</h2>
+<p class="font-body-md text-body-md text-on-surface-variant max-w-2xl">
+          自然草木纸质渲染引擎输出的全部作品。单图创作以静谧独幅铺展，系列策划以叠纸画册形式聚拢连续分镜。
+        </p>
+</div>
+<!-- 快捷视图切换与统计 -->
+<div class="flex items-center gap-space-sm bg-surface-container-low p-1.5 rounded-xl shadow-sm">
+<div class="flex items-center px-space-sm py-1 rounded-lg bg-surface-container-lowest text-primary shadow-sm">
+<span class="material-symbols-outlined text-[18px] mr-1.5">auto_stories</span>
+<span class="font-body-sm text-body-sm font-medium">全部展出 (28)</span>
+</div>
+<div class="flex items-center px-space-sm py-1 rounded-lg text-on-surface-variant hover:text-on-surface transition-colors cursor-pointer">
+<span class="font-body-sm text-body-sm">单图 (19)</span>
+</div>
+<div class="flex items-center px-space-sm py-1 rounded-lg text-on-surface-variant hover:text-on-surface transition-colors cursor-pointer">
+<span class="font-body-sm text-body-sm">系列策划 (9)</span>
+</div>
+<div class="w-px h-4 bg-outline-variant/50 mx-1"></div>
+<button class="p-1.5 text-on-surface-variant hover:text-primary transition-colors rounded-lg hover:bg-surface-container">
+<span class="material-symbols-outlined text-[20px]">tune</span>
+</button>
+</div>
+</div>
+<!-- 展品瀑布/网格阵列 -->
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-space-lg">
+<!-- 卡片 1:【系列策划 · 叠纸画册效果】（核心展示对象：点击已进入全景预览） -->
+<div class="relative group cursor-pointer" onclick="openPreviewModal('series')">
+<!-- 底层倾斜纸张 2 -->
+<div class="absolute inset-0 translate-y-2.5 rotate-3 bg-surface-container rounded-xl shadow-sm transition-transform duration-300 group-hover:rotate-6 group-hover:translate-y-3.5"></div>
+<!-- 底层倾斜纸张 1 -->
+<div class="absolute inset-0 translate-y-1 -rotate-1.5 bg-surface-container-high rounded-xl shadow-md transition-transform duration-300 group-hover:-rotate-3 group-hover:translate-y-2"></div>
+<!-- 表层主卡片 -->
+<div class="relative bg-surface-container-lowest rounded-xl p-space-sm shadow-md transition-all duration-300 group-hover:-translate-y-1.5 group-hover:shadow-xl">
+<div class="relative w-full aspect-[4/3] rounded-lg overflow-hidden bg-surface-container-low mb-space-sm">
+<img class="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" data-alt="A cinematic Japanese gouache and colored ink painting of a crimson red fox sitting quietly on an ancient mossy stone beneath a towering camphor tree, golden morning sunbeams filtering through leaves, fine washi paper grain texture, muted moss greens and vermilion palette." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDtLGIv1CpsIbJgk9dfRiz6d_wMUA8_ZeBglPG7zIDyNoeGsld7cEBolS4Eofh3ufhIOJPHZOYJY8VkHEhqIoFTwfn-XiRjcya_4wWIOMAp6EbeEJaHk4ZeFgY4oNYFDWrK5r43ZYDTjacazYti7CICrrHImJMnbiCQHTv2BaB_vu56N2gvG2og5j_QkZsSy7c_Pm-QorXZnSwi87Uvk2vnsU2L7w8C-rR_hKmSgPuhk64DFq7MSlI2Og">
+<!-- 系列画册层级角标 -->
+<div class="absolute top-2.5 right-2.5 px-2.5 py-1 rounded-full bg-surface-bright/90 backdrop-blur-md shadow-sm flex items-center gap-1.5 text-primary">
+<span class="material-symbols-outlined text-[16px]">dynamic_feed</span>
+<span class="font-meta-sm text-meta-sm font-medium">系列画册 · 4幕连贯</span>
+</div>
+<!-- 底部浮动分镜预览提示条 -->
+<div class="absolute bottom-2 inset-x-2 px-2 py-1.5 rounded-lg bg-inverse-surface/75 backdrop-blur-md text-inverse-on-surface flex items-center justify-between text-meta-sm font-meta-sm opacity-90 group-hover:opacity-100 transition-opacity">
+<span class="">当前第 1 幕 · 初见赤狐</span>
+<span class="flex items-center gap-1 text-primary-fixed">
+<span class="">点按进入剧场</span>
+<span class="material-symbols-outlined text-[14px]">open_in_full</span>
+</span>
+</div>
+</div>
+<div class="px-1 py-0.5">
+<div class="flex items-center justify-between gap-space-xs mb-1">
+<h3 class="font-headline-sm text-headline-sm text-on-surface truncate">《狐之林》连贯故事绘卷</h3>
+<span class="px-1.5 py-0.5 rounded bg-secondary-container text-on-secondary-container font-meta-sm text-meta-sm shrink-0">16:9 故事板</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant line-clamp-1 mb-2">日本岩彩、青苔林地、晨昏光影连续种子叙事...</p>
+<div class="flex items-center justify-between text-on-surface-variant font-meta-sm text-meta-sm">
+<span class="flex items-center gap-1"><span class="material-symbols-outlined text-[14px]">calendar_today</span> 10分钟前生成</span>
+<span class="text-primary font-medium">Seed: 1048821+</span>
+</div>
+</div>
+</div>
+</div>
+<!-- 卡片 2:【单图创作 · 独立单幅画作卡片】 -->
+<div class="relative group cursor-pointer bg-surface-container-lowest rounded-xl p-space-sm shadow-sm transition-all duration-300 hover:-translate-y-1.5 hover:shadow-md" onclick="openPreviewModal('single')">
+<div class="relative w-full aspect-[4/3] rounded-lg overflow-hidden bg-surface-container-low mb-space-sm">
+<img class="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" data-alt="A delicate botanical watercolor painting of a solitary wild white peony with dewdrops on emerald leaves, soft handmade rag paper texture, tranquil muted olive green background, gentle morning diffused daylight." src="https://lh3.googleusercontent.com/aida-public/AB6AXuA9VgWmTu40ZqYfEuSh_rytcpXjWDup_FbJhxqUzCpjgDU6o0uwecOAqptZKSiWEE2s3uRTwi_4gyYzBvhG1DLRvhb_gFzYw6hcNOyc3DD4D8Qd4YD1DxzXZrMEZQz0U1OdsudFsGgTJ4qNFJf_eAIbYjw0azfkfnKYXapwq-s-62Lz7XEcQ4247bfdIkyiPN-EaEr9AkEpD2Aao-q_fg8OEOEsSuV9I56KKrAGqhXtiVpPUV2e_VtjuA">
+<div class="absolute top-2.5 right-2.5 px-2 py-0.5 rounded-full bg-surface-bright/90 backdrop-blur-md shadow-sm text-on-surface-variant font-meta-sm text-meta-sm flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px]">image</span>
+<span class="">独幅绘作</span>
+</div>
+<div class="absolute inset-0 bg-primary/10 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+<span class="px-3 py-1.5 rounded-full bg-surface-bright/95 text-primary font-body-sm text-body-sm shadow-md flex items-center gap-1">
+<span class="material-symbols-outlined text-[16px]">zoom_in</span> 检视单图
+            </span>
+</div>
+</div>
+<div class="px-1 py-0.5">
+<div class="flex items-center justify-between gap-space-xs mb-1">
+<h3 class="font-headline-sm text-headline-sm text-on-surface truncate">雨后白牡丹写生</h3>
+<span class="px-1.5 py-0.5 rounded bg-surface-container-high text-on-surface-variant font-meta-sm text-meta-sm shrink-0">1:1 正方</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant line-clamp-1 mb-2">手撕水彩纸肌理、自然矿物颜料、晨雾微光漫射</p>
+<div class="flex items-center justify-between text-on-surface-variant font-meta-sm text-meta-sm">
+<span class="">2小时前</span>
+<span class="text-secondary font-medium">Seed: 8847190</span>
+</div>
+</div>
+</div>
+<!-- 卡片 3:【系列策划 · 叠纸画册效果 2】 -->
+<div class="relative group cursor-pointer" onclick="openPreviewModal('series')">
+<div class="absolute inset-0 translate-y-2.5 -rotate-2.5 bg-surface-container rounded-xl shadow-sm transition-transform duration-300 group-hover:-rotate-5 group-hover:translate-y-3.5"></div>
+<div class="absolute inset-0 translate-y-1 rotate-1 bg-surface-container-high rounded-xl shadow-md transition-transform duration-300 group-hover:rotate-2 group-hover:translate-y-2"></div>
+<div class="relative bg-surface-container-lowest rounded-xl p-space-sm shadow-md transition-all duration-300 group-hover:-translate-y-1.5 group-hover:shadow-xl">
+<div class="relative w-full aspect-[4/3] rounded-lg overflow-hidden bg-surface-container-low mb-space-sm">
+<img class="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" data-alt="Traditional Japanese zen garden rock arrangement with raked sand ripples, Bonsai pine tree clinging to moss, morning mist, subtle earthen pigments, warm washi paper aesthetics." src="https://lh3.googleusercontent.com/aida-public/AB6AXuB34EfFSLm_q4cpEWkPCE8jkOb3Vuvxfk9gB4VgMzopg2x0eO9ew8UGc7xZj80_fZ4fgE5JioRvS3HdOcHRXUy2gjSHvBaDiThsB6axn0r2esH5N2IkzxtDCKow0FylOTaZzxVQySOmZZGy8E-0QLLlMU1Gd1Y3WTN7me8FdDUwweVM_XRcHRBb4icydci1cca1aERLe4Hnrd2ac_kTxz3LSuUgDq15IZ8w-yc3ijU3QLtsHmI2lBRjyA">
+<div class="absolute top-2.5 right-2.5 px-2.5 py-1 rounded-full bg-surface-bright/90 backdrop-blur-md shadow-sm flex items-center gap-1.5 text-primary">
+<span class="material-symbols-outlined text-[16px]">dynamic_feed</span>
+<span class="font-meta-sm text-meta-sm font-medium">系列画册 · 3幕连贯</span>
+</div>
+</div>
+<div class="px-1 py-0.5">
+<div class="flex items-center justify-between gap-space-xs mb-1">
+<h3 class="font-headline-sm text-headline-sm text-on-surface truncate">枯山水四时禅境</h3>
+<span class="px-1.5 py-0.5 rounded bg-secondary-container text-on-secondary-container font-meta-sm text-meta-sm shrink-0">4:3 系列</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant line-clamp-1 mb-2">枯山水耙痕、苍松翠柏、四时雨露连续分镜...</p>
+<div class="flex items-center justify-between text-on-surface-variant font-meta-sm text-meta-sm">
+<span class="">昨天</span>
+<span class="text-primary font-medium">Seed: 9110243+</span>
+</div>
+</div>
+</div>
+</div>
+<!-- 卡片 4:【单图创作 · 独立单幅画作卡片 2】 -->
+<div class="relative group cursor-pointer bg-surface-container-lowest rounded-xl p-space-sm shadow-sm transition-all duration-300 hover:-translate-y-1.5 hover:shadow-md" onclick="openPreviewModal('single')">
+<div class="relative w-full aspect-[4/3] rounded-lg overflow-hidden bg-surface-container-low mb-space-sm">
+<img class="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" data-alt="Warm sunlight casting leaf shadows onto a ceramic tea bowl resting on a weathered natural cedar wood table, tactile paper texture, organic minimalism, earthy green and warm ochre tones." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBoHt06OvUs0f-unF0p7Gqh1T-hD5fisUSkxH_aXLPMXVV2EI9EGt6fVWnt0Pa0F4uuItr6SPggv0BXjmayp9cU1a2sKPUiOFo2vxURVH0t6yom9j5AphR7QFaHGO597YH-RviK0ZyMFqk45XiePUhzEfDPd1nIm6n1gaVNInzqpdT3d3Jo2gElr6LN0o1diXO-69vynuU6e79auWYYgpVoWqRrH3Zf_BWymCjIyP0V_Xo8XvG7PQSxfQ">
+<div class="absolute top-2.5 right-2.5 px-2 py-0.5 rounded-full bg-surface-bright/90 backdrop-blur-md shadow-sm text-on-surface-variant font-meta-sm text-meta-sm flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px]">image</span>
+<span class="">独幅绘作</span>
+</div>
+</div>
+<div class="px-1 py-0.5">
+<div class="flex items-center justify-between gap-space-xs mb-1">
+<h3 class="font-headline-sm text-headline-sm text-on-surface truncate">一盏茶器与晨隙</h3>
+<span class="px-1.5 py-0.5 rounded bg-surface-container-high text-on-surface-variant font-meta-sm text-meta-sm shrink-0">4:3 静物</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant line-clamp-1 mb-2">粗陶釉面质地、杉木案几、光斑斑驳微隙</p>
+<div class="flex items-center justify-between text-on-surface-variant font-meta-sm text-meta-sm">
+<span class="">2天前</span>
+<span class="text-secondary font-medium">Seed: 4092178</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- ========================================================================= -->
+<!-- 核心重点：大图灯箱浮层 (Inspector Overlay Modal) -->
+<!-- ========================================================================= -->
+<div class="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 md:p-6 bg-inverse-surface/60 backdrop-blur-md transition-all duration-300" id="lightbox-modal">
+<!-- 模态窗口主体容器 (Artisanal Atelier Paper Container) -->
+<div class="relative w-full h-full max-h-[94vh] bg-surface-bright rounded-2xl shadow-[0_20px_60px_rgba(40,48,36,0.28)] flex flex-col overflow-hidden">
+<!-- ================= 顶部标题与控制栏 ================= -->
+<div class="h-16 px-space-lg bg-surface-container-low/90 backdrop-blur-md flex items-center justify-between gap-space-md shrink-0">
+<!-- 左侧：作品基本元信息与模式标识 -->
+<div class="flex items-center gap-space-md min-w-0">
+<div class="w-10 h-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center shrink-0" id="badge-mode-icon">
+<span class="material-symbols-outlined text-[24px]" id="badge-icon-symbol">dynamic_feed</span>
+</div>
+<div class="flex flex-col min-w-0">
+<div class="flex items-center gap-space-xs">
+<h1 class="font-headline-sm text-headline-sm text-on-surface truncate" id="modal-work-title">《狐之林》连贯故事绘卷</h1>
+<span class="px-2 py-0.5 rounded-full bg-secondary-container text-on-secondary-container font-meta-sm text-meta-sm font-medium shrink-0" id="modal-work-tag">
+                共 4 幕分镜 · 连续生息
+              </span>
+</div>
+<div class="flex items-center gap-space-sm text-on-surface-variant font-meta-sm text-meta-sm mt-0.5 truncate">
+<span class="">风貌：自然岩彩与古墨写意</span>
+<span class="">·</span>
+<span class="">2024-04-18 10:24 生成</span>
+<span class="">·</span>
+<span class="text-primary">算力引擎：Sprout-Botanical-v2.4</span>
+</div>
+</div>
+</div>
+<!-- 中部：快速体验两模式切换器 (Series vs Single Comparison Toggle) -->
+<div class="hidden lg:flex items-center bg-surface-container p-1 rounded-xl shadow-inner">
+<button class="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-primary text-on-primary font-body-sm text-body-sm font-medium shadow-sm transition-all" id="mode-btn-series" onclick="switchPreviewMode('series')">
+<span class="material-symbols-outlined text-[16px]">cloud_download</span>
+<span class="">系列多图连贯态</span>
+</button>
+<button class="flex items-center gap-1.5 px-3 py-1 rounded-lg text-on-surface-variant hover:text-on-surface font-body-sm text-body-sm transition-all" id="mode-btn-single" onclick="switchPreviewMode('single')">
+<span class="material-symbols-outlined text-[16px]">aspect_ratio</span>
+<span class="">单图高保真检视态</span>
+</button>
+</div>
+<!-- 右侧：全局动作组 (上一套、下一套、打包下载、关闭) -->
+<div class="flex items-center gap-space-xs shrink-0">
+<div class="hidden sm:flex items-center bg-surface-container rounded-lg p-0.5">
+<button class="p-1.5 text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high rounded transition-colors" title="查看上一套">
+<span class="material-symbols-outlined text-[18px]">arrow_back</span>
+</button>
+<span class="font-meta-sm text-meta-sm text-on-surface-variant px-1.5">3 / 28</span>
+<button class="p-1.5 text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high rounded transition-colors" title="查看下一套">
+<span class="material-symbols-outlined text-[18px]">arrow_forward</span>
+</button>
+</div>
+<button class="flex items-center gap-1 px-space-md py-1.5 rounded-lg bg-primary text-on-primary hover:bg-primary-container transition-all shadow-sm" id="btn-batch-download">
+<span class="material-symbols-outlined text-[18px]">folder_zip</span>
+<span class="font-body-sm text-body-sm font-medium" id="batch-download-label">打包下载全套ZIP</span>
+</button>
+<button class="w-9 h-9 rounded-lg bg-surface-container hover:bg-error-container hover:text-on-error-container text-on-surface-variant flex items-center justify-center transition-colors" onclick="closePreviewModal()" title="关闭 (Esc)">
+<span class="material-symbols-outlined text-[20px]">close</span>
+</button>
+</div>
+</div>
+<!-- ================= 视口主内容区 (两栏：左侧画作主舞台 + 右侧参数脚本抽屉) ================= -->
+<div class="flex-1 flex flex-col md:flex-row min-h-0 relative">
+<!-- 左侧：大图主舞台与底部连贯胶卷轨道 (Stage Canvas) -->
+<div class="flex-1 flex flex-col min-w-0 bg-surface-dim/40 relative">
+<!-- 舞台悬浮快捷工具栏 (Zoom / Layout / Inspect) -->
+<div class="absolute top-4 left-4 z-20 flex items-center gap-1.5 bg-surface-bright/90 backdrop-blur-md p-1 rounded-xl shadow-md">
+<button class="p-1.5 rounded-lg hover:bg-surface-container text-on-surface-variant hover:text-on-surface transition-colors" onclick="adjustZoom(0.1)" title="放大细节">
+<span class="material-symbols-outlined text-[18px]">zoom_in</span>
+</button>
+<span class="font-meta-sm text-meta-sm text-on-surface-variant px-1.5" id="zoom-level-indicator">100%</span>
+<button class="p-1.5 rounded-lg hover:bg-surface-container text-on-surface-variant hover:text-on-surface transition-colors" onclick="adjustZoom(-0.1)" title="缩小画面">
+<span class="material-symbols-outlined text-[18px]">zoom_out</span>
+</button>
+<button class="p-1.5 rounded-lg hover:bg-surface-container text-on-surface-variant hover:text-on-surface transition-colors" onclick="resetZoom()" title="还原比例 1:1">
+<span class="material-symbols-outlined text-[18px]">fit_screen</span>
+</button>
+<div class="w-px h-4 bg-outline-variant/60 mx-0.5"></div>
+<!-- 系列专属视图排版方式切换 -->
+<div class="flex items-center gap-1" id="layout-toggle-group">
+<button class="px-2 py-1 rounded bg-secondary-container text-on-secondary-container font-meta-sm text-meta-sm flex items-center gap-1" id="view-mode-carousel" onclick="switchSeriesLayout('carousel')" title="单幕剧场放映">
+<span class="material-symbols-outlined text-[14px]">movie</span>
+<span class="">焦点剧场</span>
+</button>
+<button class="px-2 py-1 rounded hover:bg-surface-container text-on-surface-variant font-meta-sm text-meta-sm flex items-center gap-1" id="view-mode-waterfall" onclick="switchSeriesLayout('waterfall')" title="连贯长图瀑布拼版">
+<span class="material-symbols-outlined text-[14px]">view_stream</span>
+<span class="">连贯拼版</span>
+</button>
+</div>
+</div>
+<!-- 舞台悬浮元标记 (左下角纸质标牌) -->
+<div class="absolute bottom-28 md:bottom-28 left-6 z-20 pointer-events-none hidden sm:block">
+<div class="px-3 py-1.5 rounded-xl bg-surface-bright/85 backdrop-blur-md shadow-sm flex items-center gap-2 text-on-surface-variant font-meta-sm text-meta-sm"><span class="w-2 h-2 rounded-full bg-primary"></span><span id="stage-meta-res" class="">1792 × 1024 (16:9 宽屏)</span><span class="">·</span><span class="">高清 HD</span><span class="">·</span><span id="stage-meta-texture" class="">PNG 无损高保真</span></div>
+</div>
+<!-- 画作核心投映画布区 (Interactive Central Canvas) -->
+<div class="flex-1 flex items-center justify-center p-4 md:p-8 overflow-auto relative" id="main-stage-viewport">
+<!-- 单幕大图模式渲染容器 (Carousel Stage) -->
+<div class="relative max-w-full max-h-full flex items-center justify-center transition-all duration-300" id="carousel-view-container">
+<!-- 精致画纸衬底与阴影层 -->
+<div class="relative bg-surface-container-lowest p-2 md:p-3 rounded-2xl shadow-[0_12px_40px_rgba(40,48,36,0.16)] flex flex-col items-center">
+<div class="relative overflow-hidden rounded-xl group/stage">
+<img class="max-h-[50vh] md:max-h-[56vh] w-auto object-contain rounded-lg transition-transform duration-200" data-alt="A cinematic Japanese gouache and colored ink painting of a crimson red fox sitting quietly on an ancient mossy stone beneath a towering camphor tree, golden morning sunbeams filtering through leaves, fine washi paper grain texture, muted moss greens and vermilion palette." id="stage-main-image" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBosw1w1a5IEEWyoU26FtxyX7zeDMJSKT3hbhBqaM0Uit-Dh4AQTiTqABw89mOcUKF4yi1wfn2NMznni8KbFfQx4wy9rm_FbvR1REoSJ1qjYHi3EDWdhWo0Tp12JrBi35x5fVaitVVIW8rBCHgP-VA8S4eSi0G5a_WFywt4rnK8Ds5miTSX5-2o_zlTQJMJyIPjpF17u3NjCzwNnv4f_Fxon4ttfJ8rFOmAhCFjQsOFzoPfFJ3YzwRqVw">
+<!-- 画面上的微互动覆盖层 -->
+<div class="absolute top-3 right-3 opacity-0 group-hover/stage:opacity-100 transition-opacity flex items-center gap-1.5 bg-surface-bright/90 backdrop-blur-md p-1 rounded-lg shadow-sm">
+<button class="p-1 rounded text-on-surface-variant hover:text-primary transition-colors" title="单独下载当前分镜">
+<span class="material-symbols-outlined text-[18px]">download</span>
+</button>
+<button class="p-1 rounded text-on-surface-variant hover:text-primary transition-colors" title="全屏沉浸">
+<span class="material-symbols-outlined text-[18px]">fullscreen</span>
+</button>
+</div>
+</div>
+<!-- 画纸底部标签铭牌 -->
+<div class="w-full mt-2 pt-1 flex items-center justify-between text-on-surface-variant font-meta-sm text-meta-sm px-1">
+<span id="stage-caption-text" class="">Scene 01: 初见赤狐 (林间破晓与青苔巨石)</span>
+<span class="text-outline">芽绘纸质引擎生成 · 无损点阵</span>
+</div>
+</div>
+</div>
+<!-- 连贯长图瀑布拼版容器 (Waterfall Scroll View - 默认隐藏) -->
+<div class="hidden w-full max-w-4xl h-full overflow-y-auto space-y-6 pr-2 py-4" id="waterfall-view-container">
+<div class="p-4 bg-surface-container-lowest rounded-2xl shadow-md">
+<div class="text-on-surface font-headline-sm text-headline-sm mb-2">幕一 · 初见赤狐</div>
+<img class="w-full h-auto rounded-xl object-cover mb-2" data-alt="A cinematic Japanese gouache painting of a crimson red fox sitting quietly on an ancient mossy stone beneath a camphor tree, morning mist, warm sunlight." src="https://lh3.googleusercontent.com/aida-public/AB6AXuB_lyBEP8OOtUNf0gLP7ZKAMKtJnjfhu2zb_oI2sStZs3EBf1Iqfd-_bD_z_yv8Eq9LhDBiz0O5ripeTStpvDJKkVIkHsiGaq3vouJylDjNNrATO9wI-Kc88PxdN7AP32y-0TMl9H265DEBMrocggE-l2ORNuTTr7dfbnwFUTf61t7hJUjdlBKAWPJaiZW2iE3Nn_ptybRoBQZImZh2g4_4lwIGJ8g6CzaKT5ijP5JWw-OcbIKblLkKJA">
+<p class="font-body-sm text-body-sm text-on-surface-variant">晨光熹微照耀林隙，赤狐初探，青苔在初光下泛起微金。</p>
+</div>
+<div class="p-4 bg-surface-container-lowest rounded-2xl shadow-md">
+<div class="text-on-surface font-headline-sm text-headline-sm mb-2">幕二 · 午后静憩</div>
+<img class="w-full h-auto rounded-xl object-cover mb-2" data-alt="A quiet Japanese watercolor scene of a fox curled up peacefully asleep on sun-warmed cedar roots, dappled afternoon light, lush green ferns." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDh2-6BxTbKjkCGGMtVtXBU0D9BNzxvV_WjZCNIPvGpEktF9lKVdf2yj_Iw1oxpMu_T6SdbQ2TdpSmKKnZN_KVrubwDcOSir11bh5S1026kJ_U2kj3FobXTbN24IW_rmDghn-SdrKN-jntDpPeTpKxejxzD27JGcid6m424JhTqsQYx5eCSAT1sMx8EjzeL0eQR0D6wcjE-BWF-tb8_h3uS9nVjN3FFJNILnlDamz_OfwM8Yktx7O0gzw">
+<p class="font-body-sm text-body-sm text-on-surface-variant">日影西移，赤狐盘卧于百年杉木盘根之上，呼吸绵长安适。</p>
+</div>
+<div class="p-4 bg-surface-container-lowest rounded-2xl shadow-md">
+<div class="text-on-surface font-headline-sm text-headline-sm mb-2">幕三 · 夜巡林隙</div>
+<img class="w-full h-auto rounded-xl object-cover mb-2" data-alt="Moonlit enchanted forest painting with a sly fox stepping through misty bamboo groves and glowing forest fireflies, deep indigo and moss green tones." src="https://lh3.googleusercontent.com/aida-public/AB6AXuAbJraiUocyHVWV5DjIi8IP7J51EG1GOGwqmu3wb1pZC25bIYYqvojJOP_g71R44RiztEVTBpHch49DubEsjDPXkAsueJp881rQOL4pDhCoLOAsB-bdK-xl-2i3jgo6Hfc8yDfQR5Z1VIcPJIvwkOFXyvrdPlZzRh2wz0L2_I30WXxE3HwJ5vmuYATvGbZdpl6ZZsjeUlpLiaL_MpsnACjEY-Y93X3f82jNx-Gak3gvY_0saHgUb4EV-A">
+<p class="font-body-sm text-body-sm text-on-surface-variant">幽夜薄雾升腾，荧光微光游弋林间，赤狐警觉踏露夜行。</p>
+</div>
+<div class="p-4 bg-surface-container-lowest rounded-2xl shadow-md">
+<div class="text-on-surface font-headline-sm text-headline-sm mb-2">幕四 · 晨曦微露</div>
+<img class="w-full h-auto rounded-xl object-cover mb-2" data-alt="Dawn breaking over a tranquil mountain ridge, the red fox perched overlooking a sea of clouds, ethereal serene botanical painting." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBDh7hPaA8X2myNh85jUPvOuUy539H92RyutRco7IB00Avi21dB67bn052gmmujlSXuD0l6qRznnCnOnzzxlGlOG9UH4TGCWPuZQfIZqkicL8OSmMXiU5csU96OsztVhXrwk-RbRoBH_NSvcwDj3w1p53AfxxO4x0slWE1EpF57BVPsahIQCPqhgH6DpBC5KQ_Vtn1eVMD9YH1ZYi7oZgPiUToskzNAtH3JI0KHFkJQzhRdyS84UG7K6g">
+<p class="font-body-sm text-body-sm text-on-surface-variant">高崖云海翻涌，朝霞初启，故事画卷圆满交织闭环。</p>
+</div>
+</div>
+</div>
+<!-- 底部：系列连贯分镜缩略图轨道 (Thumbnail Filmstrip / Board Navigator) -->
+<div class="h-24 px-space-lg py-2 bg-surface-container-low/95 backdrop-blur-md flex items-center justify-between gap-space-md shrink-0" id="series-filmstrip-bar">
+<div class="flex items-center gap-space-xs text-on-surface-variant font-meta-sm text-meta-sm shrink-0">
+<span class="material-symbols-outlined text-[18px] text-primary">view_carousel</span>
+<span class="">故事分镜轨道</span>
+</div>
+<!-- 可平滑横向滚动的轨道条 -->
+<div class="flex-1 flex items-center justify-center gap-space-sm overflow-x-auto py-1">
+<!-- 分镜 1 (当前选中) -->
+<div class="cursor-pointer flex items-center gap-2 p-1.5 rounded-xl bg-surface-bright shadow-sm border-2 border-primary transition-all shrink-0" id="film-scene-1" onclick="selectScene(1)">
+<div class="w-16 h-11 rounded-lg overflow-hidden bg-surface-container relative">
+<img class="w-full h-full object-cover" data-alt="Thumbnail 1 of crimson red fox on mossy stone in morning light, Japanese gouache style." src="https://lh3.googleusercontent.com/aida-public/AB6AXuAvKQtC-SFcxrbPv3y-0dCGI-Z6uV0s2tB0qkTQ2r2GPV9bHpViAtLWlnEE_cawUgAn4kX7ZhyVFMVqAdRKmJByAk2nHMUn_Q5NqFel0rUXKAnRriR6vUavp8FjdwQ0o0fnbrj8VXoxCUYZ8RCjnO2mR84Ul8L2Rn2aCTCJjstWQdvOE4fhY8Z4LfkbxdEEQ3eOpx93urlfP7tadt63imJU7fh_Y47uJsvTkx-NrFKg2qpqs42dYrPvxg">
+<span class="absolute bottom-0.5 right-0.5 px-1 rounded bg-primary text-on-primary font-meta-sm text-[9px] leading-tight">01</span>
+</div>
+<div class="flex flex-col text-left pr-2">
+<span class="font-body-sm text-body-sm font-medium text-primary leading-tight">Scene 01</span>
+<span class="font-meta-sm text-meta-sm text-on-surface-variant">初见赤狐</span>
+</div>
+</div>
+<!-- 分镜 2 -->
+<div class="cursor-pointer flex items-center gap-2 p-1.5 rounded-xl bg-surface-container-high/60 hover:bg-surface-bright transition-all shrink-0 opacity-80 hover:opacity-100" id="film-scene-2" onclick="selectScene(2)">
+<div class="w-16 h-11 rounded-lg overflow-hidden bg-surface-container relative">
+<img class="w-full h-full object-cover" data-alt="Thumbnail 2 of curled up fox asleep on warm cedar roots, dappled light." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCD9MmkVgvj3jEo0boj7Pug_VRJYM9mlpHFoEAJ3pS-KfGElDCBjhOr5Xt-dud5rRqXm5_gR6cfwYFyUqvt0ygwyKBS_IfpLaL1Q-EaUVXQ8ndGtN1fE7XcmvIk32HA-yfiHKWK419TbKRePAg35T1linnuwYnv8qAvccBsOOldK-K0m7g5GZDqLYV1L0LSFDh7_l-2C_NIGKeAi1SA-GDMJSzFyzRqDP7DAQqd1iSbfiahivc2C9Dclw">
+<span class="absolute bottom-0.5 right-0.5 px-1 rounded bg-inverse-surface/80 text-inverse-on-surface font-meta-sm text-[9px] leading-tight">02</span>
+</div>
+<div class="flex flex-col text-left pr-2">
+<span class="font-body-sm text-body-sm font-medium text-on-surface leading-tight">Scene 02</span>
+<span class="font-meta-sm text-meta-sm text-on-surface-variant">午后静憩</span>
+</div>
+</div>
+<!-- 分镜 3 -->
+<div class="cursor-pointer flex items-center gap-2 p-1.5 rounded-xl bg-surface-container-high/60 hover:bg-surface-bright transition-all shrink-0 opacity-80 hover:opacity-100" id="film-scene-3" onclick="selectScene(3)">
+<div class="w-16 h-11 rounded-lg overflow-hidden bg-surface-container relative">
+<img class="w-full h-full object-cover" data-alt="Thumbnail 3 of fox stepping through indigo night bamboo grove with glowing fireflies." src="https://lh3.googleusercontent.com/aida-public/AB6AXuA8p_9bEb5HS8b9hd5jAN-SgSEVJBFNH5IyRxcC5i-iRrJyVwRTRtgSa7wL4uIrx9RJMmhfgYaiy_U-_pTacJihsF7l90ZYQWYjnB4sHy0B_CcgS7VyHPM40sjCX8w1DJuhbL8cIA_bkjmM77B7iDUV4yo1lyhqSz0vFAwqUwJ7_2PDlOJyC2YOagtIVAKmHRbBjWVgJFFfsoIkrKT3AVBlcC6K10dwYyy-mIOuykMBtR_xTt9YT0Wpfg">
+<span class="absolute bottom-0.5 right-0.5 px-1 rounded bg-inverse-surface/80 text-inverse-on-surface font-meta-sm text-[9px] leading-tight">03</span>
+</div>
+<div class="flex flex-col text-left pr-2">
+<span class="font-body-sm text-body-sm font-medium text-on-surface leading-tight">Scene 03</span>
+<span class="font-meta-sm text-meta-sm text-on-surface-variant">夜巡林隙</span>
+</div>
+</div>
+<!-- 分镜 4 -->
+<div class="cursor-pointer flex items-center gap-2 p-1.5 rounded-xl bg-surface-container-high/60 hover:bg-surface-bright transition-all shrink-0 opacity-80 hover:opacity-100" id="film-scene-4" onclick="selectScene(4)">
+<div class="w-16 h-11 rounded-lg overflow-hidden bg-surface-container relative">
+<img class="w-full h-full object-cover" data-alt="Thumbnail 4 of red fox perched atop a misty dawn mountain ridge looking at the rising sun." src="https://lh3.googleusercontent.com/aida-public/AB6AXuAcIy-ToHCEVtlcFy68y9qrZEcdf07iI6EhhCqvNgOH7j94L0BvE-OBjF7L86QJimn7Tx_W63COLMpZDjBpAhxpNC9rCQIIFKtPcJt-SQPijym0SOA6VOe0G7aHWaaqNFGxKYkvOVwiIQ5Gtv-4-g0yKIuLHtUuFknW_hJheBnFLjm53QyCXihQr9YcDnEabVyb-mYrMtbCr8e2f4dLmtIbaEnMdXirU4TxqZuoZt-NNwvYzEUgJ5rfHw">
+<span class="absolute bottom-0.5 right-0.5 px-1 rounded bg-inverse-surface/80 text-inverse-on-surface font-meta-sm text-[9px] leading-tight">04</span>
+</div>
+<div class="flex flex-col text-left pr-2">
+<span class="font-body-sm text-body-sm font-medium text-on-surface leading-tight">Scene 04</span>
+<span class="font-meta-sm text-meta-sm text-on-surface-variant">晨曦微露</span>
+</div>
+</div>
+</div>
+<!-- 右侧快捷切帧 -->
+<div class="flex items-center gap-1 shrink-0">
+<button class="w-7 h-7 rounded-lg bg-surface-container hover:bg-surface-container-high flex items-center justify-center text-on-surface-variant hover:text-on-surface transition-colors" onclick="navScene(-1)">
+<span class="material-symbols-outlined text-[16px]">chevron_left</span>
+</button>
+<button class="w-7 h-7 rounded-lg bg-surface-container hover:bg-surface-container-high flex items-center justify-center text-on-surface-variant hover:text-on-surface transition-colors" onclick="navScene(1)">
+<span class="material-symbols-outlined text-[16px]">chevron_right</span>
+</button>
+</div>
+</div>
+</div>
+<!-- ================= 右侧可折叠参数与脚本抽屉 (Inspector Drawer) ================= -->
+<div class="w-full md:w-80 lg:w-96 bg-surface-container-lowest p-space-lg flex flex-col justify-between overflow-y-auto shrink-0 shadow-[-4px_0_24px_rgba(40,48,36,0.04)]" id="inspector-drawer">
+<div class="space-y-space-md">
+<!-- 抽屉头部 -->
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-space-xs text-primary">
+<span class="material-symbols-outlined text-[20px]">tune</span>
+<span class="font-headline-sm text-headline-sm">参数与创作配方</span>
+</div>
+
+</div>
+<!-- 动态面板 A: 系列连贯专属信息 (Series Mode Exclusive) -->
+<div class="space-y-space-md" id="panel-series-info">
+<!-- 全局世界观基底提示词 -->
+<div class="p-space-sm rounded-xl bg-surface-container-low space-y-1.5">
+<div class="flex items-center justify-between text-on-surface-variant">
+<span class="font-meta-sm text-meta-sm uppercase tracking-wider flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px]">public</span> 全局故事世界观 (Master Prompt)
+                  </span>
+<button class="hover:text-primary transition-colors" onclick="copyPrompt('master')" title="复制">
+<span class="material-symbols-outlined text-[15px]">content_copy</span>
+</button>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface italic leading-relaxed" id="prompt-master-text">
+                  "Japanese traditional mineral pigments, Nihonga washi paper grain, misty secluded forest realm, serene camphor trees, moss garden, harmonious earth &amp; vermilion palette."
+                </p>
+</div>
+<!-- 当前分镜独有镜头与提示词 -->
+<div class="p-space-sm rounded-xl bg-surface-container-low space-y-1.5">
+<div class="flex items-center justify-between text-on-surface-variant">
+<span class="font-meta-sm text-meta-sm uppercase tracking-wider flex items-center gap-1 text-primary">
+<span class="material-symbols-outlined text-[14px]">videocam</span> 当前幕镜头描摹 (Scene Prompt)
+                  </span>
+<button class="hover:text-primary transition-colors" onclick="copyPrompt('scene')" title="复制">
+<span class="material-symbols-outlined text-[15px]">content_copy</span>
+</button>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface font-medium leading-relaxed" id="prompt-scene-text">
+                  "Medium close-up shot, a solitary crimson fox sitting composed on a weathered boulder, morning sunlight filtering through mist, dew drops, serene and observant expression."
+                </p>
+</div>
+<!-- 连续种子序列与调度 -->
+<div class="space-y-1.5"><span class="font-meta-sm text-meta-sm text-on-surface-variant">基底垫图与连贯参考</span><div class="flex items-center justify-between p-2 rounded-lg bg-surface-container font-body-sm text-body-sm text-on-surface"><div class="flex items-center gap-1.5"><span class="material-symbols-outlined text-primary text-[16px]">image</span><span class="">已启用连贯风格垫图</span></div><span class="font-meta-sm text-meta-sm text-primary font-medium">参考权重 0.65</span></div></div>
+</div>
+<!-- 动态面板 B: 单图检视模式专属信息 (Single Mode Exclusive - 默认由JS显隐) -->
+<div class="hidden space-y-space-md" id="panel-single-info">
+<div class="p-space-sm rounded-xl bg-surface-container-low space-y-1.5">
+<div class="flex items-center justify-between text-on-surface-variant">
+<span class="font-meta-sm text-meta-sm uppercase tracking-wider flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px]">psychology</span> 完整生成提示词 (Prompt)
+                  </span>
+<button class="hover:text-primary transition-colors" title="复制提示词">
+<span class="material-symbols-outlined text-[15px]">content_copy</span>
+</button>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface italic leading-relaxed">
+                  "A delicate botanical watercolor painting of a solitary wild white peony with dewdrops on emerald leaves, soft handmade rag paper texture, tranquil muted olive green background, gentle morning diffused daylight, 8k botanical atlas precision."
+                </p>
+</div>
+<div class="space-y-1.5">
+<span class="font-meta-sm text-meta-sm text-on-surface-variant">单作专属 Seed</span>
+<div class="p-2 rounded-lg bg-surface-container font-meta-md text-meta-md text-on-surface flex justify-between">
+<span class="">8847190</span>
+<span class="text-secondary font-meta-sm text-meta-sm">离散孤立种子</span>
+</div>
+</div>
+</div>
+<!-- 通用生息参数网格 -->
+<div class="grid grid-cols-2 gap-space-xs pt-1"><div class="p-2 rounded-lg bg-surface-container-low"><span class="font-meta-sm text-meta-sm text-on-surface-variant block">画面画幅比例</span><span class="font-body-sm text-body-sm text-on-surface font-medium">16:9 宽屏 (1792×1024)</span></div><div class="p-2 rounded-lg bg-surface-container-low"><span class="font-meta-sm text-meta-sm text-on-surface-variant block">渲染调性</span><span class="font-body-sm text-body-sm text-on-surface font-medium">柔和自然 (Soft &amp; Natural)</span></div><div class="p-2 rounded-lg bg-surface-container-low"><span class="font-meta-sm text-meta-sm text-on-surface-variant block">渲染精度</span><span class="font-body-sm text-body-sm text-on-surface font-medium">高清 HD</span></div><div class="p-2 rounded-lg bg-surface-container-low"><span class="font-meta-sm text-meta-sm text-on-surface-variant block">输出格式</span><span class="font-body-sm text-body-sm text-on-surface font-medium">PNG (无损高保真)</span></div><div class="col-span-2 p-2 rounded-lg bg-surface-container-low flex items-center justify-between"><span class="font-meta-sm text-meta-sm text-on-surface-variant">画布背景透光</span><span class="font-body-sm text-body-sm text-on-surface font-medium">默认自然纸底 (开启透光: 关)</span></div></div>
+</div>
+<!-- 抽屉底部快捷操作组 -->
+<div class="space-y-space-xs pt-space-md mt-space-md">
+<button class="w-full py-2.5 px-space-md rounded-xl bg-primary text-on-primary hover:bg-primary-container font-body-sm text-body-sm font-medium transition-all flex items-center justify-center gap-2 shadow-sm">
+<span class="material-symbols-outlined text-[18px]">brush</span>
+<span id="btn-recreate-label" class="">基于此系列继续衍生分镜</span>
+</button>
+<div class="flex items-center gap-space-xs">
+<button class="flex-1 py-2 px-space-sm rounded-xl bg-surface-container hover:bg-surface-container-high text-on-surface font-body-sm text-body-sm transition-colors flex items-center justify-center gap-1.5">
+<span class="material-symbols-outlined text-[16px]">file_download</span>
+<span class="">单张下载</span>
+</button>
+<button class="flex-1 py-2 px-space-sm rounded-xl bg-surface-container hover:bg-surface-container-high text-on-surface font-body-sm text-body-sm transition-colors flex items-center justify-center gap-1.5">
+<span class="material-symbols-outlined text-[16px]">share</span>
+<span class="">展卷分享</span>
+</button>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- 轻量交互控制脚本 -->
+<script>
+    let currentMode = 'series'; // 'series' | 'single'
+    let currentScene = 1;
+    let currentZoom = 1.0;
+
+    const scenesData = {
+      1: {
+        title: "初见赤狐",
+        desc: "Scene 01: 初见赤狐 (林间破晓与青苔巨石)",
+        prompt: "Medium close-up shot, a solitary crimson fox sitting composed on a weathered boulder, morning sunlight filtering through mist, dew drops, serene and observant expression.",
+        seed: "1048821 (偏移 +0)"
+      },
+      2: {
+        title: "午后静憩",
+        desc: "Scene 02: 午后静憩 (暖阳杉根与安适小憩)",
+        prompt: "Wide relaxed angle, the red fox sleeping deeply nestled between ancient cedar tree roots, warm golden dappled midday light filtering through ferns.",
+        seed: "1048822 (偏移 +1)"
+      },
+      3: {
+        title: "夜巡林隙",
+        desc: "Scene 03: 夜巡林隙 (幽夜薄雾与荧火灵动)",
+        prompt: "Cinematic night scene, fox stepping cautiously through deep bamboo stalks, glowing organic fireflies in cold mist, pale silver moonlight accentuating its coat.",
+        seed: "1048823 (偏移 +2)"
+      },
+      4: {
+        title: "晨曦微露",
+        desc: "Scene 04: 晨曦微露 (云海孤石与朝晖展望)",
+        prompt: "Majestic sunrise viewpoint, the fox sitting at the edge of a mountain cliff overlooking rolling clouds and waking valley, warm vibrant morning rays.",
+        seed: "1048824 (偏移 +3)"
+      }
+    };
+
+    function openPreviewModal(mode) {
+      const modal = document.getElementById('lightbox-modal');
+      modal.classList.remove('hidden');
+      modal.classList.add('flex');
+      switchPreviewMode(mode || 'series');
+    }
+
+    function closePreviewModal() {
+      const modal = document.getElementById('lightbox-modal');
+      modal.classList.add('hidden');
+      modal.classList.remove('flex');
+    }
+
+    function switchPreviewMode(mode) {
+      currentMode = mode;
+      const btnSeries = document.getElementById('mode-btn-series');
+      const btnSingle = document.getElementById('mode-btn-single');
+      const badgeIcon = document.getElementById('badge-icon-symbol');
+      const workTitle = document.getElementById('modal-work-title');
+      const workTag = document.getElementById('modal-work-tag');
+      const filmstripBar = document.getElementById('series-filmstrip-bar');
+      const layoutGroup = document.getElementById('layout-toggle-group');
+      const panelSeries = document.getElementById('panel-series-info');
+      const panelSingle = document.getElementById('panel-single-info');
+      const batchBtn = document.getElementById('btn-batch-download');
+      const batchLabel = document.getElementById('batch-download-label');
+      const recreateLabel = document.getElementById('btn-recreate-label');
+
+      if (mode === 'series') {
+        // 系列模式样式
+        btnSeries.className = 'flex items-center gap-1.5 px-3 py-1 rounded-lg bg-primary text-on-primary font-body-sm text-body-sm font-medium shadow-sm transition-all';
+        btnSingle.className = 'flex items-center gap-1.5 px-3 py-1 rounded-lg text-on-surface-variant hover:text-on-surface font-body-sm text-body-sm transition-all';
+        
+        badgeIcon.textContent = 'dynamic_feed';
+        workTitle.textContent = '《狐之林》连贯故事绘卷';
+        workTag.textContent = '共 4 幕分镜 · 连续生息';
+        workTag.className = 'px-2 py-0.5 rounded-full bg-secondary-container text-on-secondary-container font-meta-sm text-meta-sm font-medium shrink-0';
+
+        filmstripBar.classList.remove('hidden');
+        filmstripBar.classList.add('flex');
+        layoutGroup.classList.remove('hidden');
+        panelSeries.classList.remove('hidden');
+        panelSingle.classList.add('hidden');
+        
+        batchBtn.classList.remove('hidden');
+        batchLabel.textContent = '打包下载全套ZIP';
+        recreateLabel.textContent = '基于此系列继续衍生分镜';
+        selectScene(1);
+      } else {
+        // 单图检视模式样式
+        btnSingle.className = 'flex items-center gap-1.5 px-3 py-1 rounded-lg bg-primary text-on-primary font-body-sm text-body-sm font-medium shadow-sm transition-all';
+        btnSeries.className = 'flex items-center gap-1.5 px-3 py-1 rounded-lg text-on-surface-variant hover:text-on-surface font-body-sm text-body-sm transition-all';
+
+        badgeIcon.textContent = 'filter_vintage';
+        workTitle.textContent = '雨后白牡丹写生';
+        workTag.textContent = '独幅写生 · 1:1 正方画幅';
+        workTag.className = 'px-2 py-0.5 rounded-full bg-surface-container-high text-on-surface font-meta-sm text-meta-sm font-medium shrink-0';
+
+        filmstripBar.classList.add('hidden');
+        filmstripBar.classList.remove('flex');
+        layoutGroup.classList.add('hidden');
+        panelSeries.classList.add('hidden');
+        panelSingle.classList.remove('hidden');
+
+        batchLabel.textContent = '下载原图 (4K)';
+        recreateLabel.textContent = '基于此作微调衍生';
+
+        document.getElementById('stage-caption-text').textContent = '雨后白牡丹写生 · 手撕水彩纸手工装裱';
+        document.getElementById('stage-meta-res').textContent = '2048 × 2048 (1:1 正方)';
+      }
+    }
+
+    function selectScene(index) {
+      if (currentMode !== 'series') return;
+      currentScene = index;
+
+      for (let i = 1; i <= 4; i++) {
+        const item = document.getElementById(`film-scene-${i}`);
+        if (i === index) {
+          item.className = 'cursor-pointer flex items-center gap-2 p-1.5 rounded-xl bg-surface-bright shadow-sm border-2 border-primary transition-all shrink-0';
+          item.querySelector('.font-body-sm').className = 'font-body-sm text-body-sm font-medium text-primary leading-tight';
+        } else {
+          item.className = 'cursor-pointer flex items-center gap-2 p-1.5 rounded-xl bg-surface-container-high/60 hover:bg-surface-bright transition-all shrink-0 opacity-80 hover:opacity-100';
+          item.querySelector('.font-body-sm').className = 'font-body-sm text-body-sm font-medium text-on-surface leading-tight';
+        }
+      }
+
+      const info = scenesData[index];
+      if (info) {
+        document.getElementById('stage-caption-text').textContent = info.desc;
+        document.getElementById('prompt-scene-text').textContent = `"${info.prompt}"`;
+        document.getElementById('text-seed-val').textContent = info.seed;
+      }
+    }
+
+    function navScene(delta) {
+      let next = currentScene + delta;
+      if (next < 1) next = 4;
+      if (next > 4) next = 1;
+      selectScene(next);
+    }
+
+    function switchSeriesLayout(type) {
+      const carouselContainer = document.getElementById('carousel-view-container');
+      const waterfallContainer = document.getElementById('waterfall-view-container');
+      const btnCarousel = document.getElementById('view-mode-carousel');
+      const btnWaterfall = document.getElementById('view-mode-waterfall');
+
+      if (type === 'carousel') {
+        carouselContainer.classList.remove('hidden');
+        carouselContainer.classList.add('flex');
+        waterfallContainer.classList.add('hidden');
+        btnCarousel.className = 'px-2 py-1 rounded bg-secondary-container text-on-secondary-container font-meta-sm text-meta-sm flex items-center gap-1';
+        btnWaterfall.className = 'px-2 py-1 rounded hover:bg-surface-container text-on-surface-variant font-meta-sm text-meta-sm flex items-center gap-1';
+      } else {
+        carouselContainer.classList.add('hidden');
+        carouselContainer.classList.remove('flex');
+        waterfallContainer.classList.remove('hidden');
+        btnWaterfall.className = 'px-2 py-1 rounded bg-secondary-container text-on-secondary-container font-meta-sm text-meta-sm flex items-center gap-1';
+        btnCarousel.className = 'px-2 py-1 rounded hover:bg-surface-container text-on-surface-variant font-meta-sm text-meta-sm flex items-center gap-1';
+      }
+    }
+
+    function adjustZoom(delta) {
+      currentZoom = Math.min(Math.max(0.6, currentZoom + delta), 2.2);
+      applyZoom();
+    }
+
+    function resetZoom() {
+      currentZoom = 1.0;
+      applyZoom();
+    }
+
+    function applyZoom() {
+      const img = document.getElementById('stage-main-image');
+      img.style.transform = `scale(${currentZoom})`;
+      document.getElementById('zoom-level-indicator').textContent = `${Math.round(currentZoom * 100)}%`;
+    }
+
+    function copyPrompt(type) {
+      const text = type === 'master' 
+        ? document.getElementById('prompt-master-text').innerText 
+        : document.getElementById('prompt-scene-text').innerText;
+      
+      const toast = document.getElementById('toast-container');
+      if (toast) {
+        toast.firstElementChild.innerHTML = '<span class="material-symbols-outlined text-primary-fixed-dim text-[16px]">check_circle</span><span class="font-body-sm text-body-sm">分镜配方已复制到剪贴板</span>';
+      }
+    }
+
+    // 支持 ESC 键关闭预览
+    document.addEventListener('keydown', function(e) {
+      if (e.key === 'Escape') {
+        closePreviewModal();
+      }
+    });
+  </script>
+</div></main><footer class="w-full bg-surface-container-low py-space-xl mt-auto"><div class="w-full px-gutter-canvas flex flex-col sm:flex-row items-center justify-between gap-space-md text-on-surface-variant font-body-sm text-body-sm"><div class="flex items-center gap-space-xs"><span class="font-meta-md text-meta-md text-on-surface">芽绘台 SproutCanvas</span><span class="">· 自然生机 AI 创作工作室</span></div><div class="flex items-center gap-space-lg"><a class="hover:text-on-surface transition-colors" href="#">创作守则</a><a class="hover:text-on-surface transition-colors" href="#">算力公约</a><a class="hover:text-on-surface transition-colors" href="#">生态更新</a><span class="font-meta-sm text-meta-sm text-outline">v2.4.0-botanical</span></div></div></footer>
+
+</body></html>

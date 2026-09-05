@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Sparkles } from 'lucide-react';
+import { Scissors, Sparkles } from 'lucide-react';
 import type { GenerationConfig, RefImage, ResultRecord } from '../types/generation';
 import type { QueueJob } from '../types/queue';
 import { buildGenerationPayload, resolveSize } from '../lib/api/generation';
 import { brushMaskToDataUrl, brushStrokeCount, type BrushMaskData } from '../lib/editor/brush-mask';
 import { MaskEditor } from '../components/editor/MaskEditor';
+import { SplitToolDrawer } from '../components/tools/SplitToolDrawer';
 import { randomId } from '../lib/random/id';
 import { applyAnyImageStyleToPrompt, findImageStyle } from '../lib/styles/image-styles';
 import { readDraft, writeDraft } from '../lib/storage/drafts';
@@ -34,6 +35,7 @@ export function CreativeStudio({ onSubmit, onRetry, results, jobs }: CreativeStu
   const [pendingIds, setPendingIds] = useState<string[]>([]);
   const [mask, setMask] = useState<BrushMaskData | null>(null);
   const [maskEditorOpen, setMaskEditorOpen] = useState(false);
+  const [splitOpen, setSplitOpen] = useState(false);
   const railRef = useRef<HTMLDivElement>(null);
   const [config, setConfig] = useState<GenerationConfig>(() => {
     const size = resolveSize('1:1');
@@ -194,6 +196,12 @@ export function CreativeStudio({ onSubmit, onRetry, results, jobs }: CreativeStu
           onSelect={(id) => setStyleId(id)}
         />
 
+        <div className="rail-section" style={{ gap: 8 }}>
+          <button type="button" className="btn btn-sm" onClick={() => setSplitOpen(true)}>
+            <Scissors size={14} aria-hidden="true" />切图工具
+          </button>
+        </div>
+
         {config.mode !== 'text' && (
           <ReferencePanel
             images={config.refImages}
@@ -245,6 +253,15 @@ export function CreativeStudio({ onSubmit, onRetry, results, jobs }: CreativeStu
           {toast.message}
         </div>
       )}
+
+      <SplitToolDrawer
+        open={splitOpen}
+        onClose={() => setSplitOpen(false)}
+        galleryRecords={results}
+        onUseAsReference={(ref) => {
+          setConfig((current) => ({ ...current, mode: current.mode === 'text' ? 'reference' : current.mode, refImages: [ref] }));
+        }}
+      />
 
       {config.mode === 'edit' && config.refImages[0] && (
         <MaskEditor
