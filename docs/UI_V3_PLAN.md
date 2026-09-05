@@ -25,13 +25,13 @@
 
 ## 阶段 2 · 应用骨架 (顶栏 + 布局)
 
-- [ ] 2.1 重写 `src/components/layout/AppShell.tsx`: 固定顶栏 64px (品牌区 + nav-segmented 四页 + 状态点 + 队列入口 + 主题切换) + `.app-frame` 主区
-- [ ] 2.2 响应式断点 1280/1024/768/640: 顶栏副标隐藏 / 导航换行 / 品牌收 mark (DESIGN.md §5 断点表)
-- [ ] 2.3 `src/app/App.tsx`: `PageKey` 扩为 `'studio' | 'series' | 'styles' | 'gallery'`, 移除 `'split'` 导航位 (切图入工具抽屉)
-- [ ] 2.4 登录页套新视觉 (`.login-card`: eyebrow + display 标题 + 密码 + 主按钮)
-- [ ] 2.5 移除旧 CSS 的 `.sidebar/.nav-item/.app-shell` 等旧骨架类
-- [ ] 2.6 验收: 四页切换正常, 双主题正常, `npm run build` + `npm test` 通过
-- [ ] 2.7 提交: 主题「feat(shell): top-bar navigation frame」
+- [x] 2.1 重写 `src/components/layout/AppShell.tsx`: 固定顶栏 64px (品牌区 + nav-segmented 四页 + 状态点 + 队列入口 + 主题切换) + `.app-frame` 主区
+- [x] 2.2 响应式断点 1280/1024/768/640: 顶栏副标隐藏 / 导航换行 / 品牌收 mark (DESIGN.md §5 断点表)
+- [x] 2.3 `src/app/App.tsx`: `PageKey` 扩为 `'studio' | 'series' | 'styles' | 'gallery'`, 移除 `'split'` 导航位 (切图入工具抽屉)
+- [x] 2.4 登录页套新视觉 (`.login-card`: eyebrow + display 标题 + 密码 + 主按钮)
+- [x] 2.5 移除旧 CSS 的 `.sidebar/.nav-item/.app-shell` 等旧骨架类
+- [x] 2.6 验收: 四页切换正常, 双主题正常, `npm run build` + `npm test` 通过
+- [x] 2.7 提交: 主题「feat(shell): top-bar navigation frame」
 
 ## 阶段 3 · 全局组件 (队列抽屉 + toast)
 
