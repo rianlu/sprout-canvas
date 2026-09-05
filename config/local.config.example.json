@@ -1,26 +1,19 @@
 {
-  "textProvider": {
-    "id": "text",
-    "name": "文本服务商",
-    "baseUrl": "https://api.openai.com",
-    "apiKey": "sk-your-text-api-key",
-    "model": "gpt-5-mini"
-  },
   "defaultImageProvider": "default",
   "imageProviders": [
     {
       "id": "default",
-      "name": "芽绘三号",
+      "name": "芽绘一号",
       "baseUrl": "https://api.openai.com",
       "apiKey": "sk-your-default-api-key",
       "imageModel": "gpt-image-2",
       "generationMode": "images"
     },
     {
-      "id": "anyrouter",
+      "id": "backup",
       "name": "芽绘二号",
       "baseUrl": "https://a-ocnfniawgw.cn-shanghai.fcapp.run",
-      "apiKey": "sk-your-anyrouter-api-key",
+      "apiKey": "sk-your-backup-api-key",
       "imageModel": "gpt-5.3-codex",
       "generationMode": "responses",
       "requestHeaders": {
@@ -31,13 +24,6 @@
       }
     }
   ],
-  "imageConcurrency": 1,
-  "host": "127.0.0.1",
-  "port": 8787,
-  "accessPassword": "change-this-password",
-  "authSessionDays": 7,
-  "secureCookies": false,
-  "logFile": "logs/server.log",
   "textProviders": [
     {
       "id": "text",
@@ -53,5 +39,12 @@
       "apiKey": "sk-your-backup-text-api-key",
       "model": "gpt-5-mini"
     }
-  ]
+  ],
+  "imageConcurrency": 1,
+  "host": "127.0.0.1",
+  "port": 8787,
+  "accessPassword": "change-this-password",
+  "authSessionDays": 7,
+  "secureCookies": false,
+  "logFile": "logs/server.log"
 }

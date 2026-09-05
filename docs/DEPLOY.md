@@ -21,7 +21,7 @@ cp config/local.config.example.json config/local.config.json
 
 | 字段 | 必填 | 说明 |
 |---|---|---|
-| `textProviders[]` | 是 | 文本服务商列表 (用于提示词优化), 按数组顺序自动主备切换 |
+| `textProviders[]` | 是 | 文本服务商列表 (用于提示词优化), 按数组顺序自动主备切换. 旧单对象格式 `textProvider` 仅为兼容保留, 优先级高于数组首位, 新配置请只写 `textProviders[]` |
 | `imageProviders[]` | 是 | 生图服务商列表, 每项至少填 `id / name / baseUrl / apiKey / imageModel / generationMode` |
 | `defaultImageProvider` | 是 | 默认生图服务商 `id`, 必须能在 `imageProviders` 中匹配到 |
 | `accessPassword` | 是 (生产) | 网页登录密码, **必须改掉默认值** |
