@@ -77,10 +77,7 @@ export async function buildGenerationPayload(config: GenerationConfig, maskFacto
     : [];
   if (preparedRefs.length) {
     payload.ref_images = preparedRefs.map((ref: RefImage) => ({ name: ref.name, image_url: ref.dataUrl }));
-  }
-  if (config.mode === 'edit' && config.editSelection) {
-    payload.edit_selection = config.editSelection;
-    if (maskFactory && preparedRefs[0]) {
+    if (maskFactory) {
       const refs = payload.ref_images as Array<{ name: string; image_url: string; mask_url?: string }>;
       refs[0].mask_url = await maskFactory(preparedRefs[0].dataUrl);
     }

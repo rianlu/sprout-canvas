@@ -19,14 +19,6 @@ h2 { font-size: var(--fs-headline-sm); }
 .panel-heading { display: flex; justify-content: space-between; align-items: start; gap: 12px; margin-bottom: 14px; }
 .preview-heading { display: flex; justify-content: space-between; align-items: start; gap: 12px; margin-bottom: 14px; }
 
-/* ===== RegionEditor (阶段 5 删除) ===== */
-.region-editor { border: 1px solid var(--line); background: var(--panel); border-radius: var(--radius-lg); padding: 14px; }
-.editor-toolbar { display: flex; justify-content: space-between; align-items: center; color: var(--muted); margin-bottom: 12px; }
-.editor-stage { position: relative; border-radius: var(--radius-lg); overflow: hidden; background: var(--editor-bg); user-select: none; }
-.editor-stage img { width: 100%; display: block; }
-.selection-box { position: absolute; border: 2px solid var(--accent); background: var(--accent-tint-strong); box-shadow: 0 0 0 999px var(--backdrop); }
-.editor-empty { min-height: 420px; display: grid; place-items: center; color: var(--muted); border: 1px dashed var(--line); border-radius: var(--radius-lg); }
-
 /* ===== GalleryGrid (阶段 8 重写) ===== */
 .gallery-page { padding-bottom: 32px; }
 .gallery-stream { display: grid; gap: 22px; max-width: 1120px; }

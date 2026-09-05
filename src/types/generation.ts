@@ -13,13 +13,6 @@ export interface RefImage {
   size: number;
 }
 
-export interface RectSelection {
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-}
-
 export interface GenerationConfig {
   mode: StudioMode;
   generationMode: GenerationMode;
@@ -34,9 +27,7 @@ export interface GenerationConfig {
   background: 'auto' | 'transparent' | 'opaque';
   outputFormat: ImageOutputFormat;
   outputCompression: number;
-  refImages: RefImage[];
-  editSelection?: RectSelection | null;
-}
+  refImages: RefImage[];}
 
 export type ResultKind = 'single' | 'series';
 

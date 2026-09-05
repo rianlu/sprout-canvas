@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Sparkles } from 'lucide-react';
-import type { GenerationConfig, RectSelection, RefImage, ResultRecord } from '../types/generation';
+import type { GenerationConfig, RefImage, ResultRecord } from '../types/generation';
 import type { QueueJob } from '../types/queue';
 import { buildGenerationPayload, resolveSize } from '../lib/api/generation';
-import { createRectMaskDataUrl } from '../lib/editor/mask';
+import { brushMaskToDataUrl, brushStrokeCount, type BrushMaskData } from '../lib/editor/brush-mask';
+import { MaskEditor } from '../components/editor/MaskEditor';
 import { randomId } from '../lib/random/id';
 import { applyAnyImageStyleToPrompt, findImageStyle } from '../lib/styles/image-styles';
 import { readDraft, writeDraft } from '../lib/storage/drafts';
@@ -31,6 +32,8 @@ export function CreativeStudio({ onSubmit, onRetry, results, jobs }: CreativeStu
   const [submittedIds, setSubmittedIds] = useState<string[]>([]);
   const [styleId, setStyleId] = useState(() => readDraft(STUDIO_STYLE_DRAFT_KEY));
   const [pendingIds, setPendingIds] = useState<string[]>([]);
+  const [mask, setMask] = useState<BrushMaskData | null>(null);
+  const [maskEditorOpen, setMaskEditorOpen] = useState(false);
   const railRef = useRef<HTMLDivElement>(null);
   const [config, setConfig] = useState<GenerationConfig>(() => {
     const size = resolveSize('1:1');
@@ -49,7 +52,6 @@ export function CreativeStudio({ onSubmit, onRetry, results, jobs }: CreativeStu
       outputFormat: 'auto',
       outputCompression: 90,
       refImages: [],
-      editSelection: null,
     };
   });
 
@@ -85,7 +87,7 @@ export function CreativeStudio({ onSubmit, onRetry, results, jobs }: CreativeStu
   const patchConfig = useCallback((patch: Partial<GenerationConfig>) => {
     setConfig((current) => {
       if (patch.mode && patch.mode !== current.mode) {
-        return { ...current, ...patch, refImages: patch.mode === 'text' ? [] : current.refImages, editSelection: patch.mode === 'text' ? null : current.editSelection };
+        return { ...current, ...patch, refImages: patch.mode === 'text' ? [] : current.refImages };
       }
       return { ...current, ...patch };
     });
@@ -98,20 +100,22 @@ export function CreativeStudio({ onSubmit, onRetry, results, jobs }: CreativeStu
       setToast({ type: 'error', message: '局部编辑需要先载入一张原图' });
       return;
     }
+    if (config.mode === 'edit' && (!mask || mask.strokes.length === 0)) {
+      setToast({ type: 'error', message: '局部编辑需要先涂抹重绘区 (点击「进入工作区」)' });
+      return;
+    }
     setSubmitting(true);
     try {
       const style = findImageStyle(styleId);
       const snapshot: GenerationConfig = { ...config, prompt: applyAnyImageStyleToPrompt(prompt, style) };
       const effectivePrompt = snapshot.prompt;
+      const maskFactory = snapshot.mode === 'edit' && mask && mask.strokes.length > 0 && snapshot.refImages[0]
+        ? () => brushMaskToDataUrl(mask, snapshot.refImages[0].dataUrl)
+        : undefined;
 
       for (let index = 0; index < snapshot.imageCount; index += 1) {
         const placeholderId = randomId('task');
-        const payload = await buildGenerationPayload(
-          { ...snapshot, prompt: effectivePrompt },
-          snapshot.mode === 'edit' && snapshot.editSelection
-            ? (imageDataUrl: string) => createRectMaskDataUrl(imageDataUrl, snapshot.editSelection!)
-            : undefined,
-        );
+        const payload = await buildGenerationPayload({ ...snapshot, prompt: effectivePrompt }, maskFactory);
         const refCount = Array.isArray((payload as { ref_images?: unknown }).ref_images)
           ? ((payload as { ref_images?: unknown[] }).ref_images as unknown[]).length
           : 0;
@@ -193,12 +197,19 @@ export function CreativeStudio({ onSubmit, onRetry, results, jobs }: CreativeStu
         {config.mode !== 'text' && (
           <ReferencePanel
             images={config.refImages}
-            onChange={(refImages) => setConfig((current) => ({ ...current, refImages }))}
+            onChange={(refImages) => {
+              setConfig((current) => ({ ...current, refImages }));
+              if (refImages[0]?.dataUrl !== config.refImages[0]?.dataUrl) setMask(null);
+            }}
             galleryRecords={results}
             maxImages={config.mode === 'edit' ? 1 : 6}
             singleMode={config.mode === 'edit'}
-            maskSummary={config.mode === 'edit' && config.editSelection ? '已框选局部编辑区域' : null}
-            onOpenMaskEditor={() => setToast({ type: 'info', message: '选区工具即将在下一阶段提供, 当前可在原图上重新框选' })}
+            maskSummary={config.mode === 'edit'
+              ? (mask && mask.strokes.length
+                ? `已涂抹 ${brushStrokeCount(mask)} 处重绘区`
+                : '局部编辑需要在图上涂抹蒙版')
+              : null}
+            onOpenMaskEditor={() => setMaskEditorOpen(true)}
           />
         )}
 
@@ -233,6 +244,16 @@ export function CreativeStudio({ onSubmit, onRetry, results, jobs }: CreativeStu
           <Sparkles size={15} aria-hidden="true" />
           {toast.message}
         </div>
+      )}
+
+      {config.mode === 'edit' && config.refImages[0] && (
+        <MaskEditor
+          image={config.refImages[0]}
+          open={maskEditorOpen}
+          onClose={() => setMaskEditorOpen(false)}
+          onApply={(next) => { setMask(next); setMaskEditorOpen(false); }}
+          initialMask={mask}
+        />
       )}
     </div>
   );

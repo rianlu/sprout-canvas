@@ -56,12 +56,12 @@
 
 ## 阶段 5 · 画笔蒙版 (局部编辑核心新能力)
 
-- [ ] 5.1 重写 `src/components/editor/RegionEditor.tsx` → `MaskEditor.tsx`: 全屏模态画布; 画笔/橡皮/撤销/清空工具栏; 画笔尺寸滑杆 (5-80px)
-- [ ] 5.2 蒙版渲染: Canvas 叠加层 (`--accent-tint-strong` 半透明) + 笔画记录栈 (支持撤销); 输出 dataUrl 兼容现有 `maskFactory` 钩子
-- [ ] 5.3 蒙版语义: 透明=重绘区 (对齐现有 `createRectMaskDataUrl` 的输出约定, 需先读 `src/lib/editor/mask.ts` 确认颜色通道语义再实现)
-- [ ] 5.4 输入校验: 无蒙版时提交走普通 edits; 蒙版+prompt 双必填提示
-- [ ] 5.5 验收: 与上游真实调试一次 edits + mask (可暂用 tests/real-api-smoke.mjs 思路验证)
-- [ ] 5.6 提交: 主题「feat(editor): brush mask editor」
+- [x] 5.1 重写 `src/components/editor/RegionEditor.tsx` → `MaskEditor.tsx`: 全屏模态画布; 画笔/橡皮/撤销/清空工具栏; 画笔尺寸滑杆 (5-80px)
+- [x] 5.2 蒙版渲染: Canvas 叠加层 (`--accent-tint-strong` 半透明) + 笔画记录栈 (支持撤销); 输出 dataUrl 兼容现有 `maskFactory` 钩子
+- [x] 5.3 蒙版语义: 透明=重绘区 (对齐现有 `createRectMaskDataUrl` 的输出约定, 需先读 `src/lib/editor/mask.ts` 确认颜色通道语义再实现)
+- [x] 5.4 输入校验: 无蒙版时提交走普通 edits; 蒙版+prompt 双必填提示
+- [x] 5.5 验收: 与上游真实调试一次 edits + mask (可暂用 tests/real-api-smoke.mjs 思路验证)
+- [x] 5.6 提交: 主题「feat(editor): brush mask editor」
 
 ## 阶段 6 · 系列策划页
 

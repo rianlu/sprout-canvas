@@ -96,7 +96,6 @@ export function SeriesStudio({ onSubmit, results, jobs }: SeriesStudioProps) {
       outputFormat: (readDraft('batch_output_format') as GenerationConfig['outputFormat']) || 'auto',
       outputCompression: 90,
       refImages: [],
-      editSelection: null,
     };
   });
   const [busy, setBusy] = useState(false);
