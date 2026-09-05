@@ -1,11 +1,10 @@
 /*
- * ⚠️ 过渡层 (TEMPORARY): 仅为尚未重写的旧组件提供样式 —
- * SplitTool (阶段 9), RegionEditor (阶段 5 由画笔蒙版替代),
- * GalleryGrid (阶段 8 重写). 对应组件重写后删除对应段落, 阶段 9 全量删除.
+ * ⚠️ 过渡层 (TEMPORARY): 仅为 SplitTool 提供样式.
+ * 阶段 9 改造为工具抽屉后本文件全量删除.
  * 规则: 只引用 tokens, 不引入新色值.
  */
 
-/* ===== 通用 (GalleryGrid/SplitTool/RegionEditor 共用) ===== */
+/* ===== 通用 ===== */
 .field { display: grid; gap: 8px; margin-bottom: 12px; }
 .field small { color: var(--muted); font-size: var(--fs-body-sm); line-height: 1.5; }
 .field textarea, .field input, .field select { width: 100%; border: 1px solid var(--line); border-radius: var(--radius-md); background: var(--well); color: var(--text); padding: 12px; outline: none; }
@@ -18,38 +17,10 @@ h1 { font-size: var(--fs-headline-lg); letter-spacing: -0.02em; }
 h2 { font-size: var(--fs-headline-sm); }
 .panel-heading { display: flex; justify-content: space-between; align-items: start; gap: 12px; margin-bottom: 14px; }
 .preview-heading { display: flex; justify-content: space-between; align-items: start; gap: 12px; margin-bottom: 14px; }
+.card { border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--card); box-shadow: var(--shadow-soft); padding: 18px; }
+.viewer-close { position: static; border: 1px solid var(--line); border-radius: var(--radius-full); width: 34px; height: 34px; display: grid; place-items: center; cursor: pointer; color: var(--text); background: var(--well); }
 
-/* ===== GalleryGrid (阶段 8 重写) ===== */
-.gallery-page { padding-bottom: 32px; }
-.gallery-stream { display: grid; gap: 22px; max-width: 1120px; }
-.gallery-day-group { display: grid; gap: 12px; }
-.gallery-day-heading { position: sticky; top: var(--top-bar-h); z-index: 3; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 2px; background: var(--bg); }
-.gallery-day-heading span { font-size: var(--fs-body-md); font-weight: 800; }
-.gallery-day-heading strong { color: var(--muted); font-size: var(--fs-meta-sm); border: 1px solid var(--line); border-radius: var(--radius-full); padding: 5px 10px; background: var(--well); }
-.gallery-day-list { display: grid; gap: 12px; }
-.gallery-stream-card { min-width: 0; display: grid; grid-template-columns: minmax(150px, 220px) minmax(0, 1fr); gap: 14px; border: 1px solid var(--line); border-radius: var(--radius-lg); overflow: hidden; background: var(--card); box-shadow: var(--shadow-soft); }
-.stream-image-button { display: block; width: 100%; min-height: 164px; padding: 0; border: 0; background: var(--well); cursor: zoom-in; color: inherit; }
-.stream-image-button img { display: block; width: 100%; height: 100%; max-height: 220px; object-fit: contain; }
-.stream-card-body { min-width: 0; display: grid; align-content: center; gap: 10px; padding: 14px 14px 14px 0; }
-.stream-meta { display: flex; flex-wrap: wrap; gap: 8px; color: var(--muted); font-size: var(--fs-meta-md); }
-.stream-meta span { border: 1px solid var(--line); border-radius: var(--radius-full); padding: 4px 8px; background: var(--well); }
-.gallery-prompt { display: -webkit-box; overflow: hidden; line-height: 1.55; -webkit-line-clamp: 3; -webkit-box-orient: vertical; word-break: break-word; }
-.gallery-actions { display: flex; flex-wrap: wrap; gap: 8px; }
-.gallery-viewer { position: fixed; inset: 0; z-index: 70; display: grid; place-items: center; padding: 28px; }
-.gallery-viewer-backdrop { position: absolute; inset: 0; border: 0; background: var(--backdrop); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); cursor: zoom-out; }
-.gallery-viewer-panel { position: relative; z-index: 1; width: min(1180px, 100%); max-height: calc(100vh - 56px); display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 16px; align-items: center; border: 1px solid var(--line); border-radius: var(--radius-xl); background: var(--panel-overlay); box-shadow: var(--shadow-pop); padding: 16px; }
-.gallery-viewer-panel > img { max-width: 100%; max-height: calc(100vh - 100px); width: auto; height: auto; justify-self: center; border-radius: var(--radius-lg); object-fit: contain; }
-.viewer-close, .viewer-nav { position: absolute; z-index: 2; border: 1px solid var(--line); color: var(--text); background: var(--bar); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); cursor: pointer; display: grid; place-items: center; }
-.viewer-close { top: 14px; right: 14px; width: 40px; height: 40px; border-radius: var(--radius-full); }
-.viewer-nav { top: 50%; width: 46px; height: 64px; transform: translateY(-50%); border-radius: var(--radius-full); }
-.viewer-nav.prev { left: 18px; }
-.viewer-nav.next { right: 354px; }
-.viewer-meta { align-self: stretch; display: grid; align-content: end; gap: 12px; padding: 18px; border-left: 1px solid var(--line); }
-.viewer-meta strong { max-height: 42vh; overflow: auto; line-height: 1.5; }
-.viewer-meta span { color: var(--muted); font-size: var(--fs-meta-md); }
-.viewer-hint { font-size: var(--fs-meta-sm); color: var(--muted); opacity: 0.75; letter-spacing: 0.4px; }
-
-/* ===== SplitTool (阶段 9 改造为工具抽屉) ===== */
+/* ===== SplitTool ===== */
 .split-page { display: grid; gap: 18px; padding-bottom: 32px; }
 .split-summary { color: var(--muted); font-size: var(--fs-body-md); border: 1px solid var(--line); border-radius: var(--radius-full); padding: 8px 12px; background: var(--well); }
 .split-workbench { display: grid; grid-template-columns: minmax(340px, 460px) minmax(0, 1fr); gap: 18px; align-items: start; }
@@ -70,9 +41,9 @@ h2 { font-size: var(--fs-headline-sm); }
 .split-gallery-picker { margin-top: 18px; border-top: 1px solid var(--line); padding-top: 16px; }
 .gallery-source-row { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 10px; }
 .split-source-row { grid-template-columns: repeat(auto-fill, minmax(112px, 1fr)); }
-.gallery-source, .gallery-pick-card { border: 1px solid var(--line); border-radius: var(--radius-md); padding: 6px; background: var(--well); color: var(--text); cursor: pointer; text-align: left; overflow: hidden; }
-.gallery-source img, .gallery-pick-card img { width: 100%; aspect-ratio: 1/1; object-fit: cover; border-radius: var(--radius-sm); display: block; }
-.gallery-source span, .gallery-pick-card span { display: block; color: var(--muted); font-size: 11px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; margin-top: 6px; }
+.gallery-source { border: 1px solid var(--line); border-radius: var(--radius-md); padding: 6px; background: var(--well); color: var(--text); cursor: pointer; text-align: left; overflow: hidden; }
+.gallery-source img { width: 100%; aspect-ratio: 1/1; object-fit: cover; border-radius: var(--radius-sm); display: block; }
+.gallery-source span { display: block; color: var(--muted); font-size: 11px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; margin-top: 6px; }
 .split-results-panel { border: 1px solid var(--line); background: var(--panel-soft); border-radius: var(--radius-xl); padding: 18px; backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px); }
 .split-result-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 14px; }
 .split-result-card img { aspect-ratio: unset; height: auto; object-fit: contain; background: var(--well-deep); }
@@ -91,7 +62,7 @@ h2 { font-size: var(--fs-headline-sm); }
 .split-source-float { position: fixed; right: 18px; top: calc(var(--top-bar-h) + 18px); z-index: 28; width: min(320px, calc(100vw - 36px)); border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--panel-overlay); box-shadow: var(--shadow); backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px); padding: 12px; }
 .split-source-float-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
 .split-source-float-head strong { display: block; }
-.split-source-float-head button, .inline-close { border: 1px solid var(--line); border-radius: var(--radius-full); width: 34px; height: 34px; display: grid; place-items: center; cursor: pointer; color: var(--text); background: var(--well); }
+.split-source-float-head button { border: 1px solid var(--line); border-radius: var(--radius-full); width: 34px; height: 34px; display: grid; place-items: center; cursor: pointer; color: var(--text); background: var(--well); }
 .split-source-float-actions { display: flex; gap: 6px; }
 .split-source-float.minimized { padding: 8px 12px; width: min(260px, calc(100vw - 36px)); }
 .split-source-float.minimized .split-source-float-head { margin-bottom: 0; }
@@ -116,24 +87,10 @@ h2 { font-size: var(--fs-headline-sm); }
 .split-result-grid.aligned { --split-cell: 132px; grid-template-columns: repeat(var(--split-cols), minmax(var(--split-cell), 1fr)); min-width: calc(var(--split-cols) * var(--split-cell) + (var(--split-cols) - 1) * 10px); }
 .split-output-heading { align-items: center; }
 .split-output-actions { display: flex; align-items: center; gap: 10px; color: var(--muted); font-size: var(--fs-meta-md); }
-.card { border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--card); box-shadow: var(--shadow-soft); padding: 18px; }
 
-/* ===== 旧组件响应式 (对齐 v3 断点) ===== */
-@media (max-width: 920px) {
-  .gallery-stream-card { grid-template-columns: 150px minmax(0, 1fr); }
-  .gallery-viewer-panel { grid-template-columns: 1fr; overflow: auto; }
-  .gallery-viewer-panel > img { max-height: 64vh; }
-  .viewer-meta { border-left: 0; border-top: 1px solid var(--line); padding: 12px; }
-  .viewer-nav.next { right: 18px; }
-}
+/* ===== SplitTool 响应式 ===== */
 @media (max-width: 860px) { .split-workbench { grid-template-columns: 1fr; } }
 @media (max-width: 767px) {
-  .gallery-stream-card { grid-template-columns: 1fr; }
-  .stream-image-button { min-height: 220px; }
-  .stream-card-body { padding: 12px; }
-  .gallery-viewer { padding: 12px; }
-  .gallery-viewer-panel { max-height: calc(100vh - 24px); padding: 10px; border-radius: var(--radius-lg); }
-  .viewer-nav { width: 40px; height: 52px; }
   .split-summary { width: 100%; text-align: center; }
   .split-control-group { grid-template-columns: 1fr; }
   .split-source-preview { grid-template-columns: 1fr; }
