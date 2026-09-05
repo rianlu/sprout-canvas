@@ -95,7 +95,7 @@
 
 ## 3. 字体与字号
 
-**不加载外部字体 CDN** (自托管优先, 隐私与离线可用); 栈内首选字体可自托管 woff2, 回退系统字体.
+**字体自托管方案 (已敲定)**: 三个品牌字体均以 woff2 内置于 `public/fonts/` (SIL OFL 1.1, 允许自由分发, 需随附 license 文件), `@font-face` 声明 + `font-display: swap`; `index.html` 仅 preload 关键字重. 禁外链字体 CDN (隐私/离线优先). 中文 UI 文本天然回退系统字体 (苹方/微软雅黑), 与 Stitch 稿渲染行为一致, 不视为还原损失.
 
 | Token | 栈 | 用途 |
 |---|---|---|
@@ -245,7 +245,7 @@ app = 固定顶栏 + 主工作区
 |---|---|
 | Tailwind CDN + 任意值类 | 全局 `src/styles.css` 自定义类 + token 变量 (见 §6 类名表) |
 | Material Symbols 图标 | lucide-react (无新增依赖) |
-| Google Fonts (Outfit/Inter/JetBrains Mono) | 本地字体栈 + 可选自托管 woff2, 禁外链 CDN |
+| Google Fonts (Outfit/Inter/JetBrains Mono) | 自托管 woff2: `public/fonts/*.woff2` + `@font-face` (SIL OFL, 附 license 文件), 禁外链 CDN; 仅 latin 子集 + 用到的字重 (全套 ~120KB) |
 | `lh3.googleusercontent.com` 示例图 | `public/` 自托管; 风格示例图按现有 advanced style 数据结构补齐 |
 | `animate-pulse/bounce/spin` | 呼吸/spinner/spin 的受限实现, 遵守 §4.3 与 reduced-motion |
 
@@ -307,3 +307,4 @@ app = 固定顶栏 + 主工作区
 - 2026-07-24: 初版 (v1). 敲定双主题配色: 浅色默认, 暗色灰绿 accent, favicon 渐变.
 - 2026-07-24: v2 重写. 对齐 PRD v2.0 信息架构 (三页导航); 新增「Provider 隐形」与「文案务实」原则.
 - 2026-09-05: v3.0. 依据 Stitch Botanical Paper Studio 稿重写: 布局改顶栏+四页 (单图/系列/风格库/展馆); 圆角体系从 24px 大圆角收敛为 6/10/12/16 中等柔和档; 新增 `--card/--well/--well-deep/--bar/--accent-soft` 等纸面层次 token; 字号阶梯细化 (display/meta 九档); 断点改为 1280/1024/768/640; 队列坞改右侧滑出抽屉; 局部编辑改画笔蒙版画布; 新增 §9 Stitch 移植规则 (色值映射表 / 技术替换 / 旧新类名对照 / 冲突裁决) 与文案替换清单; 阴影 token 扩为四档.
+- 2026-09-05: 字体方案敲定为自托管 woff2 (public/fonts/ + @font-face + font-display: swap, SIL OFL 允许分发), 中文回退系统字体与 Stitch 稿行为一致; 图标 lucide-react 构建期打包, 零运行时请求.
