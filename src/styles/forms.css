@@ -1,0 +1,309 @@
+/*
+ * 表单与输入 — 提示词井 / 参数卡 / 比例选择格 (DESIGN §6).
+ */
+
+/* ===== 字段通用 ===== */
+.field {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.field > label,
+.field-label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: var(--fs-meta-md);
+  font-weight: 500;
+}
+
+.field-label .param-name {
+  font-size: var(--fs-meta-sm);
+  color: var(--muted);
+  opacity: 0.75;
+}
+
+.field textarea,
+.field input[type='text'],
+.field input[type='password'],
+.field input[type='number'],
+.field select {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--well);
+  color: var(--text);
+  padding: 10px 12px;
+  outline: none;
+  transition: border-color var(--t-fast) var(--ease), box-shadow var(--t-fast) var(--ease);
+}
+
+.field textarea::placeholder,
+.field input::placeholder {
+  color: var(--muted);
+  font-style: italic;
+  opacity: 0.8;
+}
+
+.field textarea { min-height: 120px; resize: vertical; line-height: 1.6; }
+
+/* ===== 提示词井 (DESIGN §6 prompt-well) ===== */
+.prompt-well {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--well);
+  padding: 12px;
+  transition: border-color var(--t-fast) var(--ease), box-shadow var(--t-fast) var(--ease);
+}
+
+.prompt-well textarea {
+  display: block;
+  width: 100%;
+  min-height: 132px;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--text);
+  font-size: var(--fs-body-md);
+  line-height: 1.65;
+  resize: vertical;
+}
+
+.prompt-well textarea::placeholder {
+  color: var(--muted);
+  font-style: italic;
+}
+
+.prompt-well:focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 4px var(--accent-tint-soft);
+}
+
+.prompt-well-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+}
+
+.prompt-well-actions {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.char-counter {
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: var(--fs-meta-sm);
+  white-space: nowrap;
+}
+
+/* 已选风格胶囊 (在提示词井标题行) */
+.pinned-style {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 10px;
+  border: 0;
+  border-radius: var(--radius-full);
+  background: var(--accent-soft);
+  color: var(--accent-soft-on);
+  font-family: var(--font-mono);
+  font-size: var(--fs-meta-md);
+  cursor: pointer;
+  transition: filter var(--t-fast) var(--ease);
+}
+
+.pinned-style:hover { filter: brightness(0.97); }
+
+/* ===== 参数卡 (DESIGN §6 param-card) ===== */
+.param-section {
+  display: grid;
+  gap: 14px;
+}
+
+.param-card {
+  border-radius: var(--radius-lg);
+  background: var(--well);
+  padding: 12px;
+}
+
+.param-card + .param-card { margin-top: 10px; }
+
+.param-card-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 10px;
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: var(--fs-meta-md);
+  font-weight: 500;
+}
+
+.param-card-title .title-icon {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text);
+}
+
+/* ===== 比例选择格 (DESIGN §6 ratio-grid) ===== */
+.ratio-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.ratio-card {
+  display: grid;
+  gap: 3px;
+  justify-items: start;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--card);
+  color: var(--muted);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color var(--t-fast) var(--ease), background var(--t-fast) var(--ease), box-shadow var(--t-fast) var(--ease);
+}
+
+.ratio-card:hover { background: var(--well); }
+
+.ratio-card.active {
+  border-color: transparent;
+  box-shadow: 0 0 0 2px var(--accent);
+  background: var(--well-deep);
+}
+
+.ratio-card .ratio-visual {
+  display: block;
+  border: 1.5px solid currentColor;
+  border-radius: 2px;
+  margin-bottom: 4px;
+  opacity: 0.7;
+}
+
+.ratio-card.active .ratio-visual { opacity: 1; color: var(--accent); }
+
+.ratio-card strong {
+  font-size: var(--fs-meta-md);
+  font-weight: 600;
+  color: var(--text);
+}
+
+.ratio-card small {
+  font-family: var(--font-mono);
+  font-size: var(--fs-meta-sm);
+  color: var(--muted);
+}
+
+/* ===== 拖放区 ===== */
+.dropzone {
+  display: grid;
+  place-items: center;
+  gap: 6px;
+  min-height: 120px;
+  border: 1.5px dashed var(--accent-border);
+  border-radius: var(--radius-lg);
+  cursor: pointer;
+  color: var(--muted);
+  background: var(--accent-tint-soft);
+  text-align: center;
+  padding: 16px;
+  transition: border-color var(--t-fast) var(--ease), background var(--t-fast) var(--ease);
+}
+
+.dropzone:hover, .dropzone.drag-over {
+  border-color: var(--accent);
+  background: var(--accent-tint);
+}
+
+.dropzone strong { color: var(--text); font-weight: 500; }
+.dropzone input { display: none; }
+
+/* 缩略行 */
+.thumb-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px;
+  border-radius: var(--radius-md);
+  background: var(--card);
+  border: 1px solid var(--line);
+}
+
+.thumb-row img {
+  width: 64px; height: 64px;
+  flex: 0 0 auto;
+  border-radius: var(--radius-md);
+  object-fit: cover;
+}
+
+.thumb-row-info {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.thumb-row-info strong {
+  font-size: var(--fs-body-sm);
+  font-weight: 500;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.thumb-row-info span {
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: var(--fs-meta-sm);
+}
+
+.thumb-row-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+}
+
+/* ===== 折叠面板 (高级参数) ===== */
+.collapsible {
+  border: 0;
+}
+
+.collapsible > summary {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 0;
+  cursor: pointer;
+  color: var(--muted);
+  font-size: var(--fs-body-sm);
+  font-weight: 500;
+  list-style: none;
+  user-select: none;
+}
+
+.collapsible > summary::-webkit-details-marker { display: none; }
+
+.collapsible > summary::before {
+  content: '▸';
+  display: inline-block;
+  transition: transform var(--t-fast) var(--ease);
+}
+
+.collapsible[open] > summary::before { transform: rotate(90deg); }
+.collapsible > summary:hover { color: var(--text); }
+.collapsible[open] > summary { margin-bottom: 8px; }

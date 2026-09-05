@@ -1,0 +1,245 @@
+/*
+ * 全局浮动层 — 队列抽屉 / toast / 模态通用 (DESIGN §5/§6).
+ */
+
+/* ===== 队列抽屉 (右侧滑出) ===== */
+.queue-drawer {
+  position: fixed;
+  top: 0; right: 0; bottom: 0;
+  z-index: 50;
+  width: var(--drawer-w);
+  display: flex;
+  flex-direction: column;
+  background: var(--panel);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border-left: 1px solid var(--line);
+  box-shadow: var(--shadow-pop);
+  transform: translateX(100%);
+  visibility: hidden;
+  transition: transform var(--t-drawer) var(--ease), visibility var(--t-drawer);
+}
+
+.queue-drawer.open {
+  transform: translateX(0);
+  visibility: visible;
+}
+
+.queue-drawer-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 16px 18px;
+  background: var(--well);
+  border-bottom: 1px solid var(--line);
+}
+
+.queue-drawer-head .head-copy {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.queue-drawer-head h2 {
+  font-size: var(--fs-headline-sm);
+  font-weight: 500;
+}
+
+.queue-drawer-body {
+  flex: 1;
+  display: grid;
+  gap: 12px;
+  align-content: start;
+  padding: 16px 18px;
+  overflow-y: auto;
+}
+
+.queue-drawer-body .empty-state { min-height: 160px; }
+
+.queue-drawer-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px 18px;
+  background: var(--well);
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: var(--fs-meta-sm);
+}
+
+/* 队列任务卡 */
+.queue-task {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--card);
+  box-shadow: var(--shadow-soft);
+}
+
+.queue-task .task-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+}
+
+.queue-task .task-top .task-copy { min-width: 0; }
+
+.queue-task .task-top strong {
+  display: block;
+  font-size: var(--fs-body-sm);
+  font-weight: 500;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.queue-task .task-top .task-sub {
+  display: block;
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: var(--fs-meta-sm);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.queue-task .state-icon {
+  flex: 0 0 auto;
+  color: var(--muted);
+}
+
+.queue-task.running .state-icon { color: var(--accent); }
+.queue-task.failed .state-icon { color: var(--danger); }
+
+/* 进度条 (仅状态表达, 假进度条禁用 — PRD §7.1; running 时为呼吸条) */
+.queue-task .progress-track {
+  height: 5px;
+  border-radius: var(--radius-full);
+  background: var(--well-deep);
+  overflow: hidden;
+}
+
+.queue-task.running .progress-track .fill {
+  height: 100%;
+  width: 100%;
+  border-radius: var(--radius-full);
+  background: var(--accent);
+  animation: breathe 2s ease-in-out infinite;
+  transform-origin: left;
+}
+
+.queue-task .task-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: var(--fs-meta-sm);
+}
+
+/* ===== toast (底部胶囊) ===== */
+.toast-stack {
+  position: fixed;
+  left: 50%;
+  bottom: 28px;
+  z-index: 80;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+.toast {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 18px;
+  border-radius: var(--radius-full);
+  background: var(--inverse-surface);
+  color: var(--inverse-on-surface);
+  box-shadow: var(--shadow-pop);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  font-size: var(--fs-body-sm);
+  pointer-events: auto;
+  animation: toast-in 200ms var(--ease);
+}
+
+.toast.success svg { color: var(--accent); }
+.toast.error svg { color: var(--danger); }
+.toast.info svg { color: var(--accent); }
+
+@keyframes toast-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ===== 模态通用 (focus trap 由组件实现) ===== */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+}
+
+.modal-overlay .backdrop {
+  position: absolute;
+  inset: 0;
+  border: 0;
+  background: var(--backdrop);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  cursor: zoom-out;
+}
+
+.modal-panel {
+  position: relative;
+  z-index: 1;
+  width: min(560px, 100%);
+  max-height: calc(100dvh - 48px);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 24px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-xl);
+  background: var(--panel-overlay);
+  box-shadow: var(--shadow-pop);
+}
+
+.modal-panel .modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.modal-panel h2 {
+  font-size: var(--fs-headline-sm);
+  font-weight: 500;
+}
+
+.modal-panel .modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+@media (max-width: 639px) {
+  .toast-stack { left: 12px; right: 12px; transform: none; align-items: stretch; }
+  .toast { border-radius: var(--radius-lg); justify-content: center; }
+}

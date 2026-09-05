@@ -1,0 +1,129 @@
+/*
+ * 设计 token — DESIGN.md §2/§3/§4 的代码化.
+ * 规则: 全项目唯一允许出现色值的文件; 组件样式一律 var(--*) 引用.
+ * 主题: :root = dark (辅助), [data-theme="light"] = 品牌默认.
+ */
+
+:root {
+  color-scheme: dark;
+
+  /* ===== 基础表面 (DESIGN §2.1) ===== */
+  --bg: #0f1412;
+  --bg-gradient: radial-gradient(circle at top left, rgba(157, 190, 166, 0.16), transparent 28rem);
+  --bar: rgba(15, 20, 18, 0.92);
+  --panel: rgba(24, 32, 28, 0.78);
+  --panel-soft: rgba(24, 32, 28, 0.54);
+  --card: #18211d;
+  --well: #1E2924;
+  --well-deep: #131A16;
+  --panel-overlay: rgba(15, 20, 18, 0.94);
+  --backdrop: rgba(0, 0, 0, 0.72);
+  --text: #edf7f0;
+  --muted: #9fb5a9;
+  --line: rgba(208, 233, 218, 0.14);
+  --editor-bg: #050806;
+  --inverse-surface: rgba(24, 32, 28, 0.95);
+  --inverse-on-surface: #edf7f0;
+
+  /* ===== 强调色 (DESIGN §2.2 品牌绿系) ===== */
+  --accent: #9DBEA6;
+  --accent-strong: #7FA389;
+  --accent-on: #07110b;
+  --accent-soft: rgba(157, 190, 166, 0.20);
+  --accent-soft-on: #9DBEA6;
+  --accent-tint: rgba(157, 190, 166, 0.12);
+  --accent-tint-strong: rgba(157, 190, 166, 0.18);
+  --accent-tint-soft: rgba(157, 190, 166, 0.08);
+  --accent-border: rgba(157, 190, 166, 0.38);
+  --accent-border-strong: rgba(157, 190, 166, 0.55);
+
+  /* ===== 语义色 (DESIGN §2.3) ===== */
+  --danger: #ff8e8e;
+  --danger-tint: rgba(255, 142, 142, 0.12);
+  --danger-tint-soft: rgba(255, 142, 142, 0.08);
+  --danger-border: rgba(255, 142, 142, 0.42);
+
+  /* ===== 阴影 四档 (DESIGN §2.4, 全绿灰调禁纯黑) ===== */
+  --shadow: 0 24px 80px rgba(0, 0, 0, 0.34);
+  --shadow-soft: 0 12px 40px rgba(0, 0, 0, 0.22);
+  --shadow-lift: 0 4px 16px rgba(0, 0, 0, 0.40);
+  --shadow-pop: 0 24px 64px rgba(0, 0, 0, 0.50);
+
+  /* ===== 圆角 五档 (DESIGN §4.2) ===== */
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-full: 999px;
+
+  /* ===== 字体 三栈 (DESIGN §3, 自托管 woff2) ===== */
+  --font-ui: 'Outfit', -apple-system, 'Segoe UI', sans-serif;
+  --font-body: 'Inter', -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', monospace;
+
+  /* ===== 字号 九档 (DESIGN §3) ===== */
+  --fs-display: clamp(28px, 4vw, 48px);
+  --fs-headline-lg: 32px;
+  --fs-headline-md: 24px;
+  --fs-headline-sm: 18px;
+  --fs-body-lg: 16px;
+  --fs-body-md: 14px;
+  --fs-body-sm: 12px;
+  --fs-meta-md: 12px;
+  --fs-meta-sm: 10px;
+
+  /* ===== 动效 (DESIGN §4.3) ===== */
+  --ease: ease-out;
+  --t-fast: 150ms;
+  --t-panel: 220ms;
+  --t-drawer: 300ms;
+
+  /* ===== 关键尺寸 (DESIGN §4.1) ===== */
+  --top-bar-h: 64px;
+  --gutter: 24px;
+  --rail-w: 440px;
+  --drawer-w: 352px;
+  --content-max: 1720px;
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+
+  --bg: #FDFCF8;
+  --bg-gradient: radial-gradient(circle at top left, rgba(89, 116, 69, 0.10), transparent 28rem);
+  --bar: rgba(253, 252, 248, 0.92);
+  --panel: rgba(255, 255, 255, 0.88);
+  --panel-soft: rgba(255, 255, 255, 0.72);
+  --card: #FFFFFF;
+  --well: #F4F4F0;
+  --well-deep: #EFEFEA;
+  --panel-overlay: rgba(255, 255, 255, 0.96);
+  --backdrop: rgba(40, 50, 35, 0.55);
+  --text: #2A2F28;
+  --muted: #798A6F;
+  --line: rgba(85, 95, 75, 0.16);
+  --editor-bg: #E8E8E0;
+  --inverse-surface: rgba(47, 49, 46, 0.92);
+  --inverse-on-surface: #f2f1ed;
+
+  --accent: #597445;
+  --accent-strong: #4A6338;
+  --accent-on: #FFFFFF;
+  --accent-soft: #D3EABC;
+  --accent-soft-on: #576A45;
+  --accent-tint: rgba(89, 116, 69, 0.10);
+  --accent-tint-strong: rgba(89, 116, 69, 0.16);
+  --accent-tint-soft: rgba(89, 116, 69, 0.06);
+  --accent-border: rgba(89, 116, 69, 0.36);
+  --accent-border-strong: rgba(89, 116, 69, 0.50);
+
+  --danger: #C53030;
+  --danger-tint: rgba(197, 48, 48, 0.10);
+  --danger-tint-soft: rgba(197, 48, 48, 0.06);
+  --danger-border: rgba(197, 48, 48, 0.36);
+
+  --shadow: 0 12px 36px rgba(85, 95, 75, 0.10);
+  --shadow-soft: 0 8px 24px rgba(85, 95, 75, 0.08);
+  --shadow-lift: 0 4px 12px rgba(89, 116, 69, 0.25);
+  --shadow-pop: 0 24px 64px rgba(85, 95, 75, 0.20);
+}

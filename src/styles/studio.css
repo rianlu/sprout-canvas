@@ -1,0 +1,393 @@
+/*
+ * 创作域 — 控制轨 / 结果流 / 任务卡 / 结果卡 (DESIGN §5/§6).
+ */
+
+/* ===== 双栏布局 ===== */
+.studio-layout {
+  display: grid;
+  grid-template-columns: var(--rail-w) minmax(0, 1fr);
+  gap: 24px;
+  align-items: start;
+}
+
+/* ===== 左侧控制轨 ===== */
+.control-rail {
+  position: sticky;
+  top: calc(var(--top-bar-h) + 24px);
+  width: var(--rail-w);
+  max-height: calc(100dvh - var(--top-bar-h) - 48px);
+  overflow-y: auto;
+  display: grid;
+  gap: 16px;
+  padding: 20px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-xl);
+  background: var(--panel);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  box-shadow: var(--shadow-soft);
+}
+
+/* 子模式 tabs (文生图/参考生成/局部编辑) */
+.mode-tabs {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+  padding: 3px;
+  border-radius: var(--radius-md);
+  background: var(--well-deep);
+}
+
+.mode-tabs button {
+  display: grid;
+  gap: 2px;
+  justify-items: center;
+  padding: 8px 4px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--muted);
+  font-size: var(--fs-body-sm);
+  font-weight: 500;
+  cursor: pointer;
+  transition: background var(--t-fast) var(--ease), color var(--t-fast) var(--ease);
+}
+
+.mode-tabs button:hover { color: var(--text); }
+
+.mode-tabs button.active {
+  background: var(--card);
+  color: var(--accent);
+  font-weight: 600;
+  box-shadow: var(--shadow-soft);
+}
+
+/* 控制轨分区标题 */
+.rail-section {
+  display: grid;
+  gap: 10px;
+}
+
+.rail-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.rail-section-head .rail-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-ui);
+  font-size: var(--fs-headline-sm);
+  font-weight: 500;
+}
+
+.rail-section-head .rail-title svg { color: var(--accent); }
+
+/* 风格快选 pills */
+.style-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.style-pill {
+  padding: 5px 12px;
+  border: 0;
+  border-radius: var(--radius-full);
+  background: var(--well-deep);
+  color: var(--muted);
+  font-size: var(--fs-meta-md);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background var(--t-fast) var(--ease), color var(--t-fast) var(--ease), box-shadow var(--t-fast) var(--ease);
+}
+
+.style-pill:hover { background: var(--well); color: var(--text); }
+
+.style-pill.active {
+  background: var(--accent);
+  color: var(--accent-on);
+  font-weight: 600;
+  box-shadow: var(--shadow-lift);
+}
+
+/* 蒙版状态条 */
+.mask-status-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: var(--radius-md);
+  background: var(--accent-tint);
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: var(--fs-meta-md);
+}
+
+.mask-status-bar .link-btn { color: var(--accent); flex: 0 0 auto; }
+
+/* 提交按钮区 (控制轨底部) */
+.rail-submit {
+  display: grid;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.generate-cta {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 48px;
+  border: 0;
+  border-radius: var(--radius-md);
+  background: var(--accent);
+  color: var(--accent-on);
+  font-family: var(--font-ui);
+  font-size: var(--fs-body-md);
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: var(--shadow-lift);
+  transition: background var(--t-fast) var(--ease), transform var(--t-fast) var(--ease), box-shadow var(--t-fast) var(--ease);
+}
+
+.generate-cta:hover:not(:disabled) {
+  background: var(--accent-strong);
+  transform: translateY(-1px);
+}
+
+.generate-cta:active:not(:disabled) { transform: scale(0.98); }
+.generate-cta:disabled { cursor: not-allowed; opacity: 0.55; }
+
+.generate-cta .kbd {
+  padding: 2px 8px;
+  border-radius: var(--radius-sm);
+  background: rgba(0, 0, 0, 0.14);
+  font-family: var(--font-mono);
+  font-size: var(--fs-meta-md);
+  font-weight: 500;
+}
+
+/* ===== 右侧结果流 ===== */
+.result-stream-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+
+.result-stream-head .filter-pills {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px;
+  border-radius: var(--radius-lg);
+  background: var(--well);
+}
+
+.filter-pill {
+  padding: 6px 12px;
+  border: 0;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--muted);
+  font-size: var(--fs-body-sm);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background var(--t-fast) var(--ease), color var(--t-fast) var(--ease);
+}
+
+.filter-pill:hover { color: var(--text); }
+
+.filter-pill.active {
+  background: var(--card);
+  color: var(--text);
+  font-weight: 500;
+  box-shadow: var(--shadow-soft);
+}
+
+.result-stream {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 24px;
+}
+
+/* ===== 任务/结果卡 ===== */
+.task-card {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--card);
+  box-shadow: var(--shadow-soft);
+  overflow: hidden;
+  transition: box-shadow var(--t-fast) var(--ease);
+}
+
+.task-card:hover { box-shadow: var(--shadow); }
+
+.task-card-figure {
+  position: relative;
+  aspect-ratio: 1 / 1;
+  display: grid;
+  place-items: center;
+  background: var(--surface-deep, var(--well));
+  overflow: hidden;
+}
+
+.task-card-figure img {
+  width: 100%; height: 100%;
+  object-fit: contain;
+  display: block;
+}
+
+/* hover 动作条 (完成卡) */
+.task-card-figure .hover-actions {
+  position: absolute;
+  top: 10px; right: 10px;
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  border-radius: var(--radius-md);
+  background: var(--bar);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  box-shadow: var(--shadow-soft);
+  opacity: 0;
+  transition: opacity var(--t-fast) var(--ease);
+}
+
+.task-card:hover .hover-actions, .task-card:focus-within .hover-actions { opacity: 1; }
+
+.hover-actions button {
+  width: 32px; height: 32px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+  transition: background var(--t-fast) var(--ease);
+}
+
+.hover-actions button:hover { background: var(--well); }
+
+/* 生成中状态 */
+.task-card.running .task-card-figure {
+  background: var(--accent-tint-soft);
+}
+
+.task-card.running .task-state {
+  display: grid;
+  justify-items: center;
+  gap: 12px;
+  padding: 24px;
+  text-align: center;
+}
+
+.task-state .state-icon {
+  width: 56px; height: 56px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--radius-full);
+  background: var(--card);
+  color: var(--accent);
+  box-shadow: var(--shadow-soft);
+}
+
+.task-state .state-icon svg { width: 26px; height: 26px; }
+
+.task-state strong { font-size: var(--fs-body-md); font-weight: 500; }
+
+.task-state .state-meta {
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: var(--fs-meta-md);
+  display: grid;
+  gap: 4px;
+}
+
+/* 失败状态 */
+.task-card.failed .task-card-figure { background: var(--danger-tint-soft); }
+
+.task-card.failed .task-state .state-icon {
+  color: var(--danger);
+  background: var(--card);
+}
+
+.task-card.failed .task-state .retry-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+/* 卡底信息 */
+.task-card-body {
+  display: grid;
+  gap: 8px;
+  padding: 14px;
+  min-width: 0;
+}
+
+.task-card-body .title-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.task-card-body .title-row strong {
+  font-family: var(--font-ui);
+  font-size: var(--fs-body-md);
+  font-weight: 500;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.task-card-body .title-row time {
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: var(--fs-meta-sm);
+  flex: 0 0 auto;
+}
+
+.task-card-body .meta-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.task-card-body .prompt-line {
+  display: -webkit-box;
+  overflow: hidden;
+  line-height: 1.5;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  color: var(--muted);
+  font-size: var(--fs-body-sm);
+  word-break: break-word;
+}
+
+.task-card-body .action-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.task-card-body .action-row .error-text {
+  color: var(--danger);
+  font-family: var(--font-mono);
+  font-size: var(--fs-meta-sm);
+  overflow-wrap: anywhere;
+  min-width: 0;
+}

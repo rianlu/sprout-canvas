@@ -1,0 +1,42 @@
+/*
+ * 芽绘台 · UI v3 (Botanical Paper Studio)
+ * 设计规范: docs/DESIGN.md — 本目录是其代码实现.
+ * 组织: tokens (变量) → base (reset/字体/全局) → 组件按域分文件, 由本文件统一引入.
+ * 规则: 所有色值/圆角/阴影/字号只允许出现在 tokens.css; 组件文件只引用 var(--*).
+ */
+
+@import './tokens.css';
+@import './base.css';
+
+/* 布局骨架与全局壳 */
+@import './app.css';
+
+/* 通用 UI 原子 (按钮/卡片/徽标/分段控件/开关) */
+@import './ui.css';
+
+/* 表单与输入 (提示词井/参数卡/选择格) */
+@import './forms.css';
+
+/* 创作域 (控制轨/结果流/任务卡) */
+@import './studio.css';
+
+/* 局部编辑 (画笔蒙版) */
+@import './mask-editor.css';
+
+/* 系列策划 (分镜卡网格) */
+@import './series.css';
+
+/* 风格库 (卡片/搜索/分类/灯箱) */
+@import './styles-library.css';
+
+/* 展馆 (流/大图查看器) */
+@import './gallery.css';
+
+/* 全局浮动层 (队列抽屉/toast/模态) */
+@import './overlays.css';
+
+/* 登录页 */
+@import './login.css';
+
+/* 工具抽屉 (切图) */
+@import './split-tool.css';

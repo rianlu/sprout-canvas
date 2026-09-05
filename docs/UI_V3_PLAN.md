@@ -17,11 +17,11 @@
 
 ## 阶段 1 · CSS token 基建 (DESIGN.md §2-§4)
 
-- [ ] 1.1 重写 `src/styles.css` 顶部 token 层: `:root` (dark) + `:root[data-theme="light"]` 双主题全量 token (基础表面 / 强调 / 语义 / 阴影四档 / 圆角五档 / 字体三栈 / 字号九档)
-- [ ] 1.2 新增纸面层次 token: `--card / --well / --well-deep / --bar / --accent-soft / --accent-soft-on / --shadow-lift / --shadow-pop`
-- [ ] 1.3 `@font-face` 自托管声明 (font-display: swap) + 全局 reset/基础样式 (body 底色渐变 / focus-visible 焦点环 / reduced-motion 降级)
-- [ ] 1.4 验收: `npm run build` 通过; 用临时测试页 (或直接在旧页面上) 确认双主题切换无未定义变量
-- [ ] 1.5 提交: 主题「feat(css): v3 token foundation (botanical paper)」
+- [x] 1.1 重写 `src/styles.css` 顶部 token 层: `:root` (dark) + `:root[data-theme="light"]` 双主题全量 token (基础表面 / 强调 / 语义 / 阴影四档 / 圆角五档 / 字体三栈 / 字号九档)
+- [x] 1.2 新增纸面层次 token: `--card / --well / --well-deep / --bar / --accent-soft / --accent-soft-on / --shadow-lift / --shadow-pop`
+- [x] 1.3 `@font-face` 自托管声明 (font-display: swap) + 全局 reset/基础样式 (body 底色渐变 / focus-visible 焦点环 / reduced-motion 降级)
+- [x] 1.4 验收: `npm run build` 通过; 用临时测试页 (或直接在旧页面上) 确认双主题切换无未定义变量
+- [x] 1.5 提交: 主题「feat(css): v3 token foundation (botanical paper)」
 
 ## 阶段 2 · 应用骨架 (顶栏 + 布局)
 
