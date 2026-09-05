@@ -15,8 +15,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 | `npm run dev:api` | 只启动 API 服务端, 给 Vite 开发服务器反代使用 |
 | `npm run dev` | Vite 开发服务器. `/api` `/ready` `/health` 反代到 8787, 因此**必须同时跑 `npm run dev:api`** |
 | `npm run build` | `tsc -b && vite build` → `dist/` |
-| `npm test` | `node --check` 静态校验 `server.mjs` 与 `server/*.mjs`, 跑 `tests/queue-routing.test.mjs` + `tests/text-routing.test.mjs`, 再 `npm run build`, 最后 `npm run test:legacy` |
-| `npm run test:legacy` | 仅 `node --check js/app.js` — 防止改坏旧的纯 JS 入口 |
+| `npm test` | `node --check` 静态校验 `server.mjs` 与 `server/*.mjs`, 跑 `tests/queue-routing.test.mjs` + `tests/text-routing.test.mjs`, 再 `npm run build` |
 | `npm run pm2:start` / `npm run pm2:logs` | PM2 生产部署, 配置见 `ecosystem.config.cjs` |
 | `docker compose up -d` | 容器内 8787 映射主机 8888, 挂载 `config/` `logs/` `output/` |
 - 单测无框架, 全部基于 `node:assert/strict`. 跑单个测试直接 `node tests/queue-routing.test.mjs`.
@@ -39,9 +38,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - `server/text-routing.mjs`: 文本提示词优化 Provider 的熔断状态机, 接口与生图类似.
 - `src/app/App.tsx`: React 19 + StrictMode 入口. 顶层挂载 `useAuth` + `useGallery` + `useQueue`, 按 `PageKey` 切 `pages/`.
 - `src/pages/`: `CreativeStudio` (单图), `SeriesStudio` (先调文本拆分→批量入队, 携带 `clientContext.kind='series'`), `SplitTool` (纯前端切图, 不打上游), 展馆在 `components/gallery/GalleryGrid`.
-- `src/hooks/useQueue.ts`: 每 2.2 秒轮询 `/api/jobs/me`. 命中 `succeeded` 后拉 `/api/jobs/:id/result`, 用 `clientContext.placeholderId` 把结果填回画廊占位.
+- **UI v3 (Stitch Botanical Paper 方案, 进行中)**: 信息架构为顶栏导航 + 四页 (单图/系列/风格库/展馆), 队列为右侧滑出抽屉, 局部编辑用画笔蒙版. 设计规范见 `docs/DESIGN.md` v3 (§9 含 Stitch 移植规则), 功能边界见 `docs/PRD.md` v3. 前端改造遵守「逻辑层 (hooks/lib/types) 保留复用, UI 层 (styles.css/pages/components) 重写」的策略.
+- `src/hooks/useQueue.ts`: 有任务时每 2s / 空闲时每 5s 轮询 `/api/jobs/me` (页面隐藏暂停). 命中 `succeeded` 后拉 `/api/jobs/:id/result`, 用 `clientContext.placeholderId` 把结果填回画廊占位.
 - `src/lib/storage/gallery-db.ts`: 展馆只在浏览器 IndexedDB (`img-gen-gallery` v2). 旧 `localStorage` 数据自动迁移. **不在服务端共享**.
-- `js/app.js` + `css/styles.css`: 旧纯 JS 兼容资产, 当前服务端不再作为 `dist/` 缺失时的回退入口. `npm run test:legacy` 仍依赖它存在. 删之前必须同步清理测试与文档.
 
 ### 关键时序: 生图
 1. 浏览器 `POST /api/jobs/images/generations` (或 `/edits` / `/responses`), 带 `X-Client-Context` (base64 后的 `{kind, placeholderId, prompt, mode}` JSON). 可带 `X-Provider-Id` 强制指定, 不带则自动路由.
