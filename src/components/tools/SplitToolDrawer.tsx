@@ -151,42 +151,48 @@ export function SplitToolDrawer({ open, onClose, galleryRecords, onUseAsReferenc
   if (!open) return null;
 
   return (
-    <div className="split-tool-overlay" role="dialog" aria-modal="true" aria-label="切图工具">
-      <button type="button" className="backdrop" onClick={onClose} aria-label="关闭切图工具" />
-      <div ref={dialogRef} className="split-tool-panel">
-        <div className="split-tool-head">
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <span className="head-icon" style={{ width: 34, height: 34, display: 'grid', placeItems: 'center', borderRadius: 'var(--radius-md)', background: 'var(--accent-tint)', color: 'var(--accent)' }}>
-              <Scissors size={16} aria-hidden="true" />
-            </span>
+    /* 切图工具 (Stitch 抽屉形态: 遮罩 + 面板 + 左参数右预览, 类名对齐 inpaint modal) */
+    <div className="fixed inset-0 z-50 bg-inverse-surface/60 backdrop-blur-md flex items-center justify-center p-space-md" role="dialog" aria-modal="true" aria-label="切图工具" onClick={onClose}>
+      <div ref={dialogRef} className="w-full max-w-5xl max-h-[92vh] bg-surface-bright rounded-2xl shadow-[0_24px_64px_rgba(85,95,75,0.20)] overflow-hidden flex flex-col" onClick={(event) => event.stopPropagation()}>
+        {/* 头条 */}
+        <div className="px-space-lg py-space-md bg-surface-container-low flex items-center justify-between">
+          <div className="flex items-center gap-space-sm">
+            <div className="w-8 h-8 rounded-lg bg-primary/10 text-primary flex items-center justify-center">
+              <Scissors size={20} aria-hidden="true" />
+            </div>
             <div>
-              <h2>切图工具</h2>
-              <p style={{ color: 'var(--muted)', fontSize: 'var(--fs-body-sm)' }}>行列切分原图, 切片可下载或送到创作台</p>
+              <h3 className="font-headline-sm text-headline-sm text-on-surface">切图工具 (Grid Splitter)</h3>
+              <p className="font-meta-sm text-meta-sm text-on-surface-variant">行列切分原图, 切片可下载或送到创作台</p>
             </div>
           </div>
-          <button type="button" className="icon-btn" onClick={onClose} aria-label="关闭"><X size={16} /></button>
+          <button type="button" className="w-8 h-8 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface flex items-center justify-center transition-colors" onClick={onClose} aria-label="关闭">
+            <X size={18} aria-hidden="true" />
+          </button>
         </div>
 
-        <div className="split-tool-body">
-          <aside className="split-tool-side">
+        {/* 主体: 左参数右预览 */}
+        <div className="flex-1 overflow-hidden flex flex-col md:flex-row min-h-0">
+          <aside className="w-full md:w-72 shrink-0 bg-surface-container-lowest p-space-md overflow-y-auto flex flex-col gap-space-md">
+            {/* 上传区 */}
             <div
-              className="dropzone"
+              className="w-full flex flex-col items-center justify-center gap-1 py-space-md rounded-xl border-2 border-dashed border-outline-variant/50 hover:border-primary/50 hover:bg-surface-container-low/50 transition-colors text-on-surface-variant cursor-pointer"
               onClick={() => document.getElementById('split-file-input')?.click()}
               role="button" tabIndex={0}
               onKeyDown={(event) => { if (event.key === 'Enter') document.getElementById('split-file-input')?.click(); }}
               aria-label="上传要切分的图片"
             >
-              <strong>上传或拖入要切分的图</strong>
-              <span>支持 PNG / JPEG / WebP</span>
-              <input type="file" accept="image/*" id="split-file-input" style={{ display: 'none' }}
+              <strong className="font-body-sm text-body-sm">上传或拖入要切分的图</strong>
+              <span className="font-meta-sm text-[10px] text-outline">支持 PNG / JPEG / WebP</span>
+              <input type="file" accept="image/*" id="split-file-input" className="hidden"
                 onChange={(event) => { if (event.target.files?.[0]) void loadFile(event.target.files[0]); event.currentTarget.value = ''; }} />
             </div>
 
+            {/* 展馆选图 */}
             {galleryRecords.length > 0 && (
-              <div className="split-gallery-grid">
+              <div className="grid grid-cols-4 gap-1.5">
                 {galleryRecords.slice(0, 12).map((record, index) => (
-                  <button key={record.id} type="button" onClick={() => { void loadGallery(record, index); }} title={record.prompt || '展馆作品'}>
-                    <img src={record.dataUrl} alt={record.prompt || '展馆作品'} loading="lazy" />
+                  <button key={record.id} type="button" className="w-14 h-14 rounded-lg overflow-hidden bg-surface-container hover:ring-2 hover:ring-primary transition-all" onClick={() => { void loadGallery(record, index); }} title={record.prompt || '展馆作品'}>
+                    <img className="w-full h-full object-cover" src={record.dataUrl} alt={record.prompt || '展馆作品'} loading="lazy" />
                   </button>
                 ))}
               </div>
@@ -194,69 +200,80 @@ export function SplitToolDrawer({ open, onClose, galleryRecords, onUseAsReferenc
 
             {source && (
               <>
-                <div className="split-source-preview" style={{ display: 'grid', gap: 8 }}>
-                  <img src={source.dataUrl} alt={source.name} />
-                  <span className="t-meta-sm" style={{ color: 'var(--muted)' }}>{source.image.naturalWidth}×{source.image.naturalHeight} · {source.name}</span>
+                <div className="flex flex-col gap-1.5">
+                  <div className="rounded-xl overflow-hidden border border-outline-variant/30 bg-surface-container">
+                    <img className="w-full h-28 object-cover" src={source.dataUrl} alt={source.name} />
+                  </div>
+                  <span className="font-meta-sm text-meta-sm text-on-surface-variant truncate">{source.image.naturalWidth}×{source.image.naturalHeight} · {source.name}</span>
                 </div>
 
-                <div className="field-label"><span>行 × 列</span></div>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-                  <label className="field">
-                    <span className="t-body-sm" style={{ color: 'var(--muted)' }}>行</span>
-                    <input type="number" min={1} max={20} value={rows}
-                      onChange={(event) => setRows(clampInt(Number(event.target.value), 1, 20, 3))} />
-                  </label>
-                  <label className="field">
-                    <span className="t-body-sm" style={{ color: 'var(--muted)' }}>列</span>
-                    <input type="number" min={1} max={20} value={cols}
-                      onChange={(event) => setCols(clampInt(Number(event.target.value), 1, 20, 3))} />
-                  </label>
+                {/* 行 × 列 */}
+                <div className="flex flex-col gap-1.5">
+                  <span className="font-meta-sm text-meta-sm text-on-surface font-medium">行 × 列</span>
+                  <div className="grid grid-cols-2 gap-1.5">
+                    <label className="flex flex-col gap-1">
+                      <span className="font-meta-sm text-[10px] text-on-surface-variant">行</span>
+                      <input className="w-full bg-surface-container-low rounded-lg px-2 py-1.5 font-body-sm text-body-sm text-on-surface border border-outline-variant/30 focus:border-primary outline-none" type="number" min={1} max={20} value={rows}
+                        onChange={(event) => setRows(clampInt(Number(event.target.value), 1, 20, 3))} />
+                    </label>
+                    <label className="flex flex-col gap-1">
+                      <span className="font-meta-sm text-[10px] text-on-surface-variant">列</span>
+                      <input className="w-full bg-surface-container-low rounded-lg px-2 py-1.5 font-body-sm text-body-sm text-on-surface border border-outline-variant/30 focus:border-primary outline-none" type="number" min={1} max={20} value={cols}
+                        onChange={(event) => setCols(clampInt(Number(event.target.value), 1, 20, 3))} />
+                    </label>
+                  </div>
                 </div>
 
-                <div className="field-label"><span>输出格式</span></div>
-                <div className="seg-control">
-                  {(['png', 'jpeg', 'webp'] as const).map((item) => (
-                    <button key={item} type="button" className={format === item ? 'active' : ''} onClick={() => setFormat(item)}>
-                      {item.toUpperCase()}
-                    </button>
-                  ))}
+                {/* 格式 */}
+                <div className="flex flex-col gap-1.5">
+                  <span className="font-meta-sm text-meta-sm text-on-surface font-medium">输出格式</span>
+                  <div className="flex items-center gap-1 bg-surface-container p-0.5 rounded-lg">
+                    {(['png', 'jpeg', 'webp'] as const).map((item) => (
+                      <button key={item} type="button" className={format === item
+                        ? 'flex-1 px-2 py-1 rounded-md bg-surface-container-lowest font-meta-sm text-[11px] text-primary font-medium shadow-sm'
+                        : 'flex-1 px-2 py-1 rounded-md font-meta-sm text-[11px] text-on-surface-variant hover:text-on-surface transition-colors'} onClick={() => setFormat(item)}>
+                        {item.toUpperCase()}
+                      </button>
+                    ))}
+                  </div>
                 </div>
 
                 {format !== 'png' && (
-                  <div className="brush-size-row">
-                    <input type="range" min={10} max={100} value={quality} onChange={(event) => setQuality(Number(event.target.value))} aria-label="质量" />
-                    <span className="size-value">Q{quality}</span>
+                  <div className="flex items-center gap-2">
+                    <input className="flex-1 accent-primary cursor-pointer" type="range" min={10} max={100} value={quality} onChange={(event) => setQuality(Number(event.target.value))} aria-label="质量" />
+                    <span className="font-meta-sm text-meta-sm text-on-surface">Q{quality}</span>
                   </div>
                 )}
 
-                <button type="button" className="btn btn-primary" onClick={() => { void split(); }} disabled={busy}>
-                  <Grid2X2 size={15} aria-hidden="true" />{busy ? '切分中...' : `切分为 ${rows}×${cols}`}
+                <button type="button" className="w-full py-2.5 rounded-xl bg-primary hover:bg-primary-container text-on-primary font-body-sm text-body-sm font-medium shadow-[0_2px_10px_rgba(65,91,47,0.25)] transition-all flex items-center justify-center gap-1.5 disabled:opacity-60" onClick={() => { void split(); }} disabled={busy}>
+                  <Grid2X2 size={16} aria-hidden="true" />{busy ? '切分中...' : `切分为 ${rows}×${cols}`}
                 </button>
               </>
             )}
 
-            {error && <p className="error-text t-meta-sm" role="alert">{error}</p>}
+            {error && <p className="font-meta-sm text-meta-sm text-error" role="alert">{error}</p>}
           </aside>
 
-          <div className="split-tool-main">
+          {/* 右: 切片预览 */}
+          <div className="flex-1 bg-surface-container-low p-space-lg overflow-y-auto min-w-0">
             {slices.length === 0 ? (
-              <div className="empty-state" style={{ minHeight: 240 }}>
-                <Grid2X2 className="empty-icon" size={28} aria-hidden="true" />
-                <strong>{source ? '设置行列后点击切分' : '先选择一张原图'}</strong>
-                <span>切分结果会显示在这里</span>
+              <div className="h-full min-h-[240px] flex flex-col items-center justify-center gap-2 text-center">
+                <Grid2X2 size={28} className="text-outline" aria-hidden="true" />
+                <strong className="font-body-sm text-body-sm text-on-surface">{source ? '设置行列后点击切分' : '先选择一张原图'}</strong>
+                <span className="font-meta-sm text-meta-sm text-outline">切分结果会显示在这里</span>
               </div>
             ) : (
-              <div className="split-grid" style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}>
+              <div className="grid gap-2" style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}>
                 {slices.map((slice) => (
-                  <figure className="split-cell" key={slice.id}>
-                    <img src={slice.dataUrl} alt={slice.filename} />
-                    <div className="cell-actions">
-                      <span className="cell-id">{slice.filename.split('_').pop()}</span>
-                      <span style={{ display: 'flex', gap: 8 }}>
-                        <button type="button" className="link-btn" onClick={() => { void useAsReference(slice); }}>送创作</button>
-                        <button type="button" className="link-btn" onClick={() => download(slice.dataUrl, slice.filename)}>下载</button>
+                  <figure key={slice.id} className="rounded-xl overflow-hidden bg-surface-container-lowest border border-outline-variant/30 flex flex-col group">
+                    <img className="w-full object-cover" src={slice.dataUrl} alt={slice.filename} />
+                    <figcaption className="p-1.5 flex items-center justify-between gap-1">
+                      <span className="font-meta-sm text-[9px] text-outline truncate">{slice.filename.split('_').pop()}</span>
+                      <span className="flex gap-1.5 shrink-0">
+                        <button type="button" className="font-meta-sm text-meta-sm text-primary hover:underline" onClick={() => { void useAsReference(slice); }}>送创作</button>
+                        <button type="button" className="font-meta-sm text-meta-sm text-primary hover:underline" onClick={() => download(slice.dataUrl, slice.filename)}>下载</button>
                       </span>
-                    </div>
+                    </figcaption>
                   </figure>
                 ))}
               </div>

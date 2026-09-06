@@ -1,17 +1,10 @@
 /*
  * 芽绘台 · UI v3.5 (Stitch 编译产物照搬路线)
  * 设计规范: docs/DESIGN.md §9.0 — 本目录是其代码实现.
- * 组织: tokens (语义色变量, 亮=Stitch 字面值/暗=品牌体系) → stitch (Tailwind 捕获产物, 类名原样)
- *       → 保留的工具组件样式 (mask-editor/split-tool/login, 待逐步套 stitch 类).
+ * 组织: tokens (语义色变量, 亮=Stitch 字面值/暗=品牌体系) → fonts (自托管) → stitch (Tailwind 捕获产物, 类名原样).
  * 规则: 亮色样式一律用 stitch.css 里的 Stitch 原子类; 新造色值必须登记 tokens.css.
  */
 
 @import './tokens.css';
 @import './fonts.css';
 @import './stitch.css';
-@import './compat-tokens.css';
-
-/* ---- 工具组件 (画布类, 类名自管; 后续按 §9.0 逐步换 stitch 类) ---- */
-@import './mask-editor.css';
-@import './split-tool.css';
-@import './login.css';

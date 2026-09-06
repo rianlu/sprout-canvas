@@ -34,16 +34,16 @@
 
 /* 暗色 (方案 α): .dark 作用域重定义 --sc-*; 亮色零改写 */
 .dark {
-  --sc-primary: 79 106 60;
+  --sc-primary: 131 158 108;
   --sc-primary-container: 89 116 69;
-  --sc-primary-fixed: 107 138 82;
-  --sc-on-primary-fixed: 205 227 176;
+  --sc-primary-fixed: 56 74 45;
+  --sc-on-primary-fixed: 203 232 178;
   --sc-secondary: 163 192 139;
   --sc-secondary-container: 61 82 48;
   --sc-on-secondary-container: 215 232 194;
-  --sc-primary-fixed-dim: 85 112 67;
-  --sc-secondary-fixed-dim: 85 112 67;
-  --sc-secondary-fixed-dim-b: 85 112 67;
+  --sc-primary-fixed-dim: 131 158 108;
+  --sc-secondary-fixed-dim: 131 158 108;
+  --sc-secondary-fixed-dim-b: 131 158 108;
   --sc-on-secondary-fixed: 215 232 194;
   --sc-on-primary-fixed-variant: 205 227 176;
   --sc-surface: 23 27 22;
@@ -53,7 +53,7 @@
   --sc-surface-container-high: 42 48 42;
   --sc-surface-container-highest: 48 54 48;
   --sc-inverse-on-surface: 232 235 227;
-  --sc-inverse-surface: 232 235 227;
+  --sc-inverse-surface: 47 49 46;
   --sc-surface-dim: 21 25 20;
   --sc-surface-alt: 30 35 32;
   --sc-on-surface: 232 235 227;

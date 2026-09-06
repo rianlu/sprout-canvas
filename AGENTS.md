@@ -38,7 +38,7 @@ This file provides guidance to Codex (Codex.ai/code) when working with code in t
 - `server/text-routing.mjs`: 文本提示词优化 Provider 的熔断状态机, 接口与生图类似.
 - `src/app/App.tsx`: React 19 + StrictMode 入口. 顶层挂载 `useAuth` + `useGallery` + `useQueue`, 按 `PageKey` 切 `pages/`.
 - `src/pages/Stitch*` 四页: `StitchCreativeStudio` (单图: 控制轨+画板瀑布流, ⌘Enter/润色/参考图/蒙版/切图), `StitchSeriesStudio` (台本配置台+分镜矩阵, seriesId 聚合), `StitchStylesLibrary` (双 tab+⌘K 搜索+详情灯箱), `StitchGalleryGrid` (类型过滤+系列叠层卡+查看器三层+Filmstrip+ZIP). 切图 `components/tools/SplitToolDrawer` (纯前端).
-- **UI v3.5 (Stitch 照搬路线, 主体已完成)**: 样式层 = Tailwind 编译产物 `src/styles/stitch.css` (捕获, 类名原样) + `tokens.css` (语义色, 亮=字面值/暗=品牌体系, `html.dark` 切换) + `compat-tokens.css` (过渡期旧变量映射, login/mask-editor/split-tool 迁移完后删). 页面 `src/pages/Stitch*.tsx` 从 5 张正式稿直接转 JSX; 壳在 `components/shell/`. 图标 lucide. 路线见 `docs/DESIGN.md` §9.0, 功能边界见 `docs/PRD.md` v3.1 §7.1.
+- **UI v3.5 (Stitch 照搬路线, 已完成)**: `src/styles/` 四文件 — `stitch.css` (Tailwind 编译产物捕获, 类名原样) + `tokens.css` (30 组语义色, 亮=Stitch 字面值/暗=品牌体系并经 WCAG 校验, `html.dark` 切换) + `fonts.css` + `index.css`. 页面 `src/pages/Stitch*.tsx` 从 5 张正式稿转 JSX; 壳在 `components/shell/`; MaskEditor/SplitToolDrawer 外壳也用 stitch 类. 图标 lucide. 路线见 `docs/DESIGN.md` §9.0, 功能边界见 `docs/PRD.md` v3.1 §7.1.
 - `src/hooks/useQueue.ts`: 有任务时每 2s / 空闲时每 5s 轮询 `/api/jobs/me` (页面隐藏暂停). 命中 `succeeded` 后拉 `/api/jobs/:id/result`, 用 `clientContext.placeholderId` 把结果填回画廊占位.
 - `src/lib/storage/gallery-db.ts`: 展馆只在浏览器 IndexedDB (`img-gen-gallery` v2). 旧 `localStorage` 数据自动迁移. **不在服务端共享**.
 

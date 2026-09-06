@@ -10,7 +10,7 @@
 
 1. **护眼优先** — 长时间创作不刺眼. 新增颜色饱和度/亮度超标即否决.
 2. **双主题等价** — 每个颜色决策必须同时给出 light/dark 值 (Stitch 稿只有浅色, dark 值按本表推导).
-3. **token 化 (v3.5 修订)** — 亮色样式 = Stitch 编译 CSS 原样 (`src/styles/stitch.css`); 暗色与品牌语义色集中在 `tokens.css` + `dark-theme.css`. 新增样式优先复用 Stitch 原子类; 新造色值必须登记 token.
+3. **token 化 (v3.5 修订)** — 亮色样式 = Stitch 编译 CSS 原样 (`src/styles/stitch.css`); 暗色语义色集中在 `tokens.css` 的 `.dark` 作用域 (30 组值经 WCAG 对比度校验). 新增样式一律复用 Stitch 原子类; 新造色值必须登记 token.
 4. **Provider 隐形** — UI 不暴露服务商概念 (无选择器/无结果标注), 失败只有「重试」.
 5. **文案务实** — 直白短句, 说明"做什么、怎么做"; 禁止修辞、比喻、口号 (见 §8).
 6. **纸面层次** — 深度靠"纸层叠放"表达 (卡 → 井 → 下沉), 阴影一律绿灰调低透明, 禁纯黑投影与荧光发光.
@@ -26,7 +26,7 @@
 - 首屏无闪烁: `index.html` 内联脚本在 React 挂载前读 `localStorage.sprout_canvas_theme` (缺省 light).
 - 切换: `src/hooks/useTheme.ts` 同步 `meta[name=theme-color]` (light `#FDFCF8` / dark `#0f1412`).
 - favicon: SVG 渐变 `#9DBEA6 → #597445`, 双主题通用.
-- **暗色方案 α (v3.5 定稿)**: Stitch 编译产物只含亮色 (`.dark` 变体规则为 0, 已实测), 暗色由 `dark-theme.css` 自建 — 在 `.dark` 作用域下按 §2 token 暗色值重定义 Stitch 语义变量, 亮色零改写 (还原度无损), 暗色延续品牌灰绿体系. 载体从 `data-theme` 改为 `<html class="dark">` 切换 (与 Stitch 的 darkMode:"class" 约定对齐).
+- **暗色方案 α (v3.5 定稿并实施)**: Stitch 编译产物只含亮色 (`.dark` 变体规则为 0, 已实测), 暗色值集中在 `tokens.css` 的 `.dark` 作用域 (30 组语义色, 功能配对经 WCAG 对比度校验, 正文类 ≥4.5:1, 装饰类 ≥3:1). 亮色零改写 (还原度无损). 载体 `<html class="dark">`, 由 `useTheme` + `index.html` 内联脚本切换.
 
 ## 2. 色彩 token
 

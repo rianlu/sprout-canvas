@@ -125,59 +125,63 @@ export function MaskEditor({ image, open, onClose, onApply, initialMask, regionP
   if (!open) return null;
 
   return (
-    <div className="mask-editor-overlay" role="dialog" aria-modal="true" aria-label="局部重绘工作区">
-      <button type="button" className="backdrop" onClick={onClose} aria-label="关闭蒙版编辑器" />
-      <div ref={dialogRef} className="mask-editor-panel">
-        <div className="mask-editor-head">
-          <div className="head-copy">
-            <span className="head-icon"><Brush size={18} aria-hidden="true" /></span>
+    /* Inpaint modal (照搬 Stitch 单图稿 MASK INPAINTING MODAL, 类名原样) */
+    <div className="fixed inset-0 z-50 bg-inverse-surface/60 backdrop-blur-md flex items-center justify-center p-space-md" role="dialog" aria-modal="true" aria-label="局部重绘工作区" onClick={onClose}>
+      <div ref={dialogRef} className="w-full max-w-4xl bg-surface-bright rounded-2xl shadow-[0_24px_64px_rgba(85,95,75,0.20)] overflow-hidden flex flex-col max-h-[90vh]" onClick={(event) => event.stopPropagation()}>
+        {/* Inpaint Header Bar */}
+        <div className="px-space-lg py-space-md bg-surface-container-low flex items-center justify-between">
+          <div className="flex items-center gap-space-sm">
+            <div className="w-8 h-8 rounded-lg bg-primary/10 text-primary flex items-center justify-center">
+              <Brush size={20} aria-hidden="true" />
+            </div>
             <div>
-              <h2>局部重绘</h2>
-              <p>涂抹要修改的区域; 蒙版外区域尽量保持不变</p>
+              <h3 className="font-headline-sm text-headline-sm text-on-surface">局部重绘修整 (Mask Inpainting)</h3>
+              <p className="font-meta-sm text-meta-sm text-on-surface-variant">涂抹想要被替换或润色的区域，保存后随生成请求提交</p>
             </div>
           </div>
-          <button type="button" className="icon-btn" onClick={onClose} aria-label="关闭"><X size={16} /></button>
+          <button type="button" className="w-8 h-8 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface flex items-center justify-center transition-colors" onClick={onClose} aria-label="关闭">
+            <X size={18} aria-hidden="true" />
+          </button>
         </div>
 
-        <div className="mask-editor-main">
-          <div className="mask-editor-tools">
-            <div className="tool-group">
-              <span className="tool-label">工具</span>
-              <button type="button" className={`tool-btn ${tool === 'brush' ? 'active' : ''}`} onClick={() => setTool('brush')}>
-                <Brush size={15} aria-hidden="true" />涂抹蒙版
-              </button>
-              <button type="button" className={`tool-btn ${tool === 'eraser' ? 'active' : ''}`} onClick={() => setTool('eraser')}>
-                <Eraser size={15} aria-hidden="true" />橡皮擦
-              </button>
-            </div>
-
-            <div className="tool-group">
-              <span className="tool-label">画笔尺寸</span>
-              <div className="brush-size-row">
-                <button type="button" className="icon-btn" onClick={() => setBrushSize((s) => Math.max(MIN_BRUSH, s - 5))} aria-label="缩小画笔"><Minus size={13} /></button>
-                <input type="range" min={MIN_BRUSH} max={MAX_BRUSH} value={brushSize}
+        {/* Canvas Viewport & Tooling Toolbar */}
+        <div className="flex-1 overflow-hidden flex flex-col md:flex-row">
+          {/* Left Sub-tools Bar */}
+          <div className="p-space-md bg-surface-container-lowest flex md:flex-col gap-space-md items-center md:items-start shrink-0">
+            <div className="space-y-1">
+              <span className="font-meta-sm text-meta-sm text-on-surface-variant uppercase">画笔尺寸</span>
+              <div className="flex items-center gap-2">
+                <input className="w-24 accent-primary cursor-pointer" max={MAX_BRUSH} min={MIN_BRUSH} type="range" value={brushSize}
                   onChange={(event) => setBrushSize(Number(event.target.value))} aria-label="画笔尺寸" />
-                <button type="button" className="icon-btn" onClick={() => setBrushSize((s) => Math.min(MAX_BRUSH, s + 5))} aria-label="放大画笔"><Plus size={13} /></button>
-                <span className="size-value">{brushSize}px</span>
+                <span className="font-meta-sm text-meta-sm text-on-surface">{brushSize}px</span>
               </div>
             </div>
-
-            <div className="tool-group">
-              <span className="tool-label">操作</span>
-              <button type="button" className="tool-btn" onClick={undo} disabled={strokes.length === 0}>
-                <RotateCcw size={15} aria-hidden="true" />撤销
+            <div className="flex md:flex-col gap-1 w-full">
+              <button type="button" className={`flex items-center gap-2 px-3 py-1.5 rounded-lg font-body-sm text-body-sm w-full transition-colors ${tool === 'brush' ? 'bg-secondary-container text-on-secondary-container' : 'hover:bg-surface-container text-on-surface'}`} onClick={() => setTool('brush')}>
+                <Brush size={18} aria-hidden="true" />
+                <span>涂抹蒙版</span>
               </button>
-              <button type="button" className="tool-btn danger" onClick={clearMask} disabled={strokes.length === 0}>
-                <Trash2 size={15} aria-hidden="true" />清空蒙版
+              <button type="button" className={`flex items-center gap-2 px-3 py-1.5 rounded-lg font-body-sm text-body-sm w-full transition-colors ${tool === 'eraser' ? 'bg-secondary-container text-on-secondary-container' : 'hover:bg-surface-container text-on-surface'}`} onClick={() => setTool('eraser')}>
+                <Eraser size={18} aria-hidden="true" />
+                <span>橡皮擦</span>
+              </button>
+              <button type="button" className="flex items-center gap-2 px-3 py-1.5 rounded-lg hover:bg-surface-container text-on-surface font-body-sm text-body-sm w-full" onClick={undo} disabled={strokes.length === 0}>
+                <RotateCcw size={18} aria-hidden="true" />
+                <span>撤销</span>
+              </button>
+              <button type="button" className="flex items-center gap-2 px-3 py-1.5 rounded-lg hover:bg-surface-container text-error font-body-sm text-body-sm w-full" onClick={clearMask} disabled={strokes.length === 0}>
+                <Trash2 size={18} aria-hidden="true" />
+                <span>清空蒙版</span>
               </button>
             </div>
           </div>
-
-          <div className="mask-editor-canvas-area">
-            <div className="mask-canvas-frame" ref={frameRef}>
-              <img src={image.dataUrl} alt={image.name} draggable={false} />
+          {/* Center Inpaint Interactive Preview Canvas */}
+          <div className="flex-1 bg-surface-container-low p-space-lg flex items-center justify-center relative overflow-hidden">
+            <div className="relative w-80 h-80 max-w-full max-h-full rounded-xl overflow-hidden shadow-lg select-none" ref={frameRef}>
+              <img className="w-full h-full object-cover" src={image.dataUrl} alt={image.name} draggable={false} />
               <canvas
                 ref={canvasRef}
+                className="absolute inset-0 w-full h-full"
                 onPointerDown={onPointerDown}
                 onPointerMove={onPointerMove}
                 onPointerUp={onPointerUp}
@@ -189,15 +193,19 @@ export function MaskEditor({ image, open, onClose, onApply, initialMask, regionP
           </div>
         </div>
 
-        <div className="mask-editor-foot">
-          <span className="t-meta" style={{ color: 'var(--muted)' }}>
-            {strokeCount > 0 ? `已涂抹 ${strokeCount} 处` : '还没有涂抹区域'}
-            {regionPrompt ? ' · 已有区域提示词' : ''}
-          </span>
-          <div style={{ display: 'flex', gap: 10, marginLeft: 'auto' }}>
-            <button type="button" className="btn" onClick={onClose}>取消</button>
-            <button type="button" className="btn btn-primary" onClick={apply} disabled={strokes.length === 0}>
-              保存并应用蒙版
+        {/* Inpaint Bottom Prompt Input & Submit */}
+        <div className="p-space-md bg-surface-container-lowest flex flex-col sm:flex-row items-center gap-space-md">
+          <div className="relative flex-1 w-full bg-surface-container-low rounded-xl px-space-md py-2 flex items-center gap-2">
+            <span className={`font-meta-sm text-meta-sm ${strokeCount > 0 ? 'text-primary' : 'text-outline'}`}>
+              {strokeCount > 0 ? `已涂抹 ${strokeCount} 处 · 保存后生效` : '还没有涂抹区域'}
+              {regionPrompt ? ' · 已有区域提示词' : ''}
+            </span>
+          </div>
+          <div className="flex items-center gap-space-sm w-full sm:w-auto justify-end">
+            <button type="button" className="px-space-md py-2 rounded-xl bg-surface-container hover:bg-surface-container-high text-on-surface font-body-sm text-body-sm" onClick={onClose}>取消</button>
+            <button type="button" className="px-space-lg py-2 rounded-xl bg-primary hover:bg-primary-container text-on-primary font-body-sm text-body-sm flex items-center gap-1.5 shadow-sm disabled:opacity-50" onClick={apply} disabled={strokes.length === 0}>
+              <Brush size={16} aria-hidden="true" />
+              <span>保存并应用蒙版</span>
             </button>
           </div>
         </div>
