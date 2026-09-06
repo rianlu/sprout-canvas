@@ -38,7 +38,7 @@ This file provides guidance to Codex (Codex.ai/code) when working with code in t
 - `server/text-routing.mjs`: 文本提示词优化 Provider 的熔断状态机, 接口与生图类似.
 - `src/app/App.tsx`: React 19 + StrictMode 入口. 顶层挂载 `useAuth` + `useGallery` + `useQueue`, 按 `PageKey` 切 `pages/`.
 - `src/pages/`: `CreativeStudio` (单图三子模式: 文生图/参考/画笔蒙版编辑), `SeriesStudio` (分镜卡网格: 文本拆解→批量入队, `clientContext.kind='series'`), `StylesLibrary` (风格库页: 双 tab+搜索+详情灯箱). 展馆在 `components/gallery/GalleryGrid`, 切图抽屉在 `components/tools/SplitToolDrawer` (纯前端, 不打上游).
-- **UI v3 (Stitch Botanical Paper 方案, 已完成)**: 顶栏导航 + 四页 (单图/系列/风格库/展馆), 队列为右侧滑出抽屉 (QueueDrawer), 局部编辑用画笔蒙版 (MaskEditor + brush-mask.ts), 切图为创作页工具抽屉 (SplitToolDrawer). CSS 为 `src/styles/` 模块化目录 (tokens.css 唯一色值源), 进度计划见 `docs/UI_V3_PLAN.md`.
+- **UI v3.5 (Stitch 照搬路线, 重构中)**: 样式层直接使用 Tailwind 编译产物 (`src/styles/stitch.css`, 无头浏览器捕获, 类名保留 Stitch 原子类原样); 暗色为 `dark-theme.css` 覆盖层 (`<html class="dark">` 切换); 图标 lucide 语义替换. 页面 DOM 从 5 张正式稿 (单图/系列/风格库/展馆/查看器) 直接转 JSX. 路线详见 `docs/DESIGN.md` §9.0, 功能边界见 `docs/PRD.md` v3.1 §7.1.
 - `src/hooks/useQueue.ts`: 有任务时每 2s / 空闲时每 5s 轮询 `/api/jobs/me` (页面隐藏暂停). 命中 `succeeded` 后拉 `/api/jobs/:id/result`, 用 `clientContext.placeholderId` 把结果填回画廊占位.
 - `src/lib/storage/gallery-db.ts`: 展馆只在浏览器 IndexedDB (`img-gen-gallery` v2). 旧 `localStorage` 数据自动迁移. **不在服务端共享**.
 
@@ -58,6 +58,7 @@ This file provides guidance to Codex (Codex.ai/code) when working with code in t
 `accessPassword` 非空即启用登录. 浏览器 `useAuth` 在 `localStorage` 生成 UUID `userId` 持久化, 登录时把 `userId + password` 提交. 服务端用 cookie `img_auth_max` (HttpOnly, SameSite=Lax, HTTPS 部署需 `secureCookies: true`) 维护会话. **`userId` 同时是队列分桶 key 和任务可见性边界** — 一个用户看不到另一个用户的 job.
 
 ## 必须守住的约定
+- **任何 git 提交必须先经用户确认**. 完成改动后先向用户报告变更内容与验证结果, 等用户明确同意后才执行 `git commit`; 未经确认不自行提交.
 - **API Key 永远不下发到浏览器**. 任何新增上游调用走 `server.mjs` 的代理路径, 配置统一从 `readLocalConfig()` 拿. 前端不允许引入第三方 LLM SDK.
 - **`imageConcurrency` 默认且保持 1**. 提高会同时打多个上游, 容易撞限流; 改之前先确认上游配额, 并同步更新 `docs/DEPLOY.md` 的字段表.
 - **新增/修改配置字段** 要同时改 `config/local.config.example.json` 和 `docs/DEPLOY.md` 的字段表, 避免示例和生产对不上.

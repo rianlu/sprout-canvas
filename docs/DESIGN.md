@@ -2,7 +2,7 @@
 
 > 本文档是 UI 设计的**单一事实来源**, 面向人和 AI 协作者. 改 UI 前先读本文.
 > 分工: **PRD (`docs/PRD.md`) 管做什么, 本文管长什么样、怎么操作, BRAND (`docs/BRAND_AND_POSITIONING.md`) 管品牌**. 与代码冲突时以代码为准, 但必须先更新本文.
-> v3 依据 `stitch_sproutcanvas_studio/` (Botanical Paper Studio 方案) 重写. 移植规则见 §9.
+> v3.5 起采用「Stitch 编译产物照搬」路线 (见 §9.0): 样式层直接使用 Tailwind CDN 捕获的编译 CSS, 类名保留 Stitch 原样.
 
 ## 0. 设计原则 (决策顺序)
 
@@ -10,7 +10,7 @@
 
 1. **护眼优先** — 长时间创作不刺眼. 新增颜色饱和度/亮度超标即否决.
 2. **双主题等价** — 每个颜色决策必须同时给出 light/dark 值 (Stitch 稿只有浅色, dark 值按本表推导).
-3. **token 化** — 组件样式只引用 `src/styles.css` 的 CSS 变量; 硬编码色值 = 违规 (含 Tailwind 任意值).
+3. **token 化 (v3.5 修订)** — 亮色样式 = Stitch 编译 CSS 原样 (`src/styles/stitch.css`); 暗色与品牌语义色集中在 `tokens.css` + `dark-theme.css`. 新增样式优先复用 Stitch 原子类; 新造色值必须登记 token.
 4. **Provider 隐形** — UI 不暴露服务商概念 (无选择器/无结果标注), 失败只有「重试」.
 5. **文案务实** — 直白短句, 说明"做什么、怎么做"; 禁止修辞、比喻、口号 (见 §8).
 6. **纸面层次** — 深度靠"纸层叠放"表达 (卡 → 井 → 下沉), 阴影一律绿灰调低透明, 禁纯黑投影与荧光发光.
@@ -26,6 +26,7 @@
 - 首屏无闪烁: `index.html` 内联脚本在 React 挂载前读 `localStorage.sprout_canvas_theme` (缺省 light).
 - 切换: `src/hooks/useTheme.ts` 同步 `meta[name=theme-color]` (light `#FDFCF8` / dark `#0f1412`).
 - favicon: SVG 渐变 `#9DBEA6 → #597445`, 双主题通用.
+- **暗色方案 α (v3.5 定稿)**: Stitch 编译产物只含亮色 (`.dark` 变体规则为 0, 已实测), 暗色由 `dark-theme.css` 自建 — 在 `.dark` 作用域下按 §2 token 暗色值重定义 Stitch 语义变量, 亮色零改写 (还原度无损), 暗色延续品牌灰绿体系. 载体从 `data-theme` 改为 `<html class="dark">` 切换 (与 Stitch 的 darkMode:"class" 约定对齐).
 
 ## 2. 色彩 token
 
@@ -240,16 +241,23 @@ app = 固定顶栏 + 主工作区
 
 ## 9. Stitch 移植规则 (v3 核心)
 
+### 9.0 照搬路线 (v3.5 核心)
+
+- **样式**: Tailwind 编译产物经无头浏览器捕获 (5 页去重 720 条唯一规则 ~35KB), 原样入库 `src/styles/stitch.css`; 类名**保留 Stitch 原子类原样** (`bg-surface-container-lowest` / `aspect-[4/3]` 等), 禁止改写映射. 对照设计稿 = 对照代码.
+- **结构**: 页面 DOM 直接转 React JSX (onclick → onClick 回调, 静态内容 → props/state), 5 页共享壳 (顶栏/队列抽屉/toast/footer) 抽为组件.
+- **捕获工具**: 一次性脚本记录于 git 历史; 设计稿更新可重跑捕获.
+- **还原度验收**: Playwright 截图 vs 设计稿 screen.png 叠加比对; 与设计稿的全部差异必须登记在 PRD §7.1 剔除清单, 无隐式偏差.
+
 ### 9.1 技术替换
 | Stitch 稿 | 实现 |
 |---|---|
-| Tailwind CDN + 任意值类 | 全局 `src/styles.css` 自定义类 + token 变量 (见 §6 类名表) |
-| Material Symbols 图标 | lucide-react (无新增依赖) |
+| Tailwind CDN + 任意值类 | **编译产物照搬**: 捕获 CSS 入库 `src/styles/stitch.css`, 类名原样保留 (§9.0); 无 Tailwind 运行时依赖 |
+| Material Symbols 图标 | **方案 α**: lucide-react 语义对应替换 (如 `auto_awesome_motion`→`Layers`), 保持自托管离线; 无新增依赖 |
 | Google Fonts (Outfit/Inter/JetBrains Mono) | 自托管 woff2: `public/fonts/*.woff2` + `@font-face` (SIL OFL, 附 license 文件), 禁外链 CDN; 仅 latin 子集 + 用到的字重 (全套 ~120KB) |
 | `lh3.googleusercontent.com` 示例图 | `public/` 自托管; 风格示例图按现有 advanced style 数据结构补齐 |
 | `animate-pulse/bounce/spin` | 呼吸/spinner/spin 的受限实现, 遵守 §4.3 与 reduced-motion |
 
-### 9.2 色值 → token 映射表 (移植时按此翻译, 禁止直接拷贝色值)
+### 9.2 色值 → token 对照表 (v3.5 起用于暗色层生成与语义维护; 亮色层由 stitch.css 原样承载, 无需翻译)
 
 | Stitch token | 映射到 |
 |---|---|
@@ -275,7 +283,7 @@ app = 固定顶栏 + 主工作区
 - 阴影: 双方一致, 无冲突.
 - 布局骨架: 采 Stitch (顶栏 + 四页), 详见 PRD v3 §3.
 
-### 9.4 旧类名 → 新类名对照 (实现迁移用)
+### 9.4 旧类名对照 (v3.0 路线遗留记录, v3.5 照搬路线下不再使用, 留作历史参照)
 
 | 旧类名 (v2 及之前) | 新类名 (v3) |
 |---|---|
@@ -296,7 +304,7 @@ app = 固定顶栏 + 主工作区
 
 ## 10. 变更流程
 
-1. 改设计 → 先改本文对应小节 → 再改 `src/styles.css` → `npm run build` 验证.
+1. 改设计 → 先改本文对应小节 → 再改 `src/styles/` (亮色进 stitch.css 捕获产物 / 暗色进 dark-theme.css / 语义色进 tokens.css) → `npm run build` 验证.
 2. 涉及功能增删 → 先改 `docs/PRD.md`, 再动本文与代码.
 3. 涉及品牌绿/命名/圆角体系 → 同步 `docs/BRAND_AND_POSITIONING.md` 并登记变更记录.
 4. 外部设计稿 (Stitch 导出 HTML/CSS) 移植: **必须按 §9.2 映射表把色值翻译回 token**, 禁止直接拷贝色值/外链资源, 否则双主题体系会断裂.
