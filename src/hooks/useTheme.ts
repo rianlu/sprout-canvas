@@ -14,15 +14,15 @@ function readSavedTheme(): Theme | null {
 }
 
 function readInitialTheme(): Theme {
-  // 内联脚本已写入 data-theme (缺省 light), 这里读回并归一化
-  const attr = document.documentElement.getAttribute('data-theme');
-  return attr === 'dark' ? 'dark' : 'light';
+  // 内联脚本已写入 class (缺省 light), 这里读回并归一化
+  return document.documentElement.classList.contains('dark') ? 'dark' : 'light';
 }
 
 function applyTheme(theme: Theme) {
-  document.documentElement.setAttribute('data-theme', theme);
+  // v3.5: 暗色载体 = <html class="dark"> (与 stitch.css .dark 作用域对齐, DESIGN.md §1)
+  document.documentElement.classList.toggle('dark', theme === 'dark');
   const meta = document.querySelector('meta[name="theme-color"]');
-  if (meta) meta.setAttribute('content', theme === 'light' ? '#FDFCF8' : '#0f1412');
+  if (meta) meta.setAttribute('content', theme === 'light' ? '#FAF9F5' : '#171B16');
 }
 
 export function useTheme() {

@@ -3,7 +3,7 @@ import { dataUrlFormat, normalizeImageOutputFormat } from '../image/format';
 
 const DB_NAME = 'img-gen-gallery';
 const STORE_NAME = 'records';
-const DB_VERSION = 2;
+const DB_VERSION = 3; // v3.5: 新增 seriesId/masterPrompt 字段 (可选, 旧记录无此字段按单图展示)
 const LEGACY_KEY = 'sprout_canvas_gallery_v1';
 
 type StoredResultRecord = Partial<Omit<ResultRecord, 'createdAt' | 'kind'>> & {

@@ -1,0 +1,558 @@
+import { useMemo, useRef, useState } from 'react';
+import {
+  Brush, CircleCheck, Download, Eraser, Layers, Leaf, Lightbulb, Maximize2,
+  Plus, RefreshCw, Scissors, Sparkles, Undo2, Wand2, X,
+} from 'lucide-react';
+import type { AspectRatio, GenerationConfig, ResultRecord } from '../../types/generation';
+
+/* ============ 单图创作 · 控制轨 (照搬 Stitch 单图稿 LEFT CONTROL PANEL, 类名原样) ============ */
+
+export interface StitchStudioRailProps {
+  prompt: string;
+  onPromptChange: (value: string) => void;
+  onPolish: () => void;
+  polishing: boolean;
+  pinnedStyleName: string | null;
+  onUnpinStyle: () => void;
+  quickStyles: { id: string; label: string }[];
+  activeStyleId: string | null;
+  onPickStyle: (id: string) => void;
+  refImage: { name: string; dataUrl: string } | null;
+  onReplaceRef: (file: File) => void;
+  onOpenMaskEditor: () => void;
+  maskStrokes: number;
+  config: GenerationConfig;
+  onConfigChange: (patch: Partial<GenerationConfig>) => void;
+  tone: 'soft' | 'vivid';
+  onToneChange: (tone: 'soft' | 'vivid') => void;
+  onSubmit: () => void;
+  submitting: boolean;
+}
+
+/** 画幅比例选择格 (稿: grid-cols-3 六格) */
+function AspectRatioGrid({ value, onChange }: { value: AspectRatio; onChange: (v: AspectRatio) => void }) {
+  const ratios: { id: AspectRatio; name: string; size: string; box: string }[] = [
+    { id: '1:1', name: '1:1 方图', size: '1024×1024', box: 'w-4 h-4' },
+    { id: '3:4', name: '3:4 竖图', size: '768×1024', box: 'w-3 h-4' },
+    { id: '4:3', name: '4:3 横图', size: '1024×768', box: 'w-4 h-3' },
+    { id: '9:16', name: '9:16 壁纸', size: '1024×1792', box: 'w-2.5 h-4' },
+    { id: '16:9', name: '16:9 宽屏', size: '1792×1024', box: 'w-4 h-2.5' },
+    { id: '21:9', name: '21:9 超宽', size: '2048×864', box: 'w-5 h-2' },
+  ];
+  return (
+    <div className="grid grid-cols-3 gap-1.5">
+      {ratios.map((r) => {
+        const active = value === r.id;
+        return (
+          <button
+            key={r.id}
+            type="button"
+            className={active
+              ? 'flex flex-col items-start p-2 rounded-xl bg-surface-container-high shadow-[0_0_0_2px_#597445] text-on-surface transition-all text-left'
+              : 'flex flex-col items-start p-2 rounded-xl bg-surface-container-low hover:bg-surface-container text-on-surface-variant transition-all text-left'}
+            onClick={() => onChange(r.id)}
+          >
+            <div className="flex items-center justify-between w-full mb-1.5">
+              <div className={`${r.box} rounded-sm border-2 ${active ? 'border-primary bg-primary/20' : 'border-outline/60'}`} />
+            </div>
+            <span className="font-meta-sm text-[11px] font-medium text-on-surface leading-tight">{r.name}</span>
+            <span className="font-meta-sm text-[10px] text-outline">{r.size}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+/** 分段选择器 (通用: 调性/精度/数量/格式) */
+function SegmentedControl<T extends string>({ options, value, onChange, columns = 2 }: {
+  options: { id: T; label: string; sub?: string; tag?: string }[];
+  value: T;
+  onChange: (v: T) => void;
+  columns?: number;
+}) {
+  return (
+    <div className={`grid p-0.5 bg-surface-container rounded-lg ${columns === 3 ? 'grid-cols-3' : 'grid-cols-2'} text-center font-meta-sm text-meta-sm`}>
+      {options.map((opt) => {
+        const active = opt.id === value;
+        return (
+          <button
+            key={opt.id}
+            type="button"
+            className={active
+              ? 'py-1.5 px-2 rounded-md bg-surface-container-lowest font-medium text-primary shadow-sm flex flex-col gap-0.5 items-center'
+              : 'py-1.5 px-2 rounded-md text-on-surface-variant hover:text-on-surface transition-colors flex flex-col gap-0.5 items-center'}
+            onClick={() => onChange(opt.id)}
+          >
+            <span className="text-[11px] font-medium">{opt.label}</span>
+            {opt.sub && <span className="text-[10px] text-outline font-normal leading-tight">{opt.sub}</span>}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+export function StitchStudioRail(props: StitchStudioRailProps) {
+  const {
+    prompt, onPromptChange, onPolish, polishing, pinnedStyleName, onUnpinStyle,
+    quickStyles, activeStyleId, onPickStyle,
+    refImage, onReplaceRef, onOpenMaskEditor, maskStrokes,
+    config, onConfigChange, tone, onToneChange, onSubmit, submitting,
+  } = props;
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  return (
+    <section className="w-full lg:w-[440px] shrink-0 bg-surface-container-lowest/80 backdrop-blur-xl rounded-xl p-space-lg shadow-[0_12px_36px_rgba(85,95,75,0.06)] flex flex-col gap-space-lg sticky top-20 z-20">
+      {/* 灵感提示词 */}
+      <div className="flex flex-col gap-space-xs">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-space-xs">
+            <Lightbulb className="text-primary" size={20} aria-hidden />
+            <span className="font-headline-sm text-headline-sm text-on-surface">灵感提示词</span>
+          </div>
+          {pinnedStyleName && (
+            <button
+              type="button"
+              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-secondary-container text-on-secondary-container hover:bg-secondary-fixed transition-colors text-meta-sm font-meta-sm"
+              onClick={onUnpinStyle}
+            >
+              <span>{pinnedStyleName}</span>
+              <X size={12} aria-hidden />
+            </button>
+          )}
+        </div>
+        <div className="relative bg-surface-container-low rounded-xl p-space-md shadow-sm transition-all focus-within:shadow-[0_0_0_2px_#597445]">
+          <textarea
+            className="w-full bg-transparent border-0 outline-none resize-none font-body-md text-body-md text-on-surface placeholder:text-outline placeholder:italic leading-relaxed"
+            maxLength={1000}
+            placeholder="描述清晨第一缕阳光穿透温室玻璃，照亮案头破土新芽的轻柔笔触，苔藓与湿润泥土的水彩质感..."
+            rows={4}
+            value={prompt}
+            onChange={(event) => onPromptChange(event.target.value)}
+          />
+          <div className="flex items-center justify-between pt-space-xs mt-space-xs text-on-surface-variant font-meta-sm text-meta-sm">
+            <div className="flex items-center gap-space-sm">
+              <button type="button" className="flex items-center gap-1 hover:text-error transition-colors" onClick={() => onPromptChange('')}>
+                <Eraser size={14} aria-hidden />
+                <span>清空</span>
+              </button>
+              <button type="button" className="flex items-center gap-1 hover:text-primary transition-colors disabled:opacity-50" onClick={onPolish} disabled={polishing}>
+                <Wand2 size={14} aria-hidden />
+                <span>{polishing ? '润色中...' : '润色扩写'}</span>
+              </button>
+            </div>
+            <span className="text-outline">{prompt.length} / 1000</span>
+          </div>
+        </div>
+      </div>
+
+      {/* 快捷笔触风格 */}
+      <div className="flex flex-col gap-space-xs">
+        <div className="flex items-center justify-between">
+          <span className="font-meta-sm text-meta-sm text-on-surface-variant tracking-wider uppercase">快捷笔触风格</span>
+        </div>
+        <div className="flex flex-wrap gap-1.5">
+          {quickStyles.map((style) => {
+            const active = style.id === activeStyleId;
+            return (
+              <button
+                key={style.id}
+                type="button"
+                className={active
+                  ? 'px-3 py-1 rounded-full text-meta-sm font-meta-sm bg-primary text-on-primary transition-all shadow-sm'
+                  : 'px-3 py-1 rounded-full text-meta-sm font-meta-sm bg-surface-container text-on-surface-variant hover:bg-surface-container-high transition-all'}
+                onClick={() => onPickStyle(active ? '' : style.id)}
+              >
+                {style.label}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* 基底垫图与局部重绘 */}
+      <div className="bg-surface-container-low rounded-xl p-space-md flex flex-col gap-space-sm">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-space-xs">
+            <Leaf className="text-primary" size={18} aria-hidden />
+            <span className="font-body-md text-body-md font-medium text-on-surface">基底垫图与局部重绘</span>
+          </div>
+          {refImage && (
+            <span className="px-2 py-0.5 rounded-full bg-primary-fixed text-on-primary-fixed font-meta-sm text-meta-sm">1 张已载入</span>
+          )}
+        </div>
+        {refImage ? (
+          <>
+            <div className="flex items-center gap-space-md p-space-xs bg-surface-container-lowest rounded-lg shadow-sm">
+              <div className="w-16 h-16 rounded-md overflow-hidden shrink-0 relative bg-surface-container">
+                <img className="w-full h-full object-cover" src={refImage.dataUrl} alt="参考源图" />
+                <span className="absolute bottom-0 inset-x-0 bg-inverse-surface/60 text-inverse-on-surface font-meta-sm text-[9px] text-center py-0.5">参考源图</span>
+              </div>
+              <div className="flex-1 min-w-0 flex flex-col justify-between h-16 py-0.5">
+                <div className="truncate">
+                  <p className="font-body-sm text-body-sm font-medium text-on-surface truncate">{refImage.name}</p>
+                  <p className="font-meta-sm text-meta-sm text-on-surface-variant">基底参考 · 保持整体结构</p>
+                </div>
+                <div className="flex items-center gap-space-xs">
+                  <button type="button" className="px-2 py-0.5 rounded bg-surface-container text-on-surface font-meta-sm text-meta-sm hover:bg-surface-container-high transition-colors" onClick={() => fileRef.current?.click()}>更换图片</button>
+                  <button type="button" className="px-2 py-0.5 rounded bg-secondary-container text-on-secondary-container font-meta-sm text-meta-sm hover:bg-secondary-fixed transition-colors flex items-center gap-1" onClick={onOpenMaskEditor}>
+                    <Brush size={13} aria-hidden />
+                    <span>局部涂抹修改</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+            {maskStrokes > 0 && (
+              <div className="flex items-center justify-between px-space-sm py-2 rounded-lg bg-primary/10 text-on-surface">
+                <div className="flex items-center gap-2 min-w-0">
+                  <Brush className="text-primary shrink-0" size={18} aria-hidden />
+                  <span className="font-meta-sm text-meta-sm truncate">已圈定局部重绘蒙版区域 ({maskStrokes} 处笔触)</span>
+                </div>
+                <button type="button" className="font-meta-sm text-meta-sm text-primary font-medium hover:underline shrink-0" onClick={onOpenMaskEditor}>进入工作区</button>
+              </div>
+            )}
+          </>
+        ) : (
+          /* 空态: 拖拽上传区 (稿内隐藏状态; 结构照常用) */
+          <button
+            type="button"
+            className="w-full flex flex-col items-center justify-center gap-1 py-space-md rounded-lg border-2 border-dashed border-outline-variant/50 hover:border-primary/50 hover:bg-surface-container-lowest/50 transition-colors text-on-surface-variant"
+            onClick={() => fileRef.current?.click()}
+          >
+            <Plus size={20} aria-hidden className="text-primary" />
+            <span className="font-body-sm text-body-sm">上传参考图</span>
+            <span className="font-meta-sm text-[10px] text-outline">支持图生图与局部重绘</span>
+          </button>
+        )}
+        <input
+          ref={fileRef}
+          type="file"
+          accept="image/png,image/jpeg,image/webp"
+          className="hidden"
+          onChange={(event) => {
+            const file = event.target.files?.[0];
+            if (file) onReplaceRef(file);
+            event.target.value = '';
+          }}
+        />
+      </div>
+
+      {/* 生图参数规范 */}
+      <div className="flex flex-col gap-space-md">
+        <div className="flex items-center justify-between pb-1 border-b border-surface-container">
+          <div className="flex items-center gap-space-xs">
+            <Layers className="text-primary" size={18} aria-hidden />
+            <span className="font-meta-sm text-meta-sm text-on-surface font-medium uppercase tracking-wider">生图参数规范</span>
+          </div>
+          <span className="font-meta-sm text-[11px] text-outline">Botanical v2.4</span>
+        </div>
+
+        {/* 画幅 */}
+        <div className="flex flex-col gap-1.5">
+          <div className="flex items-center justify-between">
+            <span className="font-meta-sm text-meta-sm text-on-surface-variant font-medium">画面画幅比例 (aspect_ratio)</span>
+            <span className="font-meta-sm text-[11px] text-outline">默认 1:1</span>
+          </div>
+          <AspectRatioGrid value={config.aspectRatio} onChange={(v) => onConfigChange({ aspectRatio: v })} />
+        </div>
+
+        {/* 渲染调性 (PRD v3.1 新增, prompt 注入) */}
+        <div className="bg-surface-container-low p-2.5 rounded-xl flex flex-col gap-2">
+          <div className="flex items-center justify-between">
+            <span className="font-meta-sm text-meta-sm text-on-surface font-medium">渲染调性 (style)</span>
+            <span className="font-meta-sm text-[10px] text-outline">精研美学滤镜</span>
+          </div>
+          <SegmentedControl
+            columns={2}
+            value={tone}
+            onChange={onToneChange}
+            options={[
+              { id: 'soft', label: '柔和自然', sub: '光影真实温润 · 自然摄影质感', tag: '推荐' },
+              { id: 'vivid', label: '生动鲜明', sub: '高立体张力 · 富有超现实对比' },
+            ]}
+          />
+        </div>
+
+        {/* 精度 + 数量 */}
+        <div className="grid grid-cols-2 gap-space-sm">
+          <div className="bg-surface-container-low p-2.5 rounded-xl flex flex-col gap-1.5">
+            <div className="flex items-center justify-between">
+              <span className="font-meta-sm text-meta-sm text-on-surface font-medium">渲染精度</span>
+              <span className="font-meta-sm text-[10px] text-outline">quality</span>
+            </div>
+            <SegmentedControl
+              value={config.quality === 'high' ? 'high' : 'standard'}
+              onChange={(v) => onConfigChange({ quality: v === 'high' ? 'high' : 'medium' })}
+              options={[
+                { id: 'standard', label: '标准' },
+                { id: 'high', label: '高清 HD' },
+              ]}
+            />
+          </div>
+          <div className="bg-surface-container-low p-2.5 rounded-xl flex flex-col gap-1.5">
+            <div className="flex items-center justify-between">
+              <span className="font-meta-sm text-meta-sm text-on-surface font-medium">生成数量</span>
+              <span className="font-meta-sm text-[10px] text-outline">n (张)</span>
+            </div>
+            <SegmentedControl
+              columns={3}
+              value={String(config.imageCount) as '1' | '2' | '4'}
+              onChange={(v) => onConfigChange({ imageCount: Number(v) })}
+              options={[
+                { id: '1', label: '1 张' },
+                { id: '2', label: '2 张' },
+                { id: '4', label: '4 张' },
+              ]}
+            />
+          </div>
+        </div>
+
+        {/* 背景透光 */}
+        <div className="p-2.5 bg-surface-container-low rounded-xl flex flex-col gap-1.5">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-1.5">
+              <Layers className="text-primary" size={18} aria-hidden />
+              <span className="font-body-sm text-body-sm font-medium text-on-surface">画布背景透光 (background)</span>
+            </div>
+            <label className="relative inline-flex items-center cursor-pointer">
+              <input
+                className="sr-only peer"
+                type="checkbox"
+                checked={config.background === 'transparent'}
+                onChange={(event) => onConfigChange({ background: event.target.checked ? 'transparent' : 'auto' })}
+              />
+              <div className="w-9 h-5 bg-surface-container-highest peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-primary" />
+            </label>
+          </div>
+          <div className="flex items-center justify-between text-outline font-meta-sm text-[10px]">
+            <span>默认自然底纸，开启即为无底透明 PNG</span>
+            <span className="text-primary">素材免抠</span>
+          </div>
+        </div>
+
+        {/* 导出格式 */}
+        <div className="flex items-center justify-between p-2 bg-surface-container-low rounded-xl">
+          <div className="flex items-center gap-1.5">
+            <Download className="text-outline" size={16} aria-hidden />
+            <span className="font-meta-sm text-meta-sm text-on-surface-variant font-medium">导出格式</span>
+          </div>
+          <div className="flex items-center gap-1 bg-surface-container p-0.5 rounded-lg">
+            {(['png', 'webp', 'jpeg'] as const).map((fmt) => {
+              const active = (config.outputFormat === 'auto' ? 'png' : config.outputFormat) === fmt;
+              return (
+                <button
+                  key={fmt}
+                  type="button"
+                  className={active
+                    ? 'px-2.5 py-0.5 rounded-md bg-surface-container-lowest font-meta-sm text-[11px] text-primary font-medium shadow-sm'
+                    : 'px-2 py-0.5 rounded-md font-meta-sm text-[11px] text-on-surface-variant hover:text-on-surface transition-colors'}
+                  onClick={() => onConfigChange({ outputFormat: fmt })}
+                >
+                  {fmt.toUpperCase()}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+
+      {/* 提交按钮 (sticky) */}
+      <div className="pt-space-xs mt-auto">
+        <button
+          type="button"
+          className="w-full py-3.5 px-space-lg rounded-xl bg-primary hover:bg-primary-container text-on-primary font-headline-sm text-headline-sm flex items-center justify-center gap-space-sm shadow-[0_4px_16px_rgba(65,91,47,0.28)] hover:-translate-y-0.5 transition-all disabled:opacity-60 disabled:hover:translate-y-0"
+          disabled={submitting || prompt.trim().length === 0}
+          onClick={onSubmit}
+        >
+          <Leaf size={20} aria-hidden />
+          <span>{submitting ? '入队中...' : '开始绘制'}</span>
+          <span className="ml-1 px-2 py-0.5 rounded-md bg-black/20 text-[11px] font-meta-sm text-white/90">⌘ + Enter</span>
+        </button>
+      </div>
+    </section>
+  );
+}
+
+/* ============ 单图创作 · 画板瀑布流 (照搬 Stitch RIGHT CANVAS STREAM, 类名原样) ============ */
+
+export interface StitchCanvasStreamProps {
+  jobs: QueueJobView[];
+  results: ResultRecord[];
+  filter: 'all' | 'today' | 'starred';
+  onFilterChange: (f: 'all' | 'today' | 'starred') => void;
+  onDownload: (record: ResultRecord) => void;
+  onUseAsRef: (record: ResultRecord) => void;
+  onOpenMask: (record: ResultRecord) => void;
+  onFullscreen: (record: ResultRecord) => void;
+  onCancelJob: (jobId: string) => void;
+  onRetryJob: (jobId: string) => void;
+  onEditPrompt: () => void;
+  onOpenSplit: (record: ResultRecord) => void;
+}
+
+export interface QueueJobView {
+  id: string;
+  status: 'queued' | 'running' | 'failed';
+  prompt: string;
+  elapsedMs: number;
+  position: number;
+  error: string;
+}
+
+function relativeTime(timestamp: number): string {
+  const diff = Date.now() - timestamp;
+  if (diff < 60_000) return '刚刚';
+  if (diff < 3_600_000) return `${Math.floor(diff / 60_000)} 分钟前`;
+  if (diff < 86_400_000) return `${Math.floor(diff / 3_600_000)} 小时前`;
+  return `${Math.floor(diff / 86_400_000)} 天前`;
+}
+
+export function StitchCanvasStream(props: StitchCanvasStreamProps) {
+  const { jobs, results, filter, onFilterChange, onDownload, onUseAsRef, onOpenMask, onFullscreen, onCancelJob, onRetryJob, onOpenSplit } = props;
+  const filterCounts = useMemo(() => {
+    const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
+    return {
+      all: results.length + jobs.length,
+      today: results.filter((r) => r.createdAt >= todayStart.getTime()).length + jobs.length,
+      starred: 0,
+    };
+  }, [results, jobs]);
+
+  const filteredResults = useMemo(() => {
+    if (filter === 'today') {
+      const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
+      return results.filter((r) => r.createdAt >= todayStart.getTime());
+    }
+    return results;
+  }, [results, filter]);
+
+  return (
+    <div className="flex-1 w-full min-w-0 flex flex-col gap-space-lg">
+      {/* 头部 + 过滤 */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-space-sm pb-space-xs">
+        <div className="flex items-baseline gap-space-sm">
+          <h1 className="font-headline-lg text-headline-lg text-on-surface tracking-tight">创作画卷</h1>
+          <span className="font-meta-sm text-meta-sm text-on-surface-variant">工坊画布流式同步已启动</span>
+        </div>
+        <div className="flex items-center gap-1.5 p-1 bg-surface-container-low rounded-xl self-start">
+          <button
+            type="button"
+            className={filter === 'all' ? 'px-3 py-1 rounded-lg bg-surface-container-lowest shadow-sm text-on-surface font-body-sm text-body-sm font-medium' : 'px-3 py-1 rounded-lg text-on-surface-variant hover:text-on-surface transition-colors font-body-sm text-body-sm'}
+            onClick={() => onFilterChange('all')}
+          >全部画稿 ({filterCounts.all})</button>
+          <button
+            type="button"
+            className={filter === 'today' ? 'px-3 py-1 rounded-lg bg-surface-container-lowest shadow-sm text-on-surface font-body-sm text-body-sm font-medium' : 'px-3 py-1 rounded-lg text-on-surface-variant hover:text-on-surface transition-colors font-body-sm text-body-sm'}
+            onClick={() => onFilterChange('today')}
+          >今日作品</button>
+          <button
+            type="button"
+            className="hidden"
+            onClick={() => onFilterChange('starred')}
+          >已精选标记</button>
+        </div>
+      </div>
+
+      {/* 卡片流 */}
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-space-lg">
+        {/* 生成中卡片 (呼吸纸纹, 真实时长, 无假百分比) */}
+        {jobs.map((job) => {
+          if (job.status === 'failed') {
+            return (
+              <article key={job.id} className="relative flex flex-col bg-error-container/40 rounded-xl p-space-md shadow-[0_8px_24px_rgba(85,95,75,0.06)]">
+                <div className="w-full aspect-square rounded-lg bg-surface-container-lowest/80 flex flex-col items-center justify-center p-space-xl text-center">
+                  <div className="w-12 h-12 rounded-full bg-error/10 text-error flex items-center justify-center mb-space-sm">
+                    <CircleCheck size={28} aria-hidden />
+                  </div>
+                  <h4 className="font-headline-sm text-headline-sm text-on-error-container mb-1">生成未能完成</h4>
+                  <p className="font-body-sm text-body-sm text-on-surface-variant max-w-sm mb-space-md leading-relaxed">{job.error || '上游服务暂时不可用，可换服务商重试'}</p>
+                  <div className="flex items-center gap-space-sm">
+                    <button type="button" className="px-space-md py-2 rounded-lg bg-surface-container text-on-surface font-body-sm text-body-sm hover:bg-surface-container-high transition-colors" onClick={props.onEditPrompt}>修改提示词</button>
+                    <button type="button" className="px-space-md py-2 rounded-lg bg-primary text-on-primary font-body-sm text-body-sm hover:bg-primary-container shadow-sm flex items-center gap-1 transition-colors" onClick={() => onRetryJob(job.id)}>
+                      <RefreshCw size={16} aria-hidden />
+                      <span>一键重试</span>
+                    </button>
+                  </div>
+                </div>
+                <div className="flex items-center justify-between pt-space-md text-on-surface-variant font-meta-sm text-meta-sm">
+                  <span className="truncate">任务已停止 · 可重试</span>
+                  <span>{relativeTime(Date.now())}</span>
+                </div>
+              </article>
+            );
+          }
+          const isRunning = job.status === 'running';
+          return (
+            <article key={job.id} className="relative flex flex-col bg-surface-container-lowest rounded-xl p-space-md shadow-[0_8px_24px_rgba(85,95,75,0.06)] overflow-hidden">
+              <div className="relative w-full aspect-square rounded-lg bg-surface-container-low overflow-hidden flex flex-col items-center justify-center p-space-lg">
+                <div className="absolute inset-0 bg-gradient-to-tr from-surface-container via-surface-container-low to-secondary-fixed-dim/20 animate-pulse" />
+                <div className="relative z-10 flex flex-col items-center gap-space-md text-center">
+                  <div className="w-16 h-16 rounded-full bg-surface-container-lowest/80 backdrop-blur-md shadow-md flex items-center justify-center text-primary">
+                    <Sparkles className="animate-bounce" size={32} aria-hidden />
+                  </div>
+                  <div className="space-y-1">
+                    <h3 className="font-headline-sm text-headline-sm text-on-surface">{isRunning ? '正在渲染' : '排队等候中'}</h3>
+                    <p className="font-meta-sm text-meta-sm text-on-surface-variant truncate max-w-[240px]">{job.prompt.slice(0, 40)}</p>
+                  </div>
+                  <div className="w-48 h-2 bg-surface-container rounded-full overflow-hidden">
+                    <div className={`h-full bg-primary rounded-full ${isRunning ? 'w-1/3 animate-pulse' : 'w-0'}`} />
+                  </div>
+                  <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-surface-bright text-on-surface-variant font-meta-sm text-meta-sm shadow-sm">
+                    <span className={`w-1.5 h-1.5 rounded-full bg-primary ${isRunning ? 'animate-pulse' : ''}`} />
+                    <span>{isRunning ? `已等待 ${Math.max(1, Math.floor(job.elapsedMs / 1000))} 秒` : `第 ${job.position} 位 · 通道忙`}</span>
+                  </div>
+                </div>
+              </div>
+              <div className="flex items-center justify-between pt-space-md">
+                <span className="font-meta-sm text-meta-sm text-on-surface-variant truncate max-w-[240px]">{job.prompt.slice(0, 50)}</span>
+                <button type="button" className="font-meta-sm text-meta-sm text-error hover:underline shrink-0" onClick={() => onCancelJob(job.id)}>中断生成</button>
+              </div>
+            </article>
+          );
+        })}
+
+        {/* 完成卡 (真实数据) */}
+        {filteredResults.map((record) => (
+          <article key={record.id} className="group relative flex flex-col bg-surface-container-lowest rounded-xl p-space-md shadow-[0_8px_24px_rgba(85,95,75,0.06)] hover:shadow-[0_16px_40px_rgba(85,95,75,0.12)] transition-all">
+            <div className="relative w-full aspect-square rounded-lg overflow-hidden bg-surface-container">
+              <img className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-[1.02]" src={record.dataUrl} alt={record.prompt.slice(0, 60)} />
+              {/* 悬浮动作条 */}
+              <div className="absolute top-space-sm right-space-sm flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200 bg-surface-bright/90 backdrop-blur-md p-1 rounded-lg shadow-md">
+                <button type="button" className="w-8 h-8 rounded-md hover:bg-surface-container flex items-center justify-center text-on-surface transition-colors" title="下载无损图" onClick={() => onDownload(record)}>
+                  <Download size={18} aria-hidden />
+                </button>
+                <button type="button" className="w-8 h-8 rounded-md hover:bg-surface-container flex items-center justify-center text-on-surface transition-colors" title="设为新参考" onClick={() => onUseAsRef(record)}>
+                  <Plus size={18} aria-hidden />
+                </button>
+                <button type="button" className="w-8 h-8 rounded-md hover:bg-surface-container flex items-center justify-center text-on-surface transition-colors" title="局部涂抹修改" onClick={() => onOpenMask(record)}>
+                  <Brush size={18} aria-hidden />
+                </button>
+                <button type="button" className="w-8 h-8 rounded-md hover:bg-surface-container flex items-center justify-center text-on-surface transition-colors" title="全屏查看" onClick={() => onFullscreen(record)}>
+                  <Maximize2 size={18} aria-hidden />
+                </button>
+                <button type="button" className="w-8 h-8 rounded-md hover:bg-surface-container flex items-center justify-center text-on-surface transition-colors" title="切图拆分" onClick={() => props.onOpenSplit(record)}>
+                  <Scissors size={18} aria-hidden />
+                </button>
+              </div>
+              <div className="absolute top-space-sm left-space-sm">
+                <span className="px-2 py-0.5 rounded bg-surface-bright/90 backdrop-blur-md font-meta-sm text-meta-sm text-primary font-medium shadow-sm">作品 #{record.id.slice(-3)}</span>
+              </div>
+            </div>
+            <div className="flex flex-col gap-1.5 pt-space-md">
+              <div className="flex items-center justify-between">
+                <h3 className="font-headline-sm text-headline-sm text-on-surface truncate">{record.prompt.slice(0, 24) || '未命名作品'}</h3>
+                <span className="font-meta-sm text-meta-sm text-on-surface-variant shrink-0">{relativeTime(record.createdAt)}</span>
+              </div>
+              <div className="flex flex-wrap items-center gap-1.5 text-on-surface-variant font-meta-sm text-meta-sm">
+                <span className="px-2 py-0.5 rounded bg-surface-container-low">1024×1024</span>
+                
+              </div>
+            </div>
+            </article>
+        ))}
+      </div>
+    </div>
+  );
+}
+

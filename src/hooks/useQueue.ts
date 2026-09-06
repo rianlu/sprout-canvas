@@ -41,6 +41,8 @@ export function useQueue(onResult: (record: ResultRecord) => void) {
           kind: (context?.kind || 'single') as ResultKind,
           outputFormat: dataUrlFormat(dataUrl) || normalizeImageOutputFormat(context?.outputFormat),
           createdAt: Date.now(),
+          seriesId: context?.seriesId,
+          masterPrompt: context?.masterPrompt,
         });
       } catch (error) {
         handled.current.delete(job.id);

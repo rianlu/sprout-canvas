@@ -6,6 +6,9 @@ export interface QueueClientContext {
   prompt: string;
   mode: string;
   outputFormat?: 'auto' | 'png' | 'jpeg' | 'webp';
+  /** 系列聚合 (v3.5): 系列页提交时带上, 回填结果按系列分组 */
+  seriesId?: string;
+  masterPrompt?: string;
 }
 
 export interface QueueJob {

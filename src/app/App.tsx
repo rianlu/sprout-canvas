@@ -1,16 +1,16 @@
 import { useCallback, useEffect, useState } from 'react';
-import { AppShell } from '../components/layout/AppShell';
-import { GalleryGrid } from '../components/gallery/GalleryGrid';
-import { QueueDrawer } from '../components/queue/QueueDrawer';
+import { AppShell } from '../components/shell/AppShell';
+import { GalleryGrid } from '../pages/StitchGalleryGrid';
+import { QueueDrawer } from '../components/shell/QueueDrawer';
 import { Button } from '../components/ui/Button';
-import { CreativeStudio } from '../pages/CreativeStudio';
-import { SeriesStudio } from '../pages/SeriesStudio';
-import { StylesLibrary } from '../pages/StylesLibrary';
+import { CreativeStudio } from '../pages/StitchCreativeStudio';
+import { SeriesStudio } from '../pages/StitchSeriesStudio';
+import { StylesLibrary } from '../pages/StitchStylesLibrary';
 import { useAuth } from '../hooks/useAuth';
 import { useGallery } from '../hooks/useGallery';
 import { useQueue } from '../hooks/useQueue';
-import { useTheme } from '../hooks/useTheme';
 import { getServerConfig } from '../lib/api/config';
+import { writeDraft } from '../lib/storage/drafts';
 import type { QueueSubmitInput } from '../lib/api/queue';
 import type { ResultRecord } from '../types/generation';
 
@@ -46,7 +46,6 @@ export function App() {
   const [ready, setReady] = useState(false);
   const auth = useAuth();
   const gallery = useGallery();
-  const { theme, toggle: toggleTheme } = useTheme();
 
   const handleResult = useCallback(gallery.add, [gallery.add]);
   const queue = useQueue(handleResult);
@@ -82,9 +81,8 @@ export function App() {
 
   return (
     <AppShell page={page} onPageChange={setPage} ready={ready}
-      queue={{ active: queue.globalActive, queued: queue.globalQueued }}
-      onOpenQueue={() => setQueueOpen(true)}
-      theme={theme} onToggleTheme={toggleTheme}>
+      queueCount={queue.globalActive + queue.globalQueued}
+      onOpenQueue={() => setQueueOpen(true)}>
       {page === 'studio' && (
         <CreativeStudio onSubmit={submit} onRetry={queue.retry} results={gallery.records} jobs={queue.jobs} />
       )}
@@ -92,10 +90,17 @@ export function App() {
         <SeriesStudio onSubmit={submit} results={gallery.records} jobs={queue.jobs} />
       )}
       {page === 'styles' && (
-        <StylesLibrary onUseInStudio={() => setPage('studio')} />
+        <StylesLibrary onUseInStudio={(styleId) => {
+          writeDraft('studio_style', styleId);
+          setPage('studio');
+        }} />
       )}
       {page === 'gallery' && (
-        <GalleryGrid records={gallery.records} onClear={gallery.clear} onDelete={gallery.remove} />
+        <GalleryGrid records={gallery.records} onClear={gallery.clear} onDelete={gallery.remove} onUseAsRef={(record) => {
+          writeDraft('studio_ref_image', JSON.stringify({ id: record.id, name: `作品-${record.id.slice(-3)}`, dataUrl: record.dataUrl, size: 0 }));
+          writeDraft('studio_style', '');
+          setPage('studio');
+        }} />
       )}
 
       <QueueDrawer open={queueOpen} onClose={() => setQueueOpen(false)} jobs={queue.jobs}

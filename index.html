@@ -13,11 +13,11 @@
         try {
           var saved = localStorage.getItem('sprout_canvas_theme');
           var theme = saved === 'light' || saved === 'dark' ? saved : 'light';
-          document.documentElement.setAttribute('data-theme', theme);
+          if (theme === 'dark') document.documentElement.classList.add('dark');
           var meta = document.querySelector('meta[name="theme-color"]');
-          if (meta) meta.setAttribute('content', theme === 'light' ? '#FDFCF8' : '#0f1412');
+          if (meta) meta.setAttribute('content', theme === 'light' ? '#FAF9F5' : '#171B16');
         } catch (e) {
-          document.documentElement.setAttribute('data-theme', 'light');
+          /* light 默认, 无需操作 */
         }
       })();
     </script>

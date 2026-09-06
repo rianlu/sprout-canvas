@@ -41,4 +41,8 @@ export interface ResultRecord {
   kind: ResultKind;
   outputFormat?: ImageOutputFormat;
   createdAt: number;
+  /** 系列聚合 (v3.5): 同一 seriesId 的记录在展馆归为一张叠层卡 */
+  seriesId?: string;
+  /** 系列主提示词 (世界观) */
+  masterPrompt?: string;
 }
