@@ -1,4 +1,5 @@
 import { dataUrlToBlob, fileToDataUrl, imageFromDataUrl, imageMime } from './data-url';
+import { MAX_REFERENCE_BYTES } from '../../../shared/generation-contract.mjs';
 
 const MAX_SOURCE_SIZE = 50 * 1024 * 1024;
 const MAX_UPLOAD_SIZE = 2 * 1024 * 1024;
@@ -20,6 +21,7 @@ async function blobToDataUrl(blob: Blob, name: string) {
 }
 
 async function compressImageDataUrl(name: string, sourceDataUrl: string) {
+  const outputMime = imageMime(sourceDataUrl) === 'image/jpeg' ? 'image/jpeg' : 'image/png';
   const image = await imageFromDataUrl(sourceDataUrl);
   const largestSide = Math.max(image.naturalWidth, image.naturalHeight);
   let targetSide = Math.min(largestSide, MAX_DIMENSION);
@@ -33,16 +35,15 @@ async function compressImageDataUrl(name: string, sourceDataUrl: string) {
     canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
     const context = canvas.getContext('2d');
     if (!context) throw new Error('无法创建图片画布');
-    context.fillStyle = '#fff';
-    context.fillRect(0, 0, canvas.width, canvas.height);
+    if (outputMime === 'image/jpeg') { context.fillStyle = '#fff'; context.fillRect(0, 0, canvas.width, canvas.height); }
     context.drawImage(image, 0, 0, canvas.width, canvas.height);
-    const blob = await canvasToBlob(canvas, 'image/jpeg', quality);
+    const blob = await canvasToBlob(canvas, outputMime, quality);
     lastBlob = blob;
     if (blob.size <= MAX_UPLOAD_SIZE) {
-      const nextName = jpegName(name);
+      const nextName = outputMime === 'image/jpeg' ? jpegName(name) : name.replace(/\.[^.]+$/, '') + '.png';
       return { name: nextName, dataUrl: await blobToDataUrl(blob, nextName), size: blob.size };
     }
-    targetSide = Math.max(900, Math.round(targetSide * 0.82));
+    targetSide = Math.max(256, Math.round(targetSide * 0.78));
     quality = Math.max(0.68, quality - 0.05);
   }
 
@@ -55,13 +56,20 @@ export async function prepareImageDataUrl(name: string, sourceDataUrl: string, s
   if (sourceBlob.size > MAX_SOURCE_SIZE) throw new Error(`${name} 超过 50MB`);
   const image = await imageFromDataUrl(sourceDataUrl);
   const largestSide = Math.max(image.naturalWidth, image.naturalHeight);
-  const shouldCompress = sourceBlob.size > MAX_UPLOAD_SIZE || largestSide > MAX_DIMENSION || imageMime(sourceDataUrl) !== 'image/jpeg';
+  const shouldCompress = sourceBlob.size > MAX_UPLOAD_SIZE || largestSide > MAX_DIMENSION || !['image/jpeg', 'image/png', 'image/webp'].includes(imageMime(sourceDataUrl));
   if (!shouldCompress) return { name, dataUrl: sourceDataUrl, size: sourceBlob.size };
   return compressImageDataUrl(name, sourceDataUrl);
 }
 
-export async function prepareImageFile(file: File) {
+export async function prepareImageFile(file: File, { preserveOriginal = false } = {}) {
   if (!file.type.startsWith('image/')) throw new Error('请选择图片文件');
+  if (preserveOriginal) {
+    if (!['image/png', 'image/jpeg', 'image/webp'].includes(file.type)) throw new Error('请选择 PNG, JPEG 或 WebP 图片');
+    if (file.size > MAX_REFERENCE_BYTES) throw new Error('原图超过 12 MiB, 请先在本地缩小文件后重新上传');
+    const dataUrl = await fileToDataUrl(file);
+    await imageFromDataUrl(dataUrl);
+    return { name: file.name, dataUrl, size: file.size };
+  }
   if (file.size > MAX_SOURCE_SIZE) throw new Error(`${file.name} 超过 50MB`);
   const sourceDataUrl = await fileToDataUrl(file);
   return prepareImageDataUrl(file.name, sourceDataUrl, file.size);

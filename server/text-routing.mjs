@@ -10,7 +10,7 @@ export function rankedTextProviders(textProviders = []) {
 
 export function recordTextProviderSuccess(providerId) {
   if (!providerId) return;
-  textProviderCircuitState.set(providerId, { failures: 0, openUntil: 0, lastError: '' });
+  textProviderCircuitState.set(providerId, { failures: 0, openUntil: 0, lastError: '', lastSuccessAt: Date.now() });
 }
 
 export function recordTextProviderFailure(providerId, error, logLine = null) {

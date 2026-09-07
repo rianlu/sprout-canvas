@@ -32,7 +32,7 @@ function paintStrokes(context: CanvasRenderingContext2D, strokes: BrushStroke[],
     context.lineWidth = radius * 2;
     context.lineCap = 'round';
     context.lineJoin = 'round';
-    context.globalCompositeOperation = stroke.mode === 'eraser' ? 'destination-out' : 'source-over';
+    context.globalCompositeOperation = stroke.mode === 'eraser' ? 'source-over' : 'destination-out';
     context.strokeStyle = '#000';
     context.beginPath();
     if (stroke.points.length === 0) continue;
@@ -54,7 +54,7 @@ function paintStrokes(context: CanvasRenderingContext2D, strokes: BrushStroke[],
 }
 
 /** 判断蒙版是否包含有效重绘区 (透明像素) */
-export async function hasEditableRegion(mask: BrushMaskData, imageDataUrl: string): Promise<boolean> {
+export async function hasEditableRegion(mask: BrushMaskData, imageDataUrl: string, baseMaskDataUrl?: string): Promise<boolean> {
   const image = await imageFromDataUrl(imageDataUrl);
   const canvas = document.createElement('canvas');
   canvas.width = image.naturalWidth;
@@ -63,6 +63,11 @@ export async function hasEditableRegion(mask: BrushMaskData, imageDataUrl: strin
   if (!context) return false;
   context.fillStyle = '#000';
   context.fillRect(0, 0, canvas.width, canvas.height);
+  if (baseMaskDataUrl) {
+    const base = await imageFromDataUrl(baseMaskDataUrl);
+    context.clearRect(0, 0, canvas.width, canvas.height);
+    context.drawImage(base, 0, 0, canvas.width, canvas.height);
+  }
   paintStrokes(context, mask.strokes, canvas.width, canvas.height);
   try {
     const data = context.getImageData(0, 0, canvas.width, canvas.height).data;
@@ -74,7 +79,7 @@ export async function hasEditableRegion(mask: BrushMaskData, imageDataUrl: strin
 }
 
 /** 导出蒙版 dataUrl (黑底 + 笔画透明区) */
-export async function brushMaskToDataUrl(mask: BrushMaskData, imageDataUrl: string): Promise<string> {
+export async function brushMaskToDataUrl(mask: BrushMaskData, imageDataUrl: string, baseMaskDataUrl?: string): Promise<string> {
   const image = await imageFromDataUrl(imageDataUrl);
   const canvas = document.createElement('canvas');
   canvas.width = image.naturalWidth;
@@ -83,6 +88,11 @@ export async function brushMaskToDataUrl(mask: BrushMaskData, imageDataUrl: stri
   if (!context) throw new Error('无法创建蒙版');
   context.fillStyle = '#000';
   context.fillRect(0, 0, canvas.width, canvas.height);
+  if (baseMaskDataUrl) {
+    const base = await imageFromDataUrl(baseMaskDataUrl);
+    context.clearRect(0, 0, canvas.width, canvas.height);
+    context.drawImage(base, 0, 0, canvas.width, canvas.height);
+  }
   paintStrokes(context, mask.strokes, canvas.width, canvas.height);
   return canvas.toDataURL('image/png');
 }

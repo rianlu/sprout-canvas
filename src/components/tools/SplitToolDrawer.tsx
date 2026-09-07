@@ -1,11 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
-import { Grid2X2, Scissors, X } from 'lucide-react';
+import { Grid2X2, Scissors, X } from '../ui/icons';
 import { fileToDataUrl, imageFromDataUrl } from '../../lib/image/data-url';
 import { useFocusTrap } from '../../hooks/useFocusTrap';
 import type { ResultRecord } from '../../types/generation';
 import type { RefImage } from '../../types/generation';
 import { prepareImageDataUrl } from '../../lib/image/compress';
+import { getRecordDataUrl } from '../../lib/storage/gallery-db';
 import { randomId } from '../../lib/random/id';
+import { RecordImage } from '../gallery/RecordImage';
 
 interface SlicePreview { id: string; dataUrl: string; filename: string; width: number; height: number }
 interface SplitSource { name: string; dataUrl: string; image: HTMLImageElement }
@@ -96,8 +98,9 @@ export function SplitToolDrawer({ open, onClose, galleryRecords, onUseAsReferenc
   }
 
   async function loadGallery(record: ResultRecord, index: number) {
-    const image = await imageFromDataUrl(record.dataUrl);
-    setSource({ name: gallerySourceName(record, index), dataUrl: record.dataUrl, image });
+    const dataUrl = await getRecordDataUrl(record);
+    const image = await imageFromDataUrl(dataUrl);
+    setSource({ name: gallerySourceName(record, index), dataUrl, image });
     setSlices([]);
     setError('');
   }
@@ -192,7 +195,7 @@ export function SplitToolDrawer({ open, onClose, galleryRecords, onUseAsReferenc
               <div className="grid grid-cols-4 gap-1.5">
                 {galleryRecords.slice(0, 12).map((record, index) => (
                   <button key={record.id} type="button" className="w-14 h-14 rounded-lg overflow-hidden bg-surface-container hover:ring-2 hover:ring-primary transition-all" onClick={() => { void loadGallery(record, index); }} title={record.prompt || '展馆作品'}>
-                    <img className="w-full h-full object-cover" src={record.dataUrl} alt={record.prompt || '展馆作品'} loading="lazy" />
+                    <RecordImage className="w-full h-full object-cover" record={record} alt={record.prompt || '展馆作品'} />
                   </button>
                 ))}
               </div>

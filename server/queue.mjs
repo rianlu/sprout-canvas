@@ -1,3 +1,8 @@
+import { initProviderAdapter, isJsonContent, isMultipartEdit, modeForUpstreamPath, rewriteMultipartFormField, executeImageJobWithProvider, isRetryableJobResult, formatThrownError, failedImageJobResult } from './provider-adapter.mjs';
+import { generationRecipe, requestError, toImagesPayload } from '../shared/generation-contract.mjs';
+import { submissionHash } from './state-store.mjs';
+import { normalizeImageResult } from './image-result.mjs';
+import { imageHash, validateSubmissionImages } from './generation-input.mjs';
 // Per-user image generation queue with strict single-worker concurrency.
 // Jobs are stored in memory, grouped by userId, served round-robin between users
 // (FIFO within each user). Designed to avoid upstream rate-limit while keeping
@@ -22,8 +27,185 @@ const DEFAULT_IMAGE_DURATION_MS = 90_000;
 const PROVIDER_FAILURE_THRESHOLD = 3;
 const PROVIDER_CIRCUIT_OPEN_MS = 30 * 60 * 1000;
 const providerCircuitState = new Map();
+let stateStore = null;
+let workerPromise = null;
+let stopping = false;
+const MAX_QUEUED_JOBS = 128;
+const MAX_USER_QUEUED_JOBS = 32;
+const MAX_RETAINED_BYTES = 128 * 1024 * 1024;
+const META_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+const cleanupTimers = new Map();
+
+function persist(job) { stateStore?.saveJob(job); }
+
+function requestBytes(job) {
+  if (job.submission) return Buffer.byteLength(JSON.stringify(job.submission));
+  return (job.originalBody?.length || 0) + (job.body !== job.originalBody ? job.body?.length || 0 : 0);
+}
+
+function retainedBytes() {
+  let bytes = 0;
+  for (const job of imageJobs.values()) bytes += requestBytes(job) + (job.result?.body?.length || 0);
+  return bytes;
+}
+
+function assertCapacity(userId, bytes = 0) {
+  if (countGlobalQueued() >= MAX_QUEUED_JOBS || (pendingByUser.get(userId)?.length || 0) >= MAX_USER_QUEUED_JOBS) throw requestError('队列已满, 请等待部分任务完成后继续提交', 429);
+  if (retainedBytes() + bytes > MAX_RETAINED_BYTES) throw requestError('待处理图片较多, 请等待作品保存后再提交', 429);
+}
+
+export function initializePersistence(store) {
+  stateStore = store;
+  for (const saved of store.loadJobs()) {
+    const job = { ...saved, result: null };
+    if (job.status === 'pending' || job.status === 'running') {
+      job.outcomeUnknown = job.status === 'running';
+      job.interruptionReason = job.status === 'running' ? 'running-restart' : 'pending-restart';
+      job.status = 'interrupted';
+      job.finishedAt = Date.now();
+      job.error = job.outcomeUnknown ? '服务重启前已开始请求, 上游结果未知. 重新生成可能重复计费.' : '服务重启前尚未执行, 可从此浏览器恢复排队.';
+      persist(job);
+    } else if (job.status === 'succeeded' && !job.acknowledgedAt) {
+      job.status = 'expired';
+      job.error = '服务重启后临时结果已释放. 服务器不保存图片, 请检查本地展馆或重新生成.';
+      persist(job);
+    }
+    imageJobs.set(job.id, job);
+    cleanupJobLater(job.id);
+  }
+}
+
+export function findSubmission(userId, requestId) {
+  return [...imageJobs.values()].find((job) => job.userId === userId && job.requestId === requestId);
+}
+
+/** Identical request IDs are accepted once, including across process restarts. */
+export function submitGeneration(input, userId, selectedProvider) {
+  const hash = submissionHash(input);
+  const existing = findSubmission(userId, input.requestId);
+  if (existing) {
+    if (existing.requestHash !== hash) throw requestError('请求 ID 已用于不同内容, 请创建新的生成任务', 409);
+    return publicJob(existing, userId);
+  }
+  validateSubmissionImages(input);
+  if (input.referenceJobId) {
+    const source = imageJobs.get(input.referenceJobId) || findSubmission(userId, input.referenceJobId);
+    if (!source || source.userId !== userId) throw requestError('参考任务不存在', 404);
+    validateReferenceSnapshot(source, input.referenceImage);
+    if (['succeeded', 'expired'].includes(source.status) && !source.result && !input.referenceImage) throw requestError('参考任务的临时图片已释放, 请从本地作品选择参考图', 409);
+  }
+  if (input.retryOf) {
+    const source = imageJobs.get(input.retryOf);
+    if (!source || source.userId !== userId) throw requestError('原任务不存在', 404);
+    if (['running', 'pending', 'succeeded'].includes(source.status)) throw requestError('此任务无需重试', 409);
+  }
+  assertCapacity(userId, Buffer.byteLength(JSON.stringify(input)));
+  const job = {
+    id: nextJobId(), userId, requestId: input.requestId, requestHash: hash, submission: input,
+    status: 'pending', method: 'POST', upstreamPath: '/v1/images/generations', contentType: 'application/json',
+    autoProviderRouting: !input.providerId, excludeProviderId: input.retryOf ? retryExcludeProviderIds(imageJobs.get(input.retryOf)) : '', clientContext: input.clientContext,
+    queuedAt: Date.now(), startedAt: 0, finishedAt: 0, error: '', result: null,
+    providerId: selectedProvider.id, providerName: selectedProvider.name,
+    recipe: generationRecipe(input, selectedProvider), referenceJobId: input.referenceJobId ? (imageJobs.get(input.referenceJobId) || findSubmission(userId, input.referenceJobId)).id : '', retryOf: input.retryOf || '',
+  };
+  return enqueue(job);
+}
+
+function validateReferenceSnapshot(source, snapshot) {
+  if (!snapshot) return;
+  if (!source?.outputImageHash || snapshot.id !== source.clientContext?.placeholderId || imageHash(snapshot.dataUrl) !== source.outputImageHash) throw requestError('首镜参考图片与原任务结果不一致', 409);
+}
+
+export function resumeGeneration(jobId, userId, input) {
+  const job = imageJobs.get(jobId);
+  if (!job || job.userId !== userId) throw requestError('任务不存在', 404);
+  if (job.status !== 'interrupted' || job.outcomeUnknown) throw requestError('只有确认未执行的任务可以恢复排队', 409);
+  if (submissionHash(input) !== job.requestHash) throw requestError('恢复内容与原始任务不一致', 409);
+  validateSubmissionImages(input);
+  if (job.referenceJobId) {
+    const source = imageJobs.get(job.referenceJobId);
+    if (!source || source.userId !== userId) throw requestError('参考任务已过期, 请从本地作品重新创建分镜', 409);
+    validateReferenceSnapshot(source, input.referenceImage);
+    if (source.status === 'interrupted') throw requestError('请先恢复首镜任务, 再恢复后续分镜', 409);
+    if (!['pending', 'running'].includes(source.status) && !source.result && !input.referenceImage) throw requestError('请先在此浏览器保存首镜原图, 再恢复后续分镜', 409);
+  }
+  assertCapacity(userId, Buffer.byteLength(JSON.stringify(input)));
+  Object.assign(job, { submission: input, status: 'pending', method: 'POST', upstreamPath: '/v1/images/generations', contentType: 'application/json', autoProviderRouting: !input.providerId, queuedAt: Date.now(), startedAt: 0, finishedAt: 0, error: '', interruptionReason: '' });
+  return enqueue(job);
+}
+
+export function updatePendingGeneration(jobId, userId, input, provider) {
+  const job = imageJobs.get(jobId);
+  if (!job || job.userId !== userId) throw requestError('任务不存在', 404);
+  if (job.status !== 'pending') throw requestError('任务已经开始, 请在完成后重新绘制', 409);
+  validateSubmissionImages(input);
+  if (input.requestId !== job.requestId || input.clientContext.placeholderId !== job.clientContext.placeholderId || input.referenceJobId !== job.submission?.referenceJobId || input.providerId !== job.submission?.providerId || input.retryOf !== job.submission?.retryOf) throw requestError('编辑不能更换任务身份, 通道或参考链', 409);
+  if (input.referenceImage) validateReferenceSnapshot(imageJobs.get(job.referenceJobId), input.referenceImage);
+  const cfg = provider || { id: job.providerId, name: job.providerName, imageModel: job.recipe.model, generationMode: job.recipe.generationMode };
+  if (!providerSupportsRequest(cfg, job.upstreamPath, job.contentType, Buffer.from(JSON.stringify(toImagesPayload(input))))) throw requestError('当前通道不支持这些生成参数');
+  const extra = Buffer.byteLength(JSON.stringify(input)) - requestBytes(job);
+  if (extra > 0 && retainedBytes() + extra > MAX_RETAINED_BYTES) throw requestError('参考图片过大, 请稍后再试', 429);
+  const next = { ...job, submission: input, clientContext: input.clientContext, requestHash: submissionHash(input), recipe: generationRecipe(input, { id: job.providerId, name: job.providerName, imageModel: job.recipe.model, generationMode: job.recipe.generationMode }) };
+  persist(next);
+  Object.assign(job, next);
+  return publicJob(job, userId);
+}
+
+export function prioritize(jobId, userId) {
+  const job = imageJobs.get(jobId);
+  if (!job || job.userId !== userId) throw requestError('任务不存在', 404);
+  if (job.status !== 'pending') throw requestError('只有排队中的任务可以置顶', 409);
+  const list = pendingByUser.get(userId);
+  list.splice(list.indexOf(job), 1);
+  list.unshift(job);
+  return publicJob(job, userId);
+}
+
+function hasActiveDependent(jobId) {
+  return [...imageJobs.values()].some((item) => item.referenceJobId === jobId && ['pending', 'running'].includes(item.status));
+}
+
+function releaseClaimedResults() {
+  for (const job of imageJobs.values()) if (job.acknowledgedAt && !hasActiveDependent(job.id)) job.result = null;
+}
+
+export function acknowledge(jobId, userId) {
+  const job = imageJobs.get(jobId);
+  if (!job || job.userId !== userId) throw requestError('任务不存在', 404);
+  if (!['succeeded', 'expired'].includes(job.status)) throw requestError('任务尚未成功', 409);
+  const previous = job.acknowledgedAt;
+  job.acknowledgedAt = previous || Date.now();
+  if (job.status === 'expired') { job.status = 'succeeded'; job.error = ''; }
+  persist(job);
+  releaseClaimedResults();
+  runWorker();
+  return publicJob(job, userId);
+}
+
+export function archiveCompleted(userId) {
+  for (const job of imageJobs.values()) {
+    if (job.userId === userId && (job.status === 'canceled' || job.status === 'succeeded' && job.acknowledgedAt)) {
+      job.archivedAt = Date.now();
+      persist(job);
+    }
+  }
+}
+
+export function providerHealth(providers) {
+  return providers.map((provider) => {
+    const open = isProviderCircuitOpen(provider.id);
+    const state = providerCircuitState.get(provider.id);
+    return { id: provider.id, name: provider.name, model: provider.imageModel, status: open ? 'cooldown' : state?.lastError ? 'degraded' : state?.lastSuccessAt ? 'available' : 'untested', failures: state?.failures || 0, openUntil: state?.openUntil || 0, lastSuccessAt: state?.lastSuccessAt || 0, lastFailureAt: state?.lastFailureAt || 0 };
+  });
+}
+
+export async function stopWorker() {
+  stopping = true;
+  if (workerPromise) await workerPromise;
+}
 
 export function init(deps) {
+  initProviderAdapter(deps);
   readLocalConfig = deps.readLocalConfig;
   upstreamHeaders = deps.upstreamHeaders;
   timeoutSignal = deps.timeoutSignal;
@@ -40,6 +222,9 @@ export function nextJobId() {
 }
 
 export function enqueue(job) {
+  persist(job);
+  clearTimeout(cleanupTimers.get(job.id));
+  cleanupTimers.delete(job.id);
   imageJobs.set(job.id, job);
   if (!pendingByUser.has(job.userId)) pendingByUser.set(job.userId, []);
   pendingByUser.get(job.userId).push(job);
@@ -51,7 +236,7 @@ export function enqueue(job) {
 export function retryFailedJob(jobId, viewerUserId) {
   const source = imageJobs.get(jobId);
   if (!source || source.userId !== viewerUserId) return { ok: false, status: 404, error: '任务不存在或已过期' };
-  if (source.status !== 'failed') return { ok: false, status: 400, error: '只有失败任务可以重试' };
+  if (source.status !== 'failed' || !source.originalBody?.length) return { ok: false, status: 400, error: '请从浏览器中的原始配方重新提交' };
   const retryJob = {
     ...source,
     id: nextJobId(),
@@ -86,7 +271,12 @@ export function cancel(jobId, viewerUserId) {
     job.status = 'canceled';
     job.finishedAt = Date.now();
     job.error = '已被用户取消';
+    job.submission = null;
+    job.body = null;
+    job.originalBody = null;
+    persist(job);
     cleanupJobLater(job.id);
+    releaseClaimedResults();
     logLine('INFO', `[image-job] canceled ${job.id} user=${viewerUserId}`);
     return { ok: true, job: publicJob(job, viewerUserId) };
   }
@@ -96,14 +286,26 @@ export function cancel(jobId, viewerUserId) {
   return { ok: false, status: 400, error: `任务已${terminalLabel(job.status)}` };
 }
 
-export function getJobsForUser(userId) {
-  const jobs = [];
-  for (const job of imageJobs.values()) {
-    if (job.userId === userId) jobs.push(publicJob(job, userId));
+export function getJobsForUser(userId, { cursor = '', limit = 30, requestIds = [] } = {}) {
+  if (!Number.isInteger(limit) || limit < 1 || limit > 100) throw requestError('历史记录页大小无效');
+  let before;
+  if (cursor) {
+    try { before = JSON.parse(Buffer.from(cursor, 'base64url').toString()); } catch { throw requestError('历史记录游标无效'); }
+    if (!Array.isArray(before) || before.length !== 2 || !Number.isFinite(before[0]) || typeof before[1] !== 'string') throw requestError('历史记录游标无效');
   }
-  jobs.sort((a, b) => b.queuedAt - a.queuedAt);
+  const own = [...imageJobs.values()].filter((job) => job.userId === userId);
+  const visible = own.filter((job) => !job.archivedAt).sort((a, b) => b.queuedAt - a.queuedAt || b.id.localeCompare(a.id));
+  const essential = (job) => ['pending', 'running'].includes(job.status) || job.status === 'succeeded' && !job.acknowledgedAt;
+  const history = visible.filter((job) => !essential(job));
+  const page = history.filter((job) => !before || job.queuedAt < before[0] || job.queuedAt === before[0] && job.id.localeCompare(before[1]) < 0).slice(0, limit + 1);
+  const hasMore = page.length > limit;
+  page.length = Math.min(page.length, limit);
+  const last = page.at(-1);
+  const selected = new Map([...visible.filter(essential), ...page, ...own.filter((job) => requestIds.includes(job.requestId))].map((job) => [job.id, job]));
   return {
-    jobs: jobs.slice(0, 50),
+    jobs: [...selected.values()].map((job) => publicJob(job, userId)),
+    historyCursor: hasMore ? Buffer.from(JSON.stringify([last.queuedAt, last.id])).toString('base64url') : '',
+    historyTotal: history.length,
     globalActive: activeJob ? 1 : 0,
     globalQueued: countGlobalQueued(),
     averageMs: averageImageDurationMs(),
@@ -125,10 +327,10 @@ export function getJobResult(jobId, viewerUserId) {
   if (!job.result) {
     return {
       kind: 'result',
-      status: 500,
+      status: ['succeeded', 'expired', 'canceled'].includes(job.status) ? 410 : 409,
       contentType: 'application/json; charset=utf-8',
       cacheControl: '',
-      body: Buffer.from(JSON.stringify({ error: job.error || `任务${terminalLabel(job.status)}` })),
+      body: Buffer.from(JSON.stringify({ error: job.error || (job.acknowledgedAt ? '图片已保存到本地, 临时结果已释放' : `任务${terminalLabel(job.status)}`) })),
     };
   }
   return { kind: 'result', ...job.result };
@@ -149,12 +351,19 @@ function publicJob(job, viewerUserId) {
   const averageMs = averageImageDurationMs();
   return {
     id: job.id,
+    requestId: job.requestId || '',
     status: job.status,
     error: job.error || '',
     providerId: job.providerId || '',
     providerName: job.providerName || '',
     retryOf: job.retryOf || '',
-    canRetry: job.status === 'failed' && Boolean(job.originalBody?.length),
+    canRetry: ['failed', 'expired', 'interrupted'].includes(job.status) && Boolean(job.submission || job.originalBody?.length),
+    acknowledgedAt: job.acknowledgedAt || 0,
+    archivedAt: job.archivedAt || 0,
+    outcomeUnknown: Boolean(job.outcomeUnknown),
+    interruptionReason: job.interruptionReason || '',
+    recipe: job.recipe || null,
+    referenceJobId: job.referenceJobId || '',
     clientContext: job.clientContext || null,
     yourPosition,
     yourQueued: userQueue.length,
@@ -181,7 +390,28 @@ function averageImageDurationMs() {
 }
 
 function cleanupJobLater(jobId) {
-  setTimeout(() => imageJobs.delete(jobId), JOB_TTL_MS).unref?.();
+  clearTimeout(cleanupTimers.get(jobId));
+  const job = imageJobs.get(jobId);
+  if (!job || ['running', 'pending'].includes(job.status)) return;
+  const timer = setTimeout(() => {
+    job.body = null;
+    job.originalBody = null;
+    job.submission = null;
+    if (!hasActiveDependent(jobId)) {
+      job.result = null;
+      if (job.status === 'succeeded' && !job.acknowledgedAt) {
+        job.status = 'expired';
+        job.error = '临时结果已过期, 请检查本地展馆. 服务器不保存图片.';
+        persist(job);
+      }
+    } else { cleanupJobLater(jobId); return; }
+    runWorker();
+    const removal = setTimeout(() => { imageJobs.delete(jobId); stateStore?.deleteJob(jobId); cleanupTimers.delete(jobId); }, Math.max(1000, META_TTL_MS - (Date.now() - (job.finishedAt || job.queuedAt))));
+    removal.unref?.();
+    cleanupTimers.set(jobId, removal);
+  }, Math.max(1000, JOB_TTL_MS - (Date.now() - (job.finishedAt || job.queuedAt))));
+  timer.unref?.();
+  cleanupTimers.set(jobId, timer);
 }
 
 function pickNextJob() {
@@ -194,27 +424,45 @@ function pickNextJob() {
     const userId = users[(startIdx + i) % users.length];
     const queue = pendingByUser.get(userId);
     if (!queue || !queue.length) continue;
+    const index = queue.findIndex((candidate) => !candidate.referenceJobId || !['pending', 'running'].includes(imageJobs.get(candidate.referenceJobId)?.status));
+    if (index < 0) continue;
     lastServedUserId = userId;
-    return queue.shift();
+    return queue.splice(index, 1)[0];
   }
   return null;
 }
 
 function runWorker() {
-  if (activeJob) return;
+  if (activeJob || stopping || retainedBytes() > MAX_RETAINED_BYTES) return;
   const job = pickNextJob();
   if (!job) return;
   activeJob = job;
   job.status = 'running';
   job.startedAt = Date.now();
-  processImageJob(job).finally(() => {
+  try { persist(job); } catch (error) {
+    job.status = 'interrupted'; job.interruptionReason = 'pending-restart'; job.outcomeUnknown = false; job.error = '任务状态无法保存, 尚未调用上游'; job.finishedAt = Date.now();
+    activeJob = null; logLine('ERROR', `任务存储失败: ${error.message}`); return;
+  }
+  workerPromise = processImageJob(job).finally(() => {
     activeJob = null;
+    workerPromise = null;
+    releaseClaimedResults();
     runWorker();
   });
 }
 
 async function processImageJob(job) {
   try {
+    if (job.referenceJobId) {
+      const source = imageJobs.get(job.referenceJobId);
+      if (!source || !['succeeded', 'expired'].includes(source.status)) throw new Error('参考分镜尚未生成成功, 请先完成参考分镜再重新提交本镜');
+      const first = source.result?.body ? JSON.parse(source.result.body.toString('utf8')).data?.[0] : null;
+      let reference = job.submission.referenceImage;
+      if (first?.b64_json) reference = { id: source.clientContext.placeholderId, recordId: source.clientContext.placeholderId, name: '系列主体参考', dataUrl: `data:${first.mime_type};base64,${first.b64_json}` };
+      if (!reference) throw new Error('参考分镜临时图片已释放, 请在保存原图的浏览器继续提交');
+      validateReferenceSnapshot(source, reference);
+      job.submission = { ...job.submission, request: { ...job.submission.request, references: [reference, ...job.submission.request.references].slice(0, 4) } };
+    }
     const initialConfig = await readLocalConfig(job.providerId);
     const providers = providersForJob(job, initialConfig);
     let jobResult = null;
@@ -230,22 +478,26 @@ async function processImageJob(job) {
       lastConfig = config;
       logLine('INFO', `[image-job] start ${job.id} user=${job.userId} provider=${config.name} mode=${config.generationMode} path=${job.upstreamPath}${index ? ' fallback' : ''}`);
       try {
-        jobResult = await executeImageJobWithProvider(job, config);
+        jobResult = await normalizeImageResult(await executeImageJobWithProvider(job, config));
       } catch (error) {
         const message = `上游请求异常: ${formatThrownError(error)}`;
         jobResult = failedImageJobResult(502, message);
+        jobResult.outcomeUnknown = true;
       }
       if (jobResult.ok) {
+        const first = JSON.parse(jobResult.body.toString('utf8')).data[0];
+        job.outputImageHash = imageHash(`data:${first.mime_type};base64,${first.b64_json}`);
         recordProviderSuccess(config.id);
         break;
       }
       const retryable = isRetryableJobResult(jobResult);
-      if (retryable) recordProviderFailure(config.id, jobResult.error);
+      if (retryable || jobResult.outcomeUnknown) recordProviderFailure(config.id, jobResult.error);
       if (!retryable || index === providers.length - 1) break;
       logLine('WARN', `[image-job] retryable ${job.id} provider=${config.name} status=${jobResult.status} error=${jobResult.error}`);
     }
     job.finishedAt = Date.now();
     job.result = jobResult;
+    job.outcomeUnknown = Boolean(jobResult.outcomeUnknown);
     job.status = jobResult.ok ? 'succeeded' : 'failed';
     if (!jobResult.ok) {
       job.error = jobResult.error;
@@ -268,6 +520,8 @@ async function processImageJob(job) {
       body: Buffer.from(JSON.stringify({ error: job.error })),
     };
   } finally {
+    if (job.status === 'succeeded') { job.submission = null; job.body = null; job.originalBody = null; }
+    try { persist(job); } catch (error) { logLine('ERROR', `任务状态保存失败: ${error.message}`); }
     cleanupJobLater(job.id);
   }
 }
@@ -276,7 +530,7 @@ async function processImageJob(job) {
 
 export function chooseImageProvider(config, upstreamPath, contentType, excludeId, body) {
   const provider = rankedImageProviders(config, upstreamPath, contentType, excludeId, body)[0];
-  if (!provider) throw new Error(`没有兼容的生图服务商: ${requestKindLabel(upstreamPath, contentType)}`);
+  if (!provider) throw requestError(`没有可用的生图通道, 请检查通道状态`, 503);
   return provider;
 }
 
@@ -305,59 +559,6 @@ function requestKindLabel(upstreamPath, contentType) {
   return upstreamPath;
 }
 
-function isJsonContent(contentType) {
-  return String(contentType || '').includes('application/json');
-}
-
-function isMultipartEdit(contentType) {
-  return String(contentType || '').includes('multipart/form-data');
-}
-
-function parseJsonBody(body) {
-  try {
-    return JSON.parse(Buffer.from(body).toString('utf8') || '{}');
-  } catch {
-    return {};
-  }
-}
-
-function referenceImagesFromPayload(payload) {
-  const refs = Array.isArray(payload?.ref_images) ? payload.ref_images : Array.isArray(payload?.input_images) ? payload.input_images : [];
-  return refs
-    .map((ref, index) => ({
-      name: String(ref?.name || `reference-${index + 1}.jpg`),
-      imageUrl: String(ref?.image_url || ref?.dataUrl || ref?.data_url || ''),
-      maskUrl: String(ref?.mask_url || ref?.maskDataUrl || ref?.mask_data_url || ''),
-    }))
-    .filter((ref) => ref.imageUrl.startsWith('data:image/'));
-}
-
-function payloadHasReferenceImages(payload) {
-  return referenceImagesFromPayload(payload).length > 0;
-}
-
-function payloadHasReferenceMask(payload) {
-  return referenceImagesFromPayload(payload).some((ref) => ref.maskUrl.startsWith('data:image/'));
-}
-
-function jobJsonPayload(job) {
-  return parseJsonBody(job.originalBody || job.body);
-}
-
-function isSemanticImageGeneration(job) {
-  return job.upstreamPath === '/v1/images/generations' && isJsonContent(job.contentType);
-}
-
-function isSemanticImageEdit(job) {
-  return isSemanticImageGeneration(job) && payloadHasReferenceImages(jobJsonPayload(job));
-}
-
-function modeForUpstreamPath(upstreamPath) {
-  if (upstreamPath.startsWith('/v1/responses')) return 'responses';
-  if (upstreamPath.startsWith('/v1/images/')) return 'images';
-  return '';
-}
-
 function providerLoad(providerId) {
   let count = 0;
   if (activeJob && activeJob.providerId === providerId) count += 1;
@@ -370,7 +571,14 @@ function providerLoad(providerId) {
 function compatibleProviders(config, upstreamPath, contentType, body) {
   const providers = Array.isArray(config.providers) ? config.providers : [];
   if (upstreamPath === '/v1/images/generations' && isJsonContent(contentType)) {
-    return providers.filter((provider) => provider.generationMode === 'images' || provider.generationMode === 'responses');
+    let payload = {};
+    try { if (body) payload = JSON.parse(Buffer.from(body).toString('utf8')); } catch { return []; }
+    return providers.filter((provider) => {
+      if (provider.generationMode !== 'images' && provider.generationMode !== 'responses') return false;
+      if (payload.output_format && provider.capabilities?.outputFormats && !provider.capabilities.outputFormats.includes(payload.output_format)) return false;
+      if (!payload.size || ['auto', '1024x1024', '1536x1024', '1024x1536'].includes(payload.size)) return true;
+      return provider.generationMode === 'images' && /^gpt-image-2(?:-|$)/.test(provider.imageModel);
+    });
   }
   if (upstreamPath === '/v1/images/edits' && isMultipartEdit(contentType)) {
     return providers.filter((provider) => provider.generationMode === 'images');
@@ -427,7 +635,7 @@ function isProviderCircuitOpen(providerId) {
 
 function recordProviderSuccess(providerId) {
   if (!providerId) return;
-  providerCircuitState.set(providerId, { failures: 0, openUntil: 0, lastError: '' });
+  providerCircuitState.set(providerId, { failures: 0, openUntil: 0, lastError: '', lastSuccessAt: Date.now() });
 }
 
 function recordProviderFailure(providerId, error) {
@@ -435,13 +643,13 @@ function recordProviderFailure(providerId, error) {
   const previous = providerCircuitState.get(providerId) || { failures: 0, openUntil: 0, lastError: '' };
   const failures = previous.failures + 1;
   const openUntil = failures >= PROVIDER_FAILURE_THRESHOLD ? Date.now() + PROVIDER_CIRCUIT_OPEN_MS : previous.openUntil || 0;
-  providerCircuitState.set(providerId, { failures, openUntil, lastError: String(error || '') });
+  providerCircuitState.set(providerId, { ...previous, failures, openUntil, lastError: String(error || ''), lastFailureAt: Date.now() });
   if (openUntil) logLine('WARN', `[image-provider] circuit-open provider=${providerId} failures=${failures} cooldownMs=${PROVIDER_CIRCUIT_OPEN_MS}`);
 }
 
 function providersForJob(job, config) {
   if (!job.autoProviderRouting) return [config];
-  const providers = rankedImageProviders(config, job.upstreamPath, job.contentType, job.excludeProviderId, job.originalBody || job.body);
+  const providers = rankedImageProviders(config, job.upstreamPath, job.contentType, job.excludeProviderId, job.submission ? Buffer.from(JSON.stringify(toImagesPayload(job.submission))) : job.originalBody || job.body);
   const selectedIndex = providers.findIndex((provider) => provider.id === job.providerId);
   if (selectedIndex <= 0) return providers;
   const [selectedProvider] = providers.splice(selectedIndex, 1);
@@ -451,350 +659,7 @@ function providersForJob(job, config) {
 function applyJobProvider(job, provider) {
   job.providerId = provider.id;
   job.providerName = provider.name;
-  job.body = rewriteImageJobBody(provider, job.originalBody || job.body, job.contentType);
-}
-
-function multipartBoundary(contentType) {
-  const match = String(contentType || '').match(/boundary=(?:("[^"]+")|([^;]+))/i);
-  return (match?.[1] || match?.[2] || '').replace(/^"|"$/g, '').trim();
-}
-
-function rewriteMultipartFormField(body, contentType, fieldName, value) {
-  const boundary = multipartBoundary(contentType);
-  if (!boundary) return body;
-  const source = Buffer.from(body).toString('latin1');
-  const pattern = new RegExp('(Content-Disposition: form-data;[^\\r\\n]*name="' + fieldName + '"[^\\r\\n]*\\r?\\n(?:[^\\r\\n]+\\r?\\n)*\\r?\\n)([^\\r\\n]*)');
-  if (pattern.test(source)) {
-    return Buffer.from(source.replace(pattern, `$1${value}`), 'latin1');
-  }
-  const closing = `--${boundary}--`;
-  const fieldPart = `--${boundary}\r\nContent-Disposition: form-data; name="${fieldName}"\r\n\r\n${value}\r\n`;
-  if (source.includes(closing)) return Buffer.from(source.replace(closing, `${fieldPart}${closing}`), 'latin1');
-  return body;
-}
-
-
-// ----- Upstream execution -----
-
-async function executeImageJobWithProvider(job, config) {
-  if (isSemanticImageGeneration(job) && config.generationMode === 'responses') {
-    return processResponsesBackedImagesJob(job, config);
-  }
-  if (isSemanticImageEdit(job) && config.generationMode === 'images') {
-    return processImagesEditBackedGenerationJob(job, config);
-  }
-  if (job.upstreamPath === '/v1/responses') {
-    return callResponsesAndExtractImage(job.body, config);
-  }
-  const timeoutMs = job.upstreamPath.startsWith('/v1/responses') ? RESPONSES_IMAGE_UPSTREAM_TIMEOUT_MS : IMAGE_UPSTREAM_TIMEOUT_MS;
-  const upstream = await fetch(`${config.baseUrl}${job.upstreamPath}`, {
-    method: job.method,
-    headers: upstreamHeaders(config, job.contentType),
-    body: job.body,
-    signal: timeoutSignal(timeoutMs),
-  });
-  const body = Buffer.from(await upstream.arrayBuffer());
-  return {
-    status: upstream.status,
-    statusText: upstream.statusText,
-    contentType: upstream.headers.get('content-type') || 'application/json; charset=utf-8',
-    cacheControl: upstream.headers.get('cache-control') || '',
-    body,
-    ok: upstream.ok,
-    error: upstream.ok ? '' : await formatUpstreamErrorFromBody(upstream, body),
-  };
-}
-
-async function callResponsesAndExtractImage(payloadBuffer, config) {
-  const upstream = await fetch(`${config.baseUrl}/v1/responses`, {
-    method: 'POST',
-    headers: upstreamHeaders(config, 'application/json'),
-    body: payloadBuffer,
-    signal: timeoutSignal(RESPONSES_IMAGE_UPSTREAM_TIMEOUT_MS),
-  });
-  const upstreamBody = Buffer.from(await upstream.arrayBuffer());
-  if (!upstream.ok) {
-    return {
-      status: upstream.status,
-      statusText: upstream.statusText,
-      contentType: upstream.headers.get('content-type') || 'application/json; charset=utf-8',
-      cacheControl: upstream.headers.get('cache-control') || '',
-      body: upstreamBody,
-      ok: false,
-      error: await formatUpstreamErrorFromBody(upstream, upstreamBody),
-    };
-  }
-  const imageBase64 = extractImageBase64FromResponsesBody(upstreamBody);
-  if (!imageBase64) {
-    const error = 'Responses API 已返回, 但未找到图片数据';
-    return {
-      status: 502,
-      statusText: 'Image not found in responses stream',
-      contentType: 'application/json; charset=utf-8',
-      cacheControl: '',
-      body: Buffer.from(JSON.stringify({ error })),
-      ok: false,
-      error,
-    };
-  }
-  return {
-    status: 200,
-    statusText: 'OK',
-    contentType: 'application/json; charset=utf-8',
-    cacheControl: '',
-    body: Buffer.from(JSON.stringify({ data: [{ b64_json: imageBase64 }] })),
-    ok: true,
-    error: '',
-  };
-}
-
-async function processImagesEditBackedGenerationJob(job, config) {
-  const imagesPayload = jobJsonPayload(job);
-  const { body, contentType } = buildImagesEditMultipartFromPayload(config, imagesPayload);
-  const upstream = await fetch(`${config.baseUrl}/v1/images/edits`, {
-    method: 'POST',
-    headers: upstreamHeaders(config, contentType),
-    body,
-    signal: timeoutSignal(IMAGE_UPSTREAM_TIMEOUT_MS),
-  });
-  const upstreamBody = Buffer.from(await upstream.arrayBuffer());
-  return {
-    status: upstream.status,
-    statusText: upstream.statusText,
-    contentType: upstream.headers.get('content-type') || 'application/json; charset=utf-8',
-    cacheControl: upstream.headers.get('cache-control') || '',
-    body: upstreamBody,
-    ok: upstream.ok,
-    error: upstream.ok ? '' : await formatUpstreamErrorFromBody(upstream, upstreamBody),
-  };
-}
-
-function dataUrlToImagePart(ref) {
-  const match = ref.imageUrl.match(/^data:([^;,]+)(;base64)?,(.*)$/s);
-  if (!match) return null;
-  const mime = match[1] || 'image/jpeg';
-  const raw = match[3] || '';
-  const buffer = match[2] ? Buffer.from(raw, 'base64') : Buffer.from(decodeURIComponent(raw));
-  return { name: ref.name, mime, buffer };
-}
-
-function appendMultipartField(parts, boundary, name, value) {
-  if (value === undefined || value === null || value === '' || value === 'auto') return;
-  parts.push(Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="${name}"\r\n\r\n${value}\r\n`));
-}
-
-function appendMultipartFile(parts, boundary, name, file) {
-  parts.push(Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="${name}"; filename="${file.name}"\r\nContent-Type: ${file.mime}\r\n\r\n`));
-  parts.push(file.buffer);
-  parts.push(Buffer.from('\r\n'));
-}
-
-
-function buildImagesEditMultipartFromPayload(provider, imagesPayload) {
-  const boundary = `----sprout-canvas-${Date.now()}-${Math.random().toString(16).slice(2)}`;
-  const parts = [];
-  appendMultipartField(parts, boundary, 'model', provider.imageModel);
-  appendMultipartField(parts, boundary, 'prompt', imagesPayload.prompt || '');
-  appendMultipartField(parts, boundary, 'n', imagesPayload.n || 1);
-  appendMultipartField(parts, boundary, 'size', imagesPayload.size);
-  appendMultipartField(parts, boundary, 'quality', imagesPayload.quality);
-  appendMultipartField(parts, boundary, 'background', imagesPayload.background);
-  appendMultipartField(parts, boundary, 'output_format', imagesPayload.output_format);
-  appendMultipartField(parts, boundary, 'output_compression', imagesPayload.output_compression);
-  for (const ref of referenceImagesFromPayload(imagesPayload)) {
-    const file = dataUrlToImagePart(ref);
-    if (file) appendMultipartFile(parts, boundary, 'image', file);
-    if (ref.maskUrl?.startsWith('data:image/')) {
-      const mask = dataUrlToImagePart({ name: `mask-${file?.name || ref.name}`, imageUrl: ref.maskUrl });
-      if (mask) appendMultipartFile(parts, boundary, 'mask', mask);
-    }
-  }
-  parts.push(Buffer.from(`--${boundary}--\r\n`));
-  return { body: Buffer.concat(parts), contentType: `multipart/form-data; boundary=${boundary}` };
-}
-
-async function processResponsesBackedImagesJob(job, config) {
-  const imagesPayload = jobJsonPayload(job);
-  const responsesPayload = buildResponsesPayloadFromImagesPayload(config, imagesPayload);
-  return callResponsesAndExtractImage(Buffer.from(JSON.stringify(responsesPayload)), config);
-}
-
-function buildResponsesPayloadFromImagesPayload(provider, imagesPayload) {
-  const prompt = String(imagesPayload?.prompt || '').trim();
-  const refs = referenceImagesFromPayload(imagesPayload);
-  const firstMaskRef = refs.find((ref) => ref.maskUrl?.startsWith('data:image/'));
-  const tool = { type: 'image_generation' };
-  if (firstMaskRef) {
-    tool.action = 'edit';
-    tool.input_image_mask = { image_url: firstMaskRef.maskUrl };
-  }
-  if (imagesPayload?.output_format) tool.output_format = imagesPayload.output_format;
-  if (imagesPayload?.size) tool.size = imagesPayload.size;
-  if (imagesPayload?.quality) tool.quality = imagesPayload.quality;
-  if (imagesPayload?.background) tool.background = imagesPayload.background;
-  if (imagesPayload?.moderation) tool.moderation = imagesPayload.moderation;
-  if (imagesPayload?.output_compression) tool.output_compression = imagesPayload.output_compression;
-  const contentParts = refs.map((ref) => ({ type: 'input_image', image_url: ref.imageUrl }));
-  const instruction = firstMaskRef
-    ? `请只编辑蒙版透明区域。保持未透明区域尽量不变。编辑要求: ${prompt}`
-    : `请根据参考图片生成新图片。要求: ${prompt}`;
-  const userContent = refs.length
-    ? [
-      { type: 'input_text', text: instruction },
-      ...contentParts,
-    ]
-    : `请生成以下描述的图片: ${prompt}`;
-  return {
-    model: provider.imageModel,
-    input: [
-      { role: 'system', content: '你是一个图片生成助手。用户要求你生成图片时, 必须调用 image_generation 工具来生成图片, 不要用文字描述图片内容。直接生成图片, 不要多说任何话。' },
-      { role: 'user', content: userContent },
-    ],
-    tools: [tool],
-    stream: true,
-  };
-}
-
-function extractImageBase64(value) {
-  if (!value) return '';
-  if (Array.isArray(value)) {
-    for (const item of value) {
-      const found = extractImageBase64(item);
-      if (found) return found;
-    }
-    return '';
-  }
-  if (typeof value === 'object') {
-    for (const [key, child] of Object.entries(value)) {
-      if ((key === 'result' || key === 'image_base64' || key === 'b64_json') && typeof child === 'string' && child.length > 1000) return child;
-      const found = extractImageBase64(child);
-      if (found) return found;
-    }
-  }
-  return '';
-}
-
-function extractImageBase64FromResponsesBody(body) {
-  const raw = body.toString('utf8');
-  for (const line of raw.split('\n')) {
-    const trimmed = line.trim();
-    if (!trimmed.startsWith('data: ')) continue;
-    const dataText = trimmed.slice(6);
-    if (!dataText || dataText === '[DONE]') continue;
-    try {
-      const found = extractImageBase64(JSON.parse(dataText));
-      if (found) return found;
-    } catch {}
-  }
-  try {
-    return extractImageBase64(JSON.parse(raw));
-  } catch {
-    return '';
-  }
-}
-
-// ----- Error helpers -----
-
-function isRetryableUpstreamStatus(status) {
-  return [408, 409, 425, 429, 500, 502, 503, 504, 524].includes(status);
-}
-
-// 某些 router/网关把限流类错误误标成 400. 通过错误消息关键词识别, 让队列切到下一个 provider.
-const RATE_LIMIT_HINTS = [
-  '服务部署已超过最大限制',
-  '超过最大限制',
-  '超过限制',
-  '限流',
-  '配额',
-  '已超额',
-  '余额不足',
-  '余额',
-  'rate limit',
-  'rate-limit',
-  'ratelimit',
-  'quota',
-  'too many requests',
-  'overloaded',
-  'capacity',
-];
-
-// 有些上游的图片接口会把一次失败的图片生成错误包装成 400, 但正文不是参数错误,
-// 而是一段类似聊天回复的自然语言说明. 这类情况通常说明上游路由到了文本回复
-// 或没有返回图片数据, 应该切换到下一个生图服务商继续尝试.
-const ASSISTANT_TEXT_400_HINTS = [
-  '如果你想',
-  '我可以',
-  '可以帮你',
-  '画面呈现',
-  '这张图',
-  '这幅图',
-  '其他方向',
-  '帮你把',
-];
-
-const NON_RETRYABLE_400_HINTS = [
-  'content_policy_violation',
-  'invalid_request_error',
-  'invalid parameter',
-  'invalid value',
-  'unsupported',
-  'not supported',
-  '缺少',
-  '无效',
-  '不支持',
-];
-
-function looksLikeRateLimit(message) {
-  if (!message) return false;
-  const lower = String(message).toLowerCase();
-  return RATE_LIMIT_HINTS.some((hint) => lower.includes(hint.toLowerCase()));
-}
-
-function looksLikeAssistantTextInsteadOfImage(message) {
-  if (!message) return false;
-  const value = String(message);
-  const lower = value.toLowerCase();
-  if (NON_RETRYABLE_400_HINTS.some((hint) => lower.includes(hint.toLowerCase()))) return false;
-  return ASSISTANT_TEXT_400_HINTS.some((hint) => value.includes(hint));
-}
-
-function isRetryableJobResult(jobResult) {
-  if (!jobResult) return false;
-  if (isRetryableUpstreamStatus(jobResult.status)) return true;
-  if (jobResult.status === 400 && looksLikeRateLimit(jobResult.error)) return true;
-  if (jobResult.status === 400 && looksLikeAssistantTextInsteadOfImage(jobResult.error)) return true;
-  return false;
-}
-
-function formatThrownError(error) {
-  const parts = [error?.message || String(error)];
-  if (error?.cause?.code) parts.push(error.cause.code);
-  if (error?.cause?.message && error.cause.message !== error.message) parts.push(error.cause.message);
-  return parts.filter(Boolean).join(' | ');
-}
-
-function failedImageJobResult(status, message) {
-  return {
-    status,
-    statusText: 'Upstream request failed',
-    contentType: 'application/json; charset=utf-8',
-    cacheControl: '',
-    body: Buffer.from(JSON.stringify({ error: message })),
-    ok: false,
-    error: message,
-  };
-}
-
-async function formatUpstreamErrorFromBody(upstream, body) {
-  const contentType = upstream.headers.get('content-type') || '';
-  const raw = body.toString('utf8');
-  let cleaned = contentType.includes('html') || /^\s*</.test(raw) ? stripHtml(raw) : raw.trim();
-  if (contentType.includes('json') || /^\s*\{/.test(cleaned)) {
-    try {
-      const parsed = JSON.parse(cleaned);
-      const inner = parsed?.error?.message || parsed?.error || parsed?.message;
-      if (inner) cleaned = typeof inner === 'string' ? inner : JSON.stringify(inner);
-    } catch {}
-  }
-  return `上游 API 返回 HTTP ${upstream.status}: ${(cleaned || upstream.statusText || '无错误正文').slice(0, 360)}`;
+  if (job.submission) job.recipe = generationRecipe(job.submission, provider);
+  else job.body = rewriteImageJobBody(provider, job.originalBody || job.body, job.contentType);
+  persist(job);
 }

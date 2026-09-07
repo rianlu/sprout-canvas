@@ -2,6 +2,10 @@ node_modules/
 .git/
 logs/
 output/
+data/
+config/local.config.json
+.env
+stitch_sproutcanvas_studio*/
 scratch/
 tests/
 docs/

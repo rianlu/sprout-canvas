@@ -1,9 +1,9 @@
-# 芽绘台 UI v3 重构 · 执行计划清单
+# 芽绘台 UI v3 重构历史记录
 
-> 用途: 跟踪 Stitch Botanical Paper Studio 方案 (PRD v3.0 + DESIGN.md v3.0) 的落地进度.
-> 规则: 每完成一项把 `[ ]` 改为 `[x]`; 发现新工作随时补条目; 阶段全部完成后在阶段末尾记一行完成日期.
-> 参照: 设计规范 `docs/DESIGN.md` (§9 移植规则) / 功能边界 `docs/PRD.md` v3 / 设计稿 `stitch_sproutcanvas_studio/`.
-> 策略: **逻辑层 (hooks/lib/types) 保留复用, UI 层 (styles.css/pages/components) 重写**. 交互协议不变 (202 + 轮询 + placeholderId 回填).
+- 将本文件视为 2026-09-05 的实施记录, 保留原勾选状态供追溯.
+- 不继续执行下方旧待办或提交计划. 当前功能/工程状态统一按 [整改清单](FEATURE_ARCHITECTURE_REVIEW.md) 和 [UI 验收](UI_STITCH_ALIGNMENT.md) 执行.
+- 使用当前 [PRD](PRD.md) 与 [设计规范](DESIGN.md), 设计参照目录为 `stitch_sproutcanvas_studio 2/`.
+- 不依据旧协议或旧文档重新添加已移除的收藏, 回收站, 模型参数和直通接口.
 
 ## 阶段 0 · 前置还债与基建
 

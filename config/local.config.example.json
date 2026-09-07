@@ -7,7 +7,11 @@
       "baseUrl": "https://api.openai.com",
       "apiKey": "sk-your-default-api-key",
       "imageModel": "gpt-image-2",
-      "generationMode": "images"
+      "generationMode": "images",
+      "capabilities": {
+        "outputFormats": ["png", "jpeg", "webp"],
+        "exactSize": false
+      }
     },
     {
       "id": "backup",
@@ -41,6 +45,7 @@
     }
   ],
   "imageConcurrency": 1,
+  "stateFile": "data/runtime.sqlite",
   "host": "127.0.0.1",
   "port": 8787,
   "accessPassword": "change-this-password",

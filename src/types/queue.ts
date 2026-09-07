@@ -1,18 +1,11 @@
-export type QueueStatus = 'pending' | 'running' | 'succeeded' | 'failed' | 'canceled';
+import type { GenerationContext, GenerationRecipe } from '../../shared/generation-contract.mjs';
 
-export interface QueueClientContext {
-  kind: 'single' | 'series';
-  placeholderId: string;
-  prompt: string;
-  mode: string;
-  outputFormat?: 'auto' | 'png' | 'jpeg' | 'webp';
-  /** 系列聚合 (v3.5): 系列页提交时带上, 回填结果按系列分组 */
-  seriesId?: string;
-  masterPrompt?: string;
-}
+export type QueueStatus = 'pending' | 'running' | 'succeeded' | 'failed' | 'canceled' | 'interrupted' | 'expired' | 'unsubmitted';
+export type QueueClientContext = GenerationContext;
 
 export interface QueueJob {
   id: string;
+  requestId: string;
   status: QueueStatus;
   error: string;
   providerId: string;
@@ -20,6 +13,13 @@ export interface QueueJob {
   retryOf: string;
   canRetry: boolean;
   clientContext?: QueueClientContext | null;
+  recipe?: GenerationRecipe | null;
+  referenceJobId?: string;
+  acknowledgedAt?: number;
+  archivedAt?: number;
+  localOnly?: boolean;
+  outcomeUnknown?: boolean;
+  interruptionReason?: string;
   yourPosition: number;
   yourQueued: number;
   globalActive: number;
@@ -32,9 +32,5 @@ export interface QueueJob {
   elapsedMs: number;
 }
 
-export interface QueueListResponse {
-  jobs: QueueJob[];
-  globalActive: number;
-  globalQueued: number;
-  averageMs: number;
-}
+export interface QueueListResponse { jobs: QueueJob[]; globalActive: number; globalQueued: number; averageMs: number; historyCursor?: string; historyTotal?: number }
+export interface QueueResult { created?: number; data?: Array<{ b64_json?: string; url?: string; mime_type?: string; width?: number; height?: number; bytes?: number; revised_prompt?: string }> }

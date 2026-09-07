@@ -1,43 +1,20 @@
-import type { QueueClientContext, QueueJob, QueueListResponse } from '../../types/queue';
+import type { GenerationSubmission } from '../../../shared/generation-contract.mjs';
+import type { QueueJob, QueueListResponse, QueueResult } from '../../types/queue';
 import { apiFetch } from './client';
 
-export interface QueueSubmitInput {
-  endpoint: '/v1/images/generations' | '/v1/images/edits' | '/v1/responses';
-  body: BodyInit;
-  contentType: string;
-  providerId?: string;
-  clientContext: QueueClientContext;
+export type QueueSubmitInput = GenerationSubmission;
+const jsonBody = (input: unknown) => ({ headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input) });
+export function submitQueueJob(input: QueueSubmitInput) { return apiFetch<QueueJob>('/api/jobs', { method: 'POST', ...jsonBody(input) }); }
+export function listQueueJobs({ cursor = '', requestIds = [], limit = 30 }: { cursor?: string; requestIds?: string[]; limit?: number } = {}) {
+  const query = new URLSearchParams({ limit: String(limit) });
+  if (cursor) query.set('cursor', cursor);
+  if (requestIds.length) query.set('requests', requestIds.join(','));
+  return apiFetch<QueueListResponse>(`/api/jobs/me?${query}`);
 }
-
-function encodeClientContext(context: QueueClientContext) {
-  return btoa(unescape(encodeURIComponent(JSON.stringify(context))));
-}
-
-export function submitQueueJob(input: QueueSubmitInput) {
-  const headers: Record<string, string> = {
-    'Content-Type': input.contentType,
-    'X-Client-Context': encodeClientContext(input.clientContext),
-  };
-  if (input.providerId) headers['X-Provider-Id'] = input.providerId;
-  return apiFetch<QueueJob>(`/api/jobs${input.endpoint.replace(/^\/v1/, '')}`, {
-    method: 'POST',
-    headers,
-    body: input.body,
-  });
-}
-
-export function listQueueJobs() {
-  return apiFetch<QueueListResponse>('/api/jobs/me');
-}
-
-export function getQueueResult(jobId: string) {
-  return apiFetch<{ data?: Array<{ b64_json?: string; url?: string }> }>(`/api/jobs/${jobId}/result`);
-}
-
-export function cancelQueueJob(jobId: string) {
-  return apiFetch<{ ok: boolean; job: QueueJob }>(`/api/jobs/${jobId}`, { method: 'DELETE' });
-}
-
-export function retryQueueJob(jobId: string) {
-  return apiFetch<{ ok: boolean; job: QueueJob }>(`/api/jobs/${jobId}/retry`, { method: 'POST' });
-}
+export function getQueueResult(jobId: string) { return apiFetch<QueueResult>(`/api/jobs/${jobId}/result`); }
+export function cancelQueueJob(jobId: string) { return apiFetch<{ ok: boolean; job: QueueJob }>(`/api/jobs/${jobId}`, { method: 'DELETE' }); }
+export function acknowledgeQueueJob(jobId: string) { return apiFetch<QueueJob>(`/api/jobs/${jobId}/ack`, { method: 'POST' }); }
+export function prioritizeQueueJob(jobId: string) { return apiFetch<QueueJob>(`/api/jobs/${jobId}/priority`, { method: 'POST' }); }
+export function archiveQueueJobs() { return apiFetch<{ ok: boolean }>('/api/jobs/archive', { method: 'POST' }); }
+export function updateQueueJob(jobId: string, input: QueueSubmitInput) { return apiFetch<QueueJob>(`/api/jobs/${jobId}`, { method: 'PATCH', ...jsonBody(input) }); }
+export function resumeQueueJob(jobId: string, input: QueueSubmitInput) { return apiFetch<QueueJob>(`/api/jobs/${jobId}/resume`, { method: 'POST', ...jsonBody(input) }); }

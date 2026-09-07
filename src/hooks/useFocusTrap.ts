@@ -1,6 +1,14 @@
 import { useEffect, useRef } from 'react';
 
-const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+const FOCUSABLE =
+  'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+function focusableItems(container: HTMLElement) {
+  return Array.from(container.querySelectorAll<HTMLElement>(FOCUSABLE)).filter(
+    (item) =>
+      item.getClientRects().length > 0 && getComputedStyle(item).visibility !== 'hidden' && !item.closest('[inert]'),
+  );
+}
 
 export function useFocusTrap<T extends HTMLElement>(active: boolean) {
   const containerRef = useRef<T | null>(null);
@@ -11,17 +19,20 @@ export function useFocusTrap<T extends HTMLElement>(active: boolean) {
     if (!container) return undefined;
     const previousActive = document.activeElement instanceof HTMLElement ? document.activeElement : null;
 
-    const initial = container.querySelector<HTMLElement>(FOCUSABLE);
+    const initial = focusableItems(container)[0];
     initial?.focus();
 
     function handleKey(event: KeyboardEvent) {
       if (event.key !== 'Tab') return;
-      const items = Array.from(container!.querySelectorAll<HTMLElement>(FOCUSABLE));
+      const items = focusableItems(container!);
       if (items.length === 0) return;
       const first = items[0];
       const last = items[items.length - 1];
       const focused = document.activeElement;
-      if (event.shiftKey && focused === first) {
+      if (!container!.contains(focused)) {
+        event.preventDefault();
+        (event.shiftKey ? last : first).focus();
+      } else if (event.shiftKey && focused === first) {
         event.preventDefault();
         last.focus();
       } else if (!event.shiftKey && focused === last) {

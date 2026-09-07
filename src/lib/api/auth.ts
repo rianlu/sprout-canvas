@@ -17,3 +17,5 @@ export function login(password: string, userId: string) {
     body: JSON.stringify({ password, userId }),
   });
 }
+
+export function logout() { return apiFetch<{ ok: boolean }>('/api/auth/logout', { method: 'POST' }); }

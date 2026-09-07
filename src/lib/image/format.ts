@@ -1,3 +1,4 @@
+import type { QueueResult } from '../../types/queue';
 import type { ImageOutputFormat } from '../../types/generation';
 
 export function formatBytes(bytes: number) {
@@ -52,14 +53,26 @@ async function imageUrlToDataUrl(url: string, preferredFormat?: string) {
   return blobToDataUrl(new Blob([blob], { type: mimeFromFormat(preferredFormat) }));
 }
 
-export async function resultDataUrl(result: { data?: Array<{ b64_json?: string; url?: string }> }, preferredFormat?: string) {
-  const item = result.data?.[0];
-  if (item?.b64_json) return `data:${mimeFromFormat(preferredFormat)};base64,${item.b64_json}`;
-  if (!item?.url) return '';
-  if (item.url.startsWith('data:image/')) return item.url;
-  try {
-    return await imageUrlToDataUrl(item.url, preferredFormat);
-  } catch {
-    return item.url;
-  }
+function imageMimeFromBase64(base64: string) {
+  const bytes = atob(base64.slice(0, 48));
+  if (bytes.startsWith('\x89PNG\r\n\x1a\n')) return 'image/png';
+  if (bytes.startsWith('\xff\xd8\xff')) return 'image/jpeg';
+  if (bytes.startsWith('RIFF') && bytes.slice(8, 12) === 'WEBP') return 'image/webp';
+  throw new Error('返回内容不是可识别的图片');
 }
+
+export async function resultDataUrls(result: QueueResult): Promise<string[]> {
+  if (!result.data?.length) throw new Error('任务未返回图片文件');
+  const output: string[] = [];
+  for (const item of result.data) {
+    if (item.b64_json) output.push(`data:${imageMimeFromBase64(item.b64_json)};base64,${item.b64_json}`);
+    else if (item.url) {
+      const dataUrl = item.url.startsWith('data:image/') ? item.url : await imageUrlToDataUrl(item.url);
+      const payload = dataUrl.slice(dataUrl.indexOf(',') + 1);
+      output.push(`data:${imageMimeFromBase64(payload)};base64,${payload}`);
+    } else throw new Error('任务未返回可保存的图片文件');
+  }
+  return output;
+}
+
+export async function resultDataUrl(result: QueueResult) { return (await resultDataUrls(result))[0]; }

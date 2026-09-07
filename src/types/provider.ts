@@ -1,4 +1,5 @@
 export type GenerationMode = 'images' | 'responses';
+export interface ImageCapabilities { customSizes: boolean; formats: Array<'png' | 'jpeg' | 'webp'>; exactSize: boolean; maxReferences: number }
 
 export interface ImageProvider {
   id: string;
@@ -19,4 +20,9 @@ export interface ServerConfig {
   imageModel: string;
   generationMode: GenerationMode;
   providers: ImageProvider[];
+  imageChannels?: ChannelHealth[];
+  textChannels?: ChannelHealth[];
+  imageCapabilities?: ImageCapabilities;
 }
+
+export interface ChannelHealth { id: string; name: string; model?: string; status: 'available' | 'untested' | 'degraded' | 'cooldown'; failures: number; openUntil: number; lastSuccessAt: number }

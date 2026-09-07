@@ -1,0 +1,949 @@
+{
+  "source": "https://github.com/gpt-image2/awesome-gptimage2-prompts",
+  "originalSource": "https://github.com/YouMind-OpenLab/awesome-gpt-image-2",
+  "fetchedAt": "2026-04-28T11:26:28Z",
+  "importedAt": "2026-09-06T18:15:47.265Z",
+  "sourceCount": 2717,
+  "sourceSha256": "5fdf19f8249ca5abdb5d2054f1dd9648e1fc808fca2af13bcafc7122fb281ce7",
+  "license": "https://creativecommons.org/licenses/by/4.0/",
+  "copyright": "Copyright (c) 2026 YouMind OpenLab",
+  "changes": "选取独立条目, 翻译名称, 提炼可复用画风, 解析模板默认值, 移除其他工具专用参数与未经验证的分辨率标注, 缩放示例图并转为 WebP.",
+  "styles": [
+    {
+      "id": "open-15563",
+      "name": "轻柔水彩绘本",
+      "englishName": "Soft Watercolor Storybook Illustration",
+      "description": "柔和日光, 低饱和粉彩与暖蓝色, 水彩和水粉的手绘笔触, 可见纸张颗粒, 简洁构图与大面积留白.",
+      "group": "插画与纸本",
+      "prompt": "柔和日光, 低饱和粉彩与暖蓝色, 水彩和水粉的手绘笔触, 可见纸张颗粒, 简洁构图与大面积留白.",
+      "template": "Soft poetic children's book illustration with watercolor and gouache textures. Clear gentle daylight. Muted pastel colors with soft blue and warm tones. Visible brush strokes and paper grain. Minimalist composition with large negative space. Hand-painted picture book style, not cartoon, not anime, not 3D. Two children in calm conversation, soft connection forming.",
+      "image": "/assets/styles/open-15563.webp",
+      "tags": [
+        "水彩水粉",
+        "纸张颗粒",
+        "绘本留白"
+      ],
+      "eyebrow": "插画与纸本",
+      "icon": "brush",
+      "needsReference": false,
+      "source": {
+        "id": 15563,
+        "author": "蜡笔进化论",
+        "authorUrl": "https://x.com/crayon1267",
+        "url": "https://x.com/crayon1267/status/2047482132952645646",
+        "imageUrl": "https://cms-assets.youmind.com/media/1777106763975_1u28ok_HGoeJjJacAAIIcv.jpg",
+        "license": "CC BY 4.0"
+      }
+    },
+    {
+      "id": "open-15548",
+      "name": "工笔重彩花鸟",
+      "englishName": "Traditional Chinese Ink Painting Style",
+      "description": "传统工笔重彩, 精致细线勾勒, 层次细腻的淡彩晕染, 典雅设色与宣纸底纹, 横向舒展的东方构图.",
+      "group": "插画与纸本",
+      "prompt": "传统工笔重彩, 精致细线勾勒, 层次细腻的淡彩晕染, 典雅设色与宣纸底纹, 横向舒展的东方构图.",
+      "template": "传统工笔重彩风格，湖畔园林亭台。枝头牡丹盛开，画面中一对鸳鸯栖息在横向伸展的牡丹枝干上，姿态亲昵，羽毛层次细腻、色彩典雅，呈现精致的工笔勾线与淡彩晕染效果。宣纸质感背景，构图呈现典雅的花鸟情趣。",
+      "image": "/assets/styles/open-15548.webp",
+      "tags": [
+        "工笔线描",
+        "宣纸",
+        "典雅设色"
+      ],
+      "eyebrow": "插画与纸本",
+      "icon": "brush",
+      "needsReference": false,
+      "source": {
+        "id": 15548,
+        "author": "宝玉",
+        "authorUrl": "https://x.com/dotey",
+        "url": "https://x.com/dotey/status/2047807925519814947",
+        "imageUrl": "https://cms-assets.youmind.com/media/1777193300725_0r2oih_HGtGbqAaoAA9_xG.jpg",
+        "license": "CC BY 4.0"
+      }
+    },
+    {
+      "id": "open-15526",
+      "name": "古典植物装饰",
+      "englishName": "Vintage Peacock Botanical Illustration",
+      "description": "对称的古典植物装饰插画, 细密花叶与羽毛纹样, 海军蓝和天蓝的层次, 柔和米色背景, 复古装饰艺术.",
+      "group": "插画与纸本",
+      "prompt": "对称的古典植物装饰插画, 细密花叶与羽毛纹样, 海军蓝和天蓝的层次, 柔和米色背景, 复古装饰艺术.",
+      "template": "symmetrical design featuring two elegant blue peacocks with detailed feather patterns, surrounded by blue floral elements, intricate vintage botanical ornament, soft beige background, classical floral decor style with rich navy and sky blue details, decorative art illustration",
+      "image": "/assets/styles/open-15526.webp",
+      "tags": [
+        "对称装饰",
+        "植物纹样",
+        "蓝米配色"
+      ],
+      "eyebrow": "插画与纸本",
+      "icon": "brush",
+      "needsReference": false,
+      "source": {
+        "id": 15526,
+        "author": "宝玉",
+        "authorUrl": "https://x.com/dotey",
+        "url": "https://x.com/dotey/status/2047803054422901046",
+        "imageUrl": "https://cms-assets.youmind.com/media/1777106745811_qsd971_HGtB_mLbMAABMIl.jpg",
+        "license": "CC BY 4.0"
+      }
+    },
+    {
+      "id": "open-14343",
+      "name": "层叠纸雕剧场",
+      "englishName": "3D Papercut Pirate Scene",
+      "description": "正面平视的多层实体纸雕, 清晰硬切边缘与厚纸截面, 灰蓝和森林绿搭配奶油白, 单一柔光形成层间投影, 哑光纸张质地.",
+      "group": "插画与纸本",
+      "prompt": "正面平视的多层实体纸雕, 清晰硬切边缘与厚纸截面, 灰蓝和森林绿搭配奶油白, 单一柔光形成层间投影, 哑光纸张质地.",
+      "template": "平视视角，正面直视一个高饱和度3D多层纸雕场景。\n整体为灰蓝、奶油白、深森林绿，点缀琥珀色暖光。所有元素必须是实体纸张分层结构，边缘为硬切割效果，并清晰可见厚纸横截面。\n极致丰富构图，一个高能量的海盗群像场景，发生在混乱的海上冒险中。多个风格化海盗角色以夸张动作呈现，中层核心是一位戴草帽的年轻船长向前冲刺，周围是姿态鲜明的船员。\n分层的船只、翻涌海浪和旋转洋流贯穿前中后景，多艘船 in 不同空间层中碰撞倾斜，船帆破损、旗帜飞扬。\n背景层中出现体型巨大的对立角色剪影，增强压迫感和空间层级。\n前景堆满叙事元素：宝箱、金币、地图、木桶、绳索、灯笼，以及一张带笑脸海盗的通缉令。角落放置一个吉祥物式小角色作为视觉锚点。\n所有氛围元素以纸雕形式呈现：海浪、水花、烟雾、碎片、动势线，强化混乱与动感。\n主体位于中层，元素跨层互动，通过重叠和空间关系表达运动感。\n单一方向柔光，形成清晰层间投影。整体为哑光纸张质感，无发光、无柔边、无体积光。\noctane渲染，细节清晰",
+      "image": "/assets/styles/open-14343.webp",
+      "tags": [
+        "纸雕层次",
+        "硬切边缘",
+        "柔光投影"
+      ],
+      "eyebrow": "插画与纸本",
+      "icon": "brush",
+      "needsReference": false,
+      "source": {
+        "id": 14343,
+        "author": "蜡笔进化论",
+        "authorUrl": "https://x.com/crayon1267",
+        "url": "https://x.com/crayon1267/status/2046618693489320005",
+        "imageUrl": "https://cms-assets.youmind.com/media/1776883060054_8747vb_HGcMPembIAEG0Do.jpg",
+        "license": "CC BY 4.0"
+      }
+    },
+    {
+      "id": "open-13860",
+      "name": "即兴涂鸦速写",
+      "englishName": "Graffiti Sketch Style AI Builder",
+      "description": "快速自由的涂鸦速写, 粗细变化的概括线条, 干刷色块和飞白, 即兴记号与夸张形态, 背景留白, 保留草稿般的节奏.",
+      "group": "插画与纸本",
+      "prompt": "快速自由的涂鸦速写, 粗细变化的概括线条, 干刷色块和飞白, 即兴记号与夸张形态, 背景留白, 保留草稿般的节奏.",
+      "template": "以涂鸦速写风表现【一个厉害的AI builder】，整体呈现快速勾勒、自由变形、即兴手绘与草稿式的视觉效果。线条随手、夸张、可粗细不一，略显凌乱但具有节奏和表现力，强调概括、夸张、趣味和随性，而不是严谨写实或精细刻画。 颜色采用粗糙、干刷感明显的块面表现，可保留不均匀的涂抹痕迹、刷痕、飞白与覆盖感，色彩根据【一个厉害的AI builder】自动适配，但整体保持涂鸦式、速写式、概括式的表达。不要透明水彩晕染效果，不要细腻水彩过渡，不要纸纹理，不要柔和雾化，不要梦幻质感。 背景以留白为主，保持简洁、轻松、未完成感和设计感，可加入少量辅助性符号、箭头、记号、圈画、重复线、随手写的文字或其他涂鸦元素，以增强速写本或随笔式视觉语言，但不可过于拥挤，不可破坏主体和留白气质。 画面内容不需要预先写清楚，由【一个厉害的AI builder】自动推演并生成最适合的主体形象、动作、相关元素、符号或简化场景，整体保持统一的涂鸦速写风和夸张概括的表现方式，避免复杂写实背景和过度铺陈。 画面中需自然加入专属签名“BlanPlan”，作为画面的一部分，位置低调 but 清晰，可放在左下角、右下角或标题附近，风格需与整体版式统一，像作品署名或设计落款；签名字体精致、克制、高级，不可过大，不可破坏主体构图，不可显得突兀或廉价。",
+      "image": "/assets/styles/open-13860.webp",
+      "tags": [
+        "干刷飞白",
+        "自由线条",
+        "速写留白"
+      ],
+      "eyebrow": "插画与纸本",
+      "icon": "brush",
+      "needsReference": false,
+      "source": {
+        "id": 13860,
+        "author": "BLANPLAN | 空界計劃",
+        "authorUrl": "https://x.com/blanplan",
+        "url": "https://x.com/blanplan/status/2045190582453350748",
+        "imageUrl": "https://cms-assets.youmind.com/media/1776697070400_yf2trn_HGH5vgyaUAA30Z7.jpg",
+        "license": "CC BY 4.0"
+      }
+    },
+    {
+      "id": "open-14714",
+      "name": "复古植物石版",
+      "englishName": "Vintage Botanical Infographic",
+      "description": "十九世纪植物石版画与维多利亚印刷品质感, 泛旧羊皮纸色, 棕米色与低饱和绿, 精细墨线搭配淡水彩, 手工艺图鉴布局.",
+      "group": "插画与纸本",
+      "prompt": "十九世纪植物石版画与维多利亚印刷品质感, 泛旧羊皮纸色, 棕米色与低饱和绿, 精细墨线搭配淡水彩, 手工艺图鉴布局.",
+      "template": "Vintage botanical-style infographic for “Artisan Brew Coffee Beans.” 19th-century lithograph look, aged parchment tones (brown, beige, muted green). Center: steaming coffee cup + labeled bag, elegant title “Premium Coffee Craft.” Surrounding small illustrations: beans, plant, grinder, kettle, cup. Simple process grid: harvest → dry → roast → grind → brew → pour. Scenic coffee farm footer. Fine ink lines, soft watercolor, rustic, artisanal feel.\nStyle Keywords: Victorian ephemera, botanical illustration, aged parchment, hand-drawn ink, watercolor\nNegative Prompt: modern, neon, 3D, photorealistic, clutter, watermark, low detail",
+      "image": "/assets/styles/open-14714.webp",
+      "tags": [
+        "石版印刷",
+        "旧纸色",
+        "细墨线"
+      ],
+      "eyebrow": "插画与纸本",
+      "icon": "brush",
+      "needsReference": false,
+      "source": {
+        "id": 14714,
+        "author": "Shami",
+        "authorUrl": "https://x.com/ShamiWeb3",
+        "url": "https://x.com/ShamiWeb3/status/2046913292309066073",
+        "imageUrl": "https://cms-assets.youmind.com/media/1776936731299_i65h9p_HGgYkNMXUAAlkTE.jpg",
+        "license": "CC BY 4.0"
+      }
+    },
+    {
+      "id": "open-13608",
+      "name": "百叶窗电影光",
+      "englishName": "Cinematic Portrait with Blind Shadows",
+      "description": "写实电影人像摄影, 百叶窗投下清晰而富有节奏的条纹光影, 深色空间与自然肤色, 控制高光, 保留真实皮肤细节.",
+      "group": "摄影与光影",
+      "prompt": "写实电影人像摄影, 百叶窗投下清晰而富有节奏的条纹光影, 深色空间与自然肤色, 控制高光, 保留真实皮肤细节.",
+      "template": "A photorealistic, cinematic portrait of a young East Asian woman sitting on a dark chair. She has shoulder-length bob hair with straight bangs colored teal. She is wearing a navy blue tank top and light beige linen shorts. She is leaning slightly forward with her hands resting near her knees, looking directly at the camera with a neutral, calm expression. The scene features dramatic shadows from venetian blinds, casting distinct horizontal stripes of warm, golden light across her face, body, and the plain warm-toned wall behind her. A window with closed blinds is visible on the right side of the frame. High contrast, moody atmosphere, highly detailed.",
+      "image": "/assets/styles/open-13608.webp",
+      "tags": [
+        "条纹光影",
+        "电影人像",
+        "真实细节"
+      ],
+      "eyebrow": "摄影与光影",
+      "icon": "photo_camera",
+      "needsReference": true,
+      "source": {
+        "id": 13608,
+        "author": "栗",
+        "authorUrl": "https://x.com/Kukkuree",
+        "url": "https://x.com/Kukkuree/status/2043525834640613591#reversed-3",
+        "imageUrl": "https://cms-assets.youmind.com/media/1776676864153_14klxf_HFvf4mcbEAE57Hq.jpg",
+        "license": "CC BY 4.0"
+      }
+    },
+    {
+      "id": "open-13750",
+      "name": "晴日复古胶片",
+      "englishName": "Vintage Film Portrait of Girl with Bicycle",
+      "description": "晴日街头的复古胶片摄影, 自然温暖的阳光, 轻盈生活感, 细致银盐颗粒与柔和色彩, 松弛的纪实构图.",
+      "group": "摄影与光影",
+      "prompt": "晴日街头的复古胶片摄影, 自然温暖的阳光, 轻盈生活感, 细致银盐颗粒与柔和色彩, 松弛的纪实构图.",
+      "template": "A vintage film photography portrait of a young Asian woman smiling broadly at the camera. She is leaning forward playfully while holding the handlebars of a bicycle on a sunny neighborhood street. She wears a white short-sleeved t-shirt, a dark blue pleated skirt, white socks, and white sneakers. Her long dark hair blows slightly in the breeze. The bicycle has a front wire basket containing a clear plastic bag of oranges. The background features a paved road, dappled sunlight through trees, and a utility pole, capturing a nostalgic, bright summer day aesthetic.",
+      "image": "/assets/styles/open-13750.webp",
+      "tags": [
+        "日光胶片",
+        "生活纪实",
+        "暖色颗粒"
+      ],
+      "eyebrow": "摄影与光影",
+      "icon": "photo_camera",
+      "needsReference": true,
+      "source": {
+        "id": 13750,
+        "author": "BubbleBrain",
+        "authorUrl": "https://x.com/BubbleBrain",
+        "url": "https://x.com/BubbleBrain/status/2044783836329087081#reversed-0",
+        "imageUrl": "https://cms-assets.youmind.com/media/1776695090062_2bncke_HGCIAhwbIAA1WW1.jpg",
+        "license": "CC BY 4.0"
+      }
+    },
+    {
+      "id": "open-15164",
+      "name": "热带商品摄影",
+      "englishName": "Tropical Product Photography",
+      "description": "明亮热带广告摄影, 细腻凝结水珠与清晰材质, 天蓝与暖沙色的鲜明分区, 自然小道具和利落投影, 突出商品主视觉.",
+      "group": "摄影与光影",
+      "prompt": "明亮热带广告摄影, 细腻凝结水珠与清晰材质, 天蓝与暖沙色的鲜明分区, 自然小道具和利落投影, 突出商品主视觉.",
+      "template": "A professional product photography shot of a cold sparkling water can placed upright in golden beach sand. The can is silver and teal, covered in realistic water droplets condensation, with a pineapple illustration and tropical branding. The can is slightly tilted, planted in a small mound of fine golden sand with tiny white pebbles and small green tropical leaves/grass scattered around the base. Background features a bold split composition - bright sky-blue on the left and vivid yellow on the right, with a large blurred real pineapple placed behind the can on the right side. A blurred tropical palm leaf drapes in from the upper left corner, adding depth and framing. Macro-level water condensation droplets visible on the can surface. Lighting is bright, vibrant, commercial studio lighting with clean shadows. Shallow depth of field - can in sharp focus, background softly blurred. Mood: summer, tropical, fresh, refreshing. Commercial product photography, ultra-detailed,",
+      "image": "/assets/styles/open-15164.webp",
+      "tags": [
+        "热带配色",
+        "凝结水珠",
+        "商品主视觉"
+      ],
+      "eyebrow": "摄影与光影",
+      "icon": "photo_camera",
+      "needsReference": false,
+      "source": {
+        "id": 15164,
+        "author": "ShaHid WaNii",
+        "authorUrl": "https://x.com/meng_dagg695",
+        "url": "https://x.com/meng_dagg695/status/2047227172486824002",
+        "imageUrl": "https://cms-assets.youmind.com/media/1777022497285_zju5tf_HGk2PldaEAE0u_f.jpg",
+        "license": "CC BY 4.0"
+      }
+    },
+    {
+      "id": "open-13661",
+      "name": "生态微距摄影",
+      "englishName": "Macro Wildlife Photography",
+      "description": "写实生态微距摄影, 清晰呈现细小纹理与湿润材质, 浅景深, 深绿色植被散景, 自然环境光强调主体细节.",
+      "group": "摄影与光影",
+      "prompt": "写实生态微距摄影, 清晰呈现细小纹理与湿润材质, 浅景深, 深绿色植被散景, 自然环境光强调主体细节.",
+      "template": "A hyper-realistic macro photograph of a vibrant chameleon resting on a mossy branch in a lush jungle. The reptile features intricate, textured scales in shades of bright green, electric blue, and warm yellow, with a prominent, highly detailed eye. Its clawed feet tightly grip the wet, textured wood, and its tail is curled beneath. The background is a smooth, out-of-focus bokeh of deep green foliage, highlighting the sharp focus and vivid colors of the subject.",
+      "image": "/assets/styles/open-13661.webp",
+      "tags": [
+        "微距纹理",
+        "浅景深",
+        "自然散景"
+      ],
+      "eyebrow": "摄影与光影",
+      "icon": "photo_camera",
+      "needsReference": true,
+      "source": {
+        "id": 13661,
+        "author": "Replica",
+        "authorUrl": "https://x.com/John82924749",
+        "url": "https://x.com/John82924749/status/2044347291600113933#reversed-0",
+        "imageUrl": "https://cms-assets.youmind.com/media/1776701492866_ff51qg_HF76-Z3bwAAAfnq.jpg",
+        "license": "CC BY 4.0"
+      }
+    },
+    {
+      "id": "open-13706",
+      "name": "纯白棚拍时尚",
+      "englishName": "Professional Studio Fashion Portrait",
+      "description": "极简时尚棚拍, 纯白无缝背景, 大型柔光主灯与补光, 均匀照明和轻柔塑形阴影, 自然皮肤与面料质感, 干净编辑式构图.",
+      "group": "摄影与光影",
+      "prompt": "极简时尚棚拍, 纯白无缝背景, 大型柔光主灯与补光, 均匀照明和轻柔塑形阴影, 自然皮肤与面料质感, 干净编辑式构图.",
+      "template": "Professional studio fashion photography, ultra-clean high-end digital editorial portrait in a pure white seamless cyclorama photography studio, massive soft octabox key light + large softbox fill light creating flawless even illumination with gentle sculpting shadows, Vogue-level minimalist high fashion aesthetic, eye-level shot, 3/4 body shot, early 20s Korean idol-type young woman with ultra-realistic delicate refined Korean features, slightly upturned almond-shaped fox eyes with natural double eyelids, small sharp jawline, flawless yet realistic porcelain skin with cool ivory undertone, completely natural post-workout no-makeup look, soft natural flush on cheeks, subtle dewy skin glow from light sweat, natural dusty rose lips slightly parted, subtle natural freckles across nose and cheeks, visible subtle skin texture, pores and micro skin details, long naturally wavy dark brown hair slightly messy with realistic loose strands, wearing a white fitted tennis polo or short-sleeve athletic top and a high-waisted white tennis skirt, standing naturally in the center of the pure white studio, holding a white tennis racket casually resting on one shoulder, the other hand relaxed at her side or lightly on her hip, one leg slightly forward, posture natural and confident, looking directly at the viewer at eye level with a calm, confident and fresh expression, pure soft professional studio lighting with large diffused sources, flawless even illumination, gentle sculpting shadows that naturally define the figure, clean high-key minimalist aesthetic, ultra-clean high-end digital photography, extremely sharp yet soft skin rendering with natural dewy glow, no film grain, no noise, no halation, no vignette, perfect neutral color grading, authentic Korean idol studio editorial aesthetic, visible realistic tennis racket texture, natural skin texture with freckles and subtle sweat sheen, no plastic skin, no digital over-sharpening, no airbrushing, no watermark, no text",
+      "image": "/assets/styles/open-13706.webp",
+      "tags": [
+        "无缝白底",
+        "柔光棚拍",
+        "时尚编辑"
+      ],
+      "eyebrow": "摄影与光影",
+      "icon": "photo_camera",
+      "needsReference": false,
+      "source": {
+        "id": 13706,
+        "author": "BubbleBrain",
+        "authorUrl": "https://x.com/BubbleBrain",
+        "url": "https://x.com/BubbleBrain/status/2044846335728467996",
+        "imageUrl": "https://cms-assets.youmind.com/media/1776695069830_o2y9py_HGDAtXuaAAASgnW.jpg",
+        "license": "CC BY 4.0"
+      }
+    },
+    {
+      "id": "open-15507",
+      "name": "拍立得记忆",
+      "englishName": "Nostalgic Polaroid Portrait Prompt",
+      "description": "写实拍立得照片质感, 可见的胶片颗粒, 自然随拍构图, 怀旧而温暖的模拟色彩.",
+      "group": "摄影与光影",
+      "prompt": "写实拍立得照片质感, 可见的胶片颗粒, 自然随拍构图, 怀旧而温暖的模拟色彩.",
+      "template": "make her real. polaroid photograph with film grain effect",
+      "image": "/assets/styles/open-15507.webp",
+      "tags": [
+        "拍立得",
+        "模拟色彩",
+        "怀旧颗粒"
+      ],
+      "eyebrow": "摄影与光影",
+      "icon": "photo_camera",
+      "needsReference": false,
+      "source": {
+        "id": 15507,
+        "author": "sankalp",
+        "authorUrl": "https://x.com/dejavucoder",
+        "url": "https://x.com/dejavucoder/status/2047723352417329411",
+        "imageUrl": "https://cms-assets.youmind.com/media/1777106738445_hxsi37_HGr5KkJbwAA0uw1.png",
+        "license": "CC BY 4.0"
+      }
+    },
+    {
+      "id": "open-13957",
+      "name": "复古黏土玩具",
+      "englishName": "Retro 3D Claymation Desk Setup",
+      "description": "鲜明可爱的三维黏土定格风格, 圆润手作造型, 复古黄与蓝绿色搭配, 玩具般的材质, 桌面微缩布景与柔和投影.",
+      "group": "三维与微缩",
+      "prompt": "鲜明可爱的三维黏土定格风格, 圆润手作造型, 复古黄与蓝绿色搭配, 玩具般的材质, 桌面微缩布景与柔和投影.",
+      "template": "A vibrant, cute 3D claymation-style illustration of a retro yellow desktop computer setup on a desk. The central yellow CRT monitor displays a teal screen with the Microsoft Windows 98 logo and 7 desktop icons labeled 'My Computer', 'Online Services', 'My Documents', 'Outlook Express', 'Internet Explorer', 'Connect to the Internet', and 'Recycle Bin', plus a bottom taskbar with a 'Start' button and a clock reading '5:49 PM'. The monitor has a yellow sticky note reading 'Be Happy' and a small yellow bird perched on top. The computer base is labeled 'CREATIVE PC'. In front is a yellow mechanical keyboard labeled 'KBD-98' with orange and cream keys, and a yellow mouse labeled 'MS'. To the left is a green desk lamp, a smiling potted cactus, a blue floppy disk labeled 'FUN STUFF', and a blue mug reading 'COFFEE TIME!' with a smiley face. To the right are 2 stacked books (green 'WINDOWS 98 MANUAL', blue 'INTERNET EXPLORER') and 2 smiling balloons (orange and yellow). The foreground features a green cutting mat, a yellow pencil, a green tape dispenser labeled 'TAPE IT!', 2 crayons, a pink sticky note reading 'Take a Break!', and a white notepad with a 5-item 'TO DO LIST': '1. Be Awesome', '2. Play More', '3. Call Mom', '4. Eat Snacks', '5. Smile :)'. The background wall has a green and cream clock, a white poster reading 'HAVE A NICE DAY!' with a smiling sun and 'Do Your Best!', and 3 additional sticky notes: a yellow one reading 'Dream Big Work Hard!', a pink one reading 'You've Got This!', and a green one reading 'Meeting 10:00 AM!'.",
+      "image": "/assets/styles/open-13957.webp",
+      "tags": [
+        "黏土定格",
+        "复古玩具",
+        "圆润造型"
+      ],
+      "eyebrow": "三维与微缩",
+      "icon": "view_in_ar",
+      "needsReference": true,
+      "source": {
+        "id": 13957,
+        "author": "可可耐特coconut",
+        "authorUrl": "https://x.com/coconut_256",
+        "url": "https://x.com/coconut_256/status/2045026556561719581#reversed-0",
+        "imageUrl": "https://cms-assets.youmind.com/media/1776697137709_1m4dcb_HGFky2DbMAEzWSU.jpg",
+        "license": "CC BY 4.0"
+      }
+    },
+    {
+      "id": "open-14256",
+      "name": "微缩城市沙盘",
+      "englishName": "Miniature 3D City Diorama Map",
+      "description": "等距视角的精细三维城市沙盘, 传统与现代建筑形成层次, 旧纸地图底板, 河流和交通作为视觉动线, 温暖窗光和微缩模型质感.",
+      "group": "三维与微缩",
+      "prompt": "等距视角的精细三维城市沙盘, 传统与现代建筑形成层次, 旧纸地图底板, 河流和交通作为视觉动线, 温暖窗光和微缩模型质感.",
+      "template": "A highly detailed, isometric 3D miniature diorama map of Chongqing, blending traditional Chinese architecture with modern skyscrapers, set against a vintage parchment map background. The scene features a winding river with a modern bridge connecting a densely packed peninsula of high-rises to older, multi-tiered traditional buildings glowing with warm light. A monorail train curves along a track near the water. Key landmarks are labeled with vertical banners containing Chinese characters, such as \"洪崖洞\" (Hongyadong) and \"解放碑\" (Jiefangbei). The top left corner displays large calligraphy reading \"重庆\" above the English text \"CHONGQING\" and smaller Chinese text \"山城雾都·江城重庆\" alongside a red seal. The lighting is warm and cinematic, emphasizing the intricate textures of the miniature buildings, trees, and water, creating a tilt-shift photography effect.",
+      "image": "/assets/styles/open-14256.webp",
+      "tags": [
+        "等距城市",
+        "沙盘模型",
+        "暖光建筑"
+      ],
+      "eyebrow": "三维与微缩",
+      "icon": "view_in_ar",
+      "needsReference": true,
+      "source": {
+        "id": 14256,
+        "author": "boon陈庚阳",
+        "authorUrl": "https://x.com/A9Quant",
+        "url": "https://x.com/A9Quant/status/2046197741685260384#reversed-1",
+        "imageUrl": "https://cms-assets.youmind.com/media/1776756846562_olp28w_HGWN5KnbwAAKuoE.jpg",
+        "license": "CC BY 4.0"
+      }
+    },
+    {
+      "id": "open-15567",
+      "name": "微缩世界剖面",
+      "englishName": "Isometric Micro-World Cross-Section Archive",
+      "description": "等距轴测的微缩世界剖面图, 清楚展现多层空间与功能分区, 密集但有序的主题道具, 玩具屋模型质感与设定集式布局.",
+      "group": "三维与微缩",
+      "prompt": "等距轴测的微缩世界剖面图, 清楚展现多层空间与功能分区, 密集但有序的主题道具, 玩具屋模型质感与设定集式布局.",
+      "template": "请根据【主题】创作一张高完成度、高信息密度、适合系列化发布的「微缩世界剖面馆 / Isometric Micro-World Archive」视觉图。\n\n这不是普通房间插画，也不是单纯的建筑图，而是一张结合“等距轴测视角 + 建筑剖面结构 + 多层功能空间 + 高密度主题道具 + 微缩模型感 + 游戏场景设定集感”的主题空间总览图。画面需要像一个被剖开的微缩世界、经营模拟游戏场景、玩具屋模型或世界观设定图，让观者可以一眼看懂整体结构，又能反复观察其中的小细节。\n\n【基础设定】\n主题：【主题，例如昆虫研究所 / 未来生存基地 / 魔法药剂工坊 / AI自动化公司 / 植物工厂 / 儿童学习中心 / 太空补给站】\n空间名称 / 品牌名：【品牌名或空间名称，可为空】\n世界观方向：【现实 / 科幻 / 童话 / 魔法 / 末日 / 博物馆 / 实验室 / 经营模拟 / 校园 / 自然生态】\n建筑类型：【小屋 / 基地 / 工厂 / 实验室 / 商店 / 博物馆 / 地下空间 / 飞船 / 多层工作室】\n核心功能：【这个空间主要用来做什么，例如研究、生产、展示、生活、训练、交易、学习、维修、种植】\n主色调：【主色调，例如浅蓝、薄荷绿、奶油黄、粉色、橙绿、紫蓝、白蓝科技色】\n辅助色：【辅助色，可为空】\n点缀色：【点缀色，可为空】\n画幅比例：【1:1 / 3:4 / 4:5 / 9:16】\n信息密度：【中高密度 / 高密度 / 超高密度】\n整体气质：【治愈、可爱、精密、童趣、科普、未来感、复古、清爽、探索感】\n\n如果某些字段没有填写，请根据【主题】自动合理推导，不要让画面留空。所有内容都要围绕主题统一生成，避免加入无关元素。\n\n【画面结构】\n采用清晰的等距轴测视角 / isometric view / axonometric view，主体是一个被剖开的多层主题建筑或功能基地。观者可以同时看到建筑的正面、侧面、顶面和内部空间。整体建筑位于画面中心，占据画面主要面积，背景环境适度淡化，用来衬托主体。\n\n建筑内部需要分成多个功能区域，每个区域都要有明确用途，而不是随机堆放装饰。可以包含：\n1. 主工作区 / 核心操作区\n2. 展示区 / 收藏区 / 标本区\n3. 研究区 / 实验区 / 控制区\n4. 储藏区 / 货架区 / 物资区\n5. 生活区 / 休息区 / 小型居住区\n6. 能源区 / 机器区 / 管道区\n7. 种植区 / 培养区 / 生态区\n8. 入口区 / 运输区 / 维修区\n9. 楼梯、平台、走廊、栏杆、梯子等空间连接结构\n\n各个区域之间要通过楼梯、走廊、平台、管道、桥架或电缆形成清晰的空间关系，让画面像一个真实可以运转的小型系统。\n\n【道具与细节】\n根据【主题】生成大量相关道具，并让它们分布在不同功能区中。道具需要具体、可识别、有主题关联，不能只是泛泛的装饰。每个小物件都应像游戏资产一样清晰可读，具有可点击、可互动、可收集的感觉。\n\n道具类型可以包括：\n- 主题设备：机器、仪器、工具、控制台、容器、屏幕、工作台\n- 生活物件：桌椅、书架、床铺、杯子、箱子、柜子、灯具\n- 展示物件：标本、模型、海报、说明牌、玻璃柜、陈列架\n- 连接结构：管道、电线、梯子、楼梯、输送带、滑轨、平台\n- 生态元素：植物、水箱、培养箱、土壤、树枝、岩石、标本\n- 角色元素：少量小人物、小动物、机器人或主题生物，用来提供尺度感和故事感\n\n道具数量要丰富，但要保持秩序。所有道具都应服务于空间功能和主题世界观。\n\n【风格要求】\n整体风格为清晰、可爱、精密的手绘卡通等距插画。线条干净，边缘略圆润，色彩明亮柔和，整体具有轻松、治愈、探索感。画面应有经营模拟游戏、儿童科普绘本、微缩模型、设定集页面的感觉。\n\n避免过度写实，避免强烈暗黑光影，避免厚重油画感，避免复杂噪点。重点是清楚、精致、有层次、可读性强。\n\n【颜色与光影】\n使用高明度、低到中等饱和度的柔和配色。主色调统一，辅助色用于区分不同空间，点缀色用于突出关键设备和小道具。线稿颜色不要使用死黑，可使用深灰、蓝灰、棕灰等柔和描边。\n\n光影保持轻量，不需要强烈真实投影。通过色块、结构、线条和局部高亮来建立层次。背景使用浅色、低对比度处理，使主体建筑更加突出。\n\n【构图与阅读路径】\n画面主体居中或略微偏上，建筑呈多层剖面结构。视觉阅读路径应从整体建筑轮廓开始，再进入各楼层功能区，最后观察细节道具。可以通过楼梯、平台、走廊、管线、轨道等元素引导视线。\n\n整体画面要饱满但不拥挤，丰富但不混乱。每个房间、平台和角落都应该有内容，但仍然保持清晰的空间边界。\n\n【背景环境】\n背景可以根据主题加入弱化的外部环境，例如森林、城市、街道、地下岩层、实验园区、海底、太空、校园、工厂外墙等。背景不要抢主体，建议使用淡色、低透明度、低对比度处理，形成“主体清晰、背景退后”的效果。\n\n【最终效果】\n最终画面应像一张完整的主题空间设定图，既有建筑剖面图的结构感，又有游戏场景资产图的细节感，还带有微缩玩具屋的可爱探索感。它应该适合用于系列化视觉创作、IP世界观展示、游戏场景设定、品牌空间概念图、科普内容封面或小红书/Pinterest风格视觉发布。\n\n请确保画面：\n1. 等距轴测视角明确\n2. 建筑剖面结构清楚\n3. 多层功能区完整\n4. 道具丰富且主题统一\n5. 色彩柔和明亮\n6. 线稿清晰干净\n7. 背景弱化、主体突出\n8. 信息密度高但不混乱\n9. 具有可探索、可运营、可反复观察的微缩世界感",
+      "image": "/assets/styles/open-15567.webp",
+      "tags": [
+        "轴测剖面",
+        "多层空间",
+        "主题道具"
+      ],
+      "eyebrow": "三维与微缩",
+      "icon": "view_in_ar",
+      "needsReference": false,
+      "source": {
+        "id": 15567,
+        "author": "Larus Canus",
+        "authorUrl": "https://x.com/MrLarus",
+        "url": "https://x.com/MrLarus/status/2047709029804155226",
+        "imageUrl": "https://cms-assets.youmind.com/media/1777106764191_1bshfh_HGrnL-7WMAA0Eyp.jpg",
+        "license": "CC BY 4.0"
+      }
+    },
+    {
+      "id": "open-15883",
+      "name": "微缩工坊广告",
+      "englishName": "Miniature Diorama Skincare Advertisement",
+      "description": "写实微缩场景广告, 放大的主物体搭配精细微型人物与道具, 移轴浅景深, 受控摄影棚光线, 用比例反差讲述制作过程.",
+      "group": "三维与微缩",
+      "prompt": "写实微缩场景广告, 放大的主物体搭配精细微型人物与道具, 移轴浅景深, 受控摄影棚光线, 用比例反差讲述制作过程.",
+      "template": "A hyper-realistic miniature diorama product advertisement featuring an oversized luxury skincare pump bottle labeled \"LUXEVEIL Skin Science – Radiance Nourishing Body Lotion\" in cream/beige with a polished gold pump top, placed on a circular platform. Tiny figurine construction workers dressed in yellow coveralls and white hard hats swarm around the bottle climbing scaffolding, painting the bottle with rollers, operating a tower crane, working near industrial tanks and pipework, and unloading a miniature flatbed truck. The scene includes metal scaffolding structures, industrial silos, orange traffic cones, wooden barricades, and storage barrels. The overall color palette is warm beige, cream, gold, and mustard yellow. Studio photography style with soft diffused lighting, no shadows, clean beige background. The concept metaphorically shows workers \"crafting\" or \"building\" the perfect lotion. Tilt-shift miniature aesthetic, ultra-detailed, commercial product photography, photorealistic CGI render.",
+      "image": "/assets/styles/open-15883.webp",
+      "tags": [
+        "比例反差",
+        "移轴景深",
+        "工坊叙事"
+      ],
+      "eyebrow": "三维与微缩",
+      "icon": "view_in_ar",
+      "needsReference": false,
+      "source": {
+        "id": 15883,
+        "author": "𝐌",
+        "authorUrl": "https://x.com/Strength04_X",
+        "url": "https://x.com/Strength04_X/status/2048074514278563949",
+        "imageUrl": "https://cms-assets.youmind.com/media/1777193307108_gqlfkd_HGw417FboAAQNrp.jpg",
+        "license": "CC BY 4.0"
+      }
+    },
+    {
+      "id": "open-16562",
+      "name": "折纸立体书",
+      "englishName": "Origami Pop-Up T-Rex Book Ad",
+      "description": "摄影棚中的折纸立体书艺术, 细密层叠纸片和激光切割般的镂空, 纸张折痕与轻薄截面, 低角度近景, 柔和透光与立体投影.",
+      "group": "三维与微缩",
+      "prompt": "摄影棚中的折纸立体书艺术, 细密层叠纸片和激光切割般的镂空, 纸张折痕与轻薄截面, 低角度近景, 柔和透光与立体投影.",
+      "template": "A cinematic studio photograph of an open pop-up book on a clean white surface, viewed from a low front angle, with a dramatic T-rex made entirely of intricate white origami and laser-cut paper bursting upward from the center fold. The dinosaur is large and dominant, facing right in a roaring pose with open jaws, sharp paper teeth, tiny forearms, powerful legs, and a long tail sweeping left. Its body is built from hundreds of delicate layered paper slats and cutout perforations, glowing from strong internal and under-page illumination so the creature appears backlit and semi-luminous. Around the base, exactly 7 paper plant silhouettes rise from the pages: 3 darker branching shrubs in the foreground and 4 pale fern-like foliage shapes behind them, all also cut from paper. The open pages show faint printed text on the right-hand spread, while the center gutter emits a bright white light that shines upward through the structure. A soft cool-blue ambient environment contrasts with the warm white glow from inside the book, creating a magical children's advertisement feel. Strong spotlighting from above and behind the dinosaur produces crisp shadows cast across the next spread and onto the tabletop. Minimal background, high detail, elegant product-ad aesthetic, volumetric haze, shallow depth of field, monochrome white and blue palette, ultra-clean composition, surreal handcrafted realism.",
+      "image": "/assets/styles/open-16562.webp",
+      "tags": [
+        "折纸机关",
+        "镂空层次",
+        "立体书"
+      ],
+      "eyebrow": "三维与微缩",
+      "icon": "view_in_ar",
+      "needsReference": true,
+      "source": {
+        "id": 16562,
+        "author": "Gadgetify",
+        "authorUrl": "https://x.com/Gdgtify",
+        "url": "https://x.com/Gdgtify/status/2048870299894939916#reversed-0",
+        "imageUrl": "https://cms-assets.youmind.com/media/1777367287481_qb2uv8_HGt_lR9a0AEsJQK.jpg",
+        "license": "CC BY 4.0"
+      }
+    },
+    {
+      "id": "open-14123",
+      "name": "等距像素博物馆",
+      "englishName": "Isometric Pixel Art Evolution Museum",
+      "description": "细节丰富的等距像素艺术, 清晰像素边缘与统一网格, 以空间分区表达主题演进, 每区使用不同但协调的色彩, 博物馆式陈列构图.",
+      "group": "三维与微缩",
+      "prompt": "细节丰富的等距像素艺术, 清晰像素边缘与统一网格, 以空间分区表达主题演进, 每区使用不同但协调的色彩, 博物馆式陈列构图.",
+      "template": "创作一张超高细节等距像素艺术时间线插画（3:4，4K），融合细节密度、象征性与隐喻。用户指定的主题为【Western Art Development】。\n\n首先，围绕Western Art Development进行推理，确定：主题的中英文标题、涵盖的最早与最近历史时期、起始阶段标签与结束阶段标签，以及3-5个关键演进阶段及其各自的象征性元素与色彩方案。\n\n然后构建一个以\"Western Art Development\"为主题的等距\"演进博物馆\"，每个展馆区域代表一个演进阶段，空间推进即代表时间演变。采用标准等距视角（2:1），丰富的层次深度与流畅过渡。每个阶段分配3-5个与主题强烈关联的象征元素，并用差异化色彩暗示时间流动。在场景中融入双语像素字体标题：中文\"[主题中文]演进史\"与英文\"EVOLUTION OF Western Art Development\"，加上起止阶段的双语副标题及关键时间节点标记。整体风格专业且具视觉张力，适合学术分析与对比可视化，直接出图。",
+      "image": "/assets/styles/open-14123.webp",
+      "tags": [
+        "等距像素",
+        "主题陈列",
+        "网格秩序"
+      ],
+      "eyebrow": "三维与微缩",
+      "icon": "view_in_ar",
+      "needsReference": false,
+      "source": {
+        "id": 14123,
+        "author": "知识猫图解",
+        "authorUrl": "https://x.com/GeekCatX",
+        "url": "https://x.com/GeekCatX/status/2046172416716759171",
+        "imageUrl": "https://cms-assets.youmind.com/media/1776756764350_ol31ju_HGV2lMFasAAlw3Z.jpg",
+        "license": "CC BY 4.0"
+      }
+    },
+    {
+      "id": "open-13486",
+      "name": "东方极简城市",
+      "englishName": "Minimalist City Poster Prompt",
+      "description": "新中式极简海报, 地标几何化, 留白加线描和局部色块, 水纹与祥云构成流动动线, 红青蓝搭配克制暖金细节.",
+      "group": "海报与排版",
+      "prompt": "新中式极简海报, 地标几何化, 留白加线描和局部色块, 水纹与祥云构成流动动线, 红青蓝搭配克制暖金细节.",
+      "template": "新中式极简风格高端城市海报，9:16竖版构图，以广州为核心主题，画面中心为抽象几何化的广州塔，造型简洁但具有辨识度，\n\n整体采用S型流动构图，从下方向上延展，珠江水系被设计为流动的水波纹与传统祥云纹样融合，环绕整个画面形成视觉动线，\n\n广州地标建筑以“留白+线描+局部色块”的方式点缀其中：珠江新城双塔、猎德大桥、白云山轮廓、岭南骑楼，\n传统与现代建筑自然融合，层次递进，远近虚实分明，\n\n风格控制：极简 + 高级 + 东方意境，不杂乱不过度写实，\n\n色彩方案（重点）：\n中国红、青蓝、鎏金为主色，\n辅以少量暖金高光点缀，形成强烈视觉冲击但不俗艳，\n\n背景：大面积纯净留白或淡宣纸肌理，增强呼吸感与高级感，\n\n细节：祥云与水纹具有轻微浮雕/烫金质感，\n局部加入微光粒子或流动光线，增强现代感，\n\n光影：柔和渐变光+局部高光，突出恢弘大气氛围，\n\n整体风格：国潮高级插画 / 品牌海报级质感 / / 超清细节",
+      "image": "/assets/styles/open-13486.webp",
+      "tags": [
+        "几何地标",
+        "东方留白",
+        "国潮色块"
+      ],
+      "eyebrow": "海报与排版",
+      "icon": "interests",
+      "needsReference": false,
+      "source": {
+        "id": 13486,
+        "author": "李岳",
+        "authorUrl": "https://x.com/liyue_ai",
+        "url": "https://x.com/liyue_ai/status/2045744531686166878",
+        "imageUrl": "https://cms-assets.youmind.com/media/1776661947089_hneqys_HGPxyjwbAAAYkgo.jpg",
+        "license": "CC BY 4.0"
+      }
+    },
+    {
+      "id": "open-13647",
+      "name": "复古海岸旅行",
+      "englishName": "Vintage Amalfi Coast Travel Poster",
+      "description": "复古旅行海报, 铅笔插画与丝网印刷纹理, 浓郁蓝色搭配温暖黄色, 阳光明亮, 以道路或地形形成电影式纵深.",
+      "group": "海报与排版",
+      "prompt": "复古旅行海报, 铅笔插画与丝网印刷纹理, 浓郁蓝色搭配温暖黄色, 阳光明亮, 以道路或地形形成电影式纵深.",
+      "template": "Modern pencil illustration of Vintage travel poster illustration of the Amalfi Coast, Italy, panoramic coastal cliff road scene, classic 1960s white car driving along a curved seaside road, deep blue Mediterranean sea with small sailboats, colorful pastel hillside village, bright blue sky with soft clouds, lemon tree branches with vibrant yellow lemons framing the foreground, warm summer sunlight, bold vibrant colors, retro 1950s travel poster style, cinematic composition, high detail, screen print texture, graphic illustration. Hand-drawn style, illustration with loose strokes and defined contours. High-contrast color palette, maintaining chromatic harmony between background and elements. Contemporary and decorative aesthetic.",
+      "image": "/assets/styles/open-13647.webp",
+      "tags": [
+        "旅行海报",
+        "丝网印刷",
+        "夏日色彩"
+      ],
+      "eyebrow": "海报与排版",
+      "icon": "interests",
+      "needsReference": false,
+      "source": {
+        "id": 13647,
+        "author": "Riccardo Wolf",
+        "authorUrl": "https://x.com/WolfRiccardo",
+        "url": "https://x.com/WolfRiccardo/status/2044562722491121718",
+        "imageUrl": "https://cms-assets.youmind.com/media/1776701486254_6knj7d_HF--qboXoAA8isD.jpg",
+        "license": "CC BY 4.0"
+      }
+    },
+    {
+      "id": "open-14126",
+      "name": "清晨水墨山水",
+      "englishName": "Oriental Aesthetics Ink Wash Poster",
+      "description": "东方极简水墨, 大面积留白, 低饱和青绿雾蓝和浅墨, 浓淡干湿的晕染, 层叠晨雾与镜面倒影, 少量朱砂红作为视觉焦点.",
+      "group": "海报与排版",
+      "prompt": "东方极简水墨, 大面积留白, 低饱和青绿雾蓝和浅墨, 浓淡干湿的晕染, 层叠晨雾与镜面倒影, 少量朱砂红作为视觉焦点.",
+      "template": "新中式水墨山水海报，竖版9:16构图，东方极简美学风格，\n大面积留白，整体色调为春日清晨氛围（青绿色、雾蓝、淡灰、浅墨），低饱和、清透柔和，高级质感。\n画面主体为奇峻巍峨的群山，从中间平静湖面的两侧拔地而起，占据左右两侧画面，\n山体以水墨晕染表现，浓淡干湿变化丰富，局部融入淡青绿色渲染，体现春意生机。\n山峰被湿润轻柔的晨雾包裹，雾气层层递进，与浅青蓝天空自然融合，形成空气透视与空间纵深。\n\n湖面如镜面般平静，呈现微青绿色调，倒映山体与天空，反射略带柔焦与雾化扩散效果，增强春日湿润与梦幻氛围。\n中景一艘带弧形篷顶的小木舟缓慢漂浮，船桨轻触水面形成细腻涟漪，水纹自然扩散，整体保持极静状态。\n\n船上为一位红衣渔女，体量较小（远景比例），人物简化处理为水墨剪影 + 轻微设色，\n身着低饱和朱砂红传统服饰（非鲜艳红），颜色略被雾气柔化，\n人物面部不刻画细节，仅保留轮廓与姿态（如轻扶船篷或执桨），\n红色在水面形成淡淡倒影，作为画面唯一暖色视觉焦点。\n\n岸边点缀疏林与春季新生植被，采用淡墨 + 淡青绿点染，虚实结合，增强节奏与生命气息。\n\n少量飞鸟在远空掠过，轻盈疏散分布，增强空间层次与灵动感。\n\n画面顶部居中竖排书法：“东方美学”，采用传统手写行书或行草风格（王羲之笔意），\n笔触自然起伏、提按分明，带飞白与墨韵扩散效果，避免字体感。\n书法颜色为深墨青或柔和墨黑，与整体画面统一。\n整体风格：水墨 + 现代极简设计融合，春日禅意、空灵湿润、宁静氛围，\n冷暖对比克制，电影感光影，高级艺术海报质感，超清细节。",
+      "image": "/assets/styles/open-14126.webp",
+      "tags": [
+        "水墨晨雾",
+        "青绿淡墨",
+        "大幅留白"
+      ],
+      "eyebrow": "海报与排版",
+      "icon": "interests",
+      "needsReference": false,
+      "source": {
+        "id": 14126,
+        "author": "李岳",
+        "authorUrl": "https://x.com/liyue_ai",
+        "url": "https://x.com/liyue_ai/status/2046215276249993720",
+        "imageUrl": "https://cms-assets.youmind.com/media/1776756766247_xswfzf_HGWd3PRbAAA0IZ3.jpg",
+        "license": "CC BY 4.0"
+      }
+    },
+    {
+      "id": "open-14315",
+      "name": "新浪潮拼贴海报",
+      "englishName": "1960s French New Wave Movie Poster",
+      "description": "六十年代法国新浪潮海报, 大胆摄影蒙太奇与撕纸拼贴, 高反差黑白图像搭配红蓝黄, 手工胶印错位, 不对称布局与有表现力的字形.",
+      "group": "海报与排版",
+      "prompt": "六十年代法国新浪潮海报, 大胆摄影蒙太奇与撕纸拼贴, 高反差黑白图像搭配红蓝黄, 手工胶印错位, 不对称布局与有表现力的字形.",
+      "template": "1960s French New Wave theatrical poster, bold photomontage composition, torn-paper collage sensibility, pop-art color bursts, high-contrast black-and-white imagery with selective red blue and yellow accents, hand-made offset-print texture, slightly off-register ink, expressive asymmetry, art-house poster cool, graphic spontaneity, street-poster energy, adventurous typography-led design.\n\nPoster text:\n- Large title at the bottom: \"GPT Image 2.0\"\n- Smaller headline at the top: \"Image generation with a point of view\"\n- Small footer text: \"Coming soon\"\nKeep all visible text in English. Use a theatrical poster composition.",
+      "image": "/assets/styles/open-14315.webp",
+      "tags": [
+        "摄影拼贴",
+        "错位套印",
+        "大胆排版"
+      ],
+      "eyebrow": "海报与排版",
+      "icon": "interests",
+      "needsReference": false,
+      "source": {
+        "id": 14315,
+        "author": "宝玉",
+        "authorUrl": "https://x.com/dotey",
+        "url": "https://x.com/dotey/status/2046783507511287906",
+        "imageUrl": "https://cms-assets.youmind.com/media/1776936743893_vm83rs_HGeimRSXoAA6X6k.jpg",
+        "license": "CC BY 4.0"
+      }
+    },
+    {
+      "id": "open-14313",
+      "name": "复古像素电影",
+      "englishName": "Pixel Art Movie Poster Prompt",
+      "description": "复古十六位像素艺术海报, 硬朗清晰的像素边缘, 电影式光影, 戏剧性构图与浓厚叙事氛围.",
+      "group": "海报与排版",
+      "prompt": "复古十六位像素艺术海报, 硬朗清晰的像素边缘, 电影式光影, 戏剧性构图与浓厚叙事氛围.",
+      "template": "Create a single full-scene image in a 9:16 vertical format, retro 16-bit pixel art style, crisp pixel edges, cinematic lighting, and strong atmosphere. Buddy cop movie poster for the fictional movie “Dead Heat”. 2 zombie detectives in the poster looking for zombie criminals to arrest.",
+      "image": "/assets/styles/open-14313.webp",
+      "tags": [
+        "十六位像素",
+        "电影光影",
+        "叙事海报"
+      ],
+      "eyebrow": "海报与排版",
+      "icon": "interests",
+      "needsReference": false,
+      "source": {
+        "id": 14313,
+        "author": "PromptlyAI",
+        "authorUrl": "https://x.com/PromptlyAI_YT",
+        "url": "https://x.com/PromptlyAI_YT/status/2046716273556598979",
+        "imageUrl": "https://cms-assets.youmind.com/media/1776883045257_vgzmee_HGdlmX0aEAE-eiF.jpg",
+        "license": "CC BY 4.0"
+      }
+    },
+    {
+      "id": "open-13621",
+      "name": "碳纤维字形",
+      "englishName": "Carbon Fiber Typography",
+      "description": "以方向明确的碳纤维编织纹理塑造字形或主体轮廓, 强调材料触感, 精细光泽与冷静克制的工业设计感.",
+      "group": "海报与排版",
+      "prompt": "以方向明确的碳纤维编织纹理塑造字形或主体轮廓, 强调材料触感, 精细光泽与冷静克制的工业设计感.",
+      "template": "Typography where every letterform is woven from carbon fibre. Tactile, directional, pure performance aesthetic.",
+      "image": "/assets/styles/open-13621.webp",
+      "tags": [
+        "碳纤编织",
+        "材质字形",
+        "工业质感"
+      ],
+      "eyebrow": "海报与排版",
+      "icon": "interests",
+      "needsReference": false,
+      "source": {
+        "id": 13621,
+        "author": "SRKDAN",
+        "authorUrl": "https://x.com/SRKDAN",
+        "url": "https://x.com/SRKDAN/status/2043871921889001824",
+        "imageUrl": "https://cms-assets.youmind.com/media/1776678795269_2t2ahw_HF1Krn_WIAABfGj.jpg",
+        "license": "CC BY 4.0"
+      }
+    },
+    {
+      "id": "open-14324",
+      "name": "角色设定图鉴",
+      "englishName": "Character Design Sheet Prompt",
+      "description": "清晰的角色设计设定稿, 统一外貌与服饰语言, 主体全身展示搭配关键特征细节和简洁说明, 规整布局便于角色开发.",
+      "group": "角色与分镜",
+      "prompt": "清晰的角色设计设定稿, 统一外貌与服饰语言, 主体全身展示搭配关键特征细节和简洁说明, 规整布局便于角色开发.",
+      "template": "Create a character design sheet for Hermes Agent, with key info",
+      "image": "/assets/styles/open-14324.webp",
+      "tags": [
+        "角色设定",
+        "特征细节",
+        "规整版式"
+      ],
+      "eyebrow": "角色与分镜",
+      "icon": "auto_stories",
+      "needsReference": false,
+      "source": {
+        "id": 14324,
+        "author": "Neo",
+        "authorUrl": "https://x.com/NeoAIForecast",
+        "url": "https://x.com/NeoAIForecast/status/2046795552650936695",
+        "imageUrl": "https://cms-assets.youmind.com/media/1776936740187_pzxhix_HGetCnrbIAAq6T0.jpg",
+        "license": "CC BY 4.0"
+      }
+    },
+    {
+      "id": "open-14311",
+      "name": "热血漫画分镜",
+      "englishName": "Japanese Shonen Manga Page",
+      "description": "彩色少年冒险漫画, 动态构图与戏剧性透视, 清晰分格和阅读顺序, 富有张力的线条与实体漫画纸页质感.",
+      "group": "角色与分镜",
+      "prompt": "彩色少年冒险漫画, 动态构图与戏剧性透视, 清晰分格和阅读顺序, 富有张力的线条与实体漫画纸页质感.",
+      "template": "Make a sample page of a colorized Japanese shonen adventure manga. The page should vividly depict our main character found a magical quill. The name of the quill is called the Quill of GPT Image. Make it dramatic. The magical quill has strong power sealed inside it. Additional instructions: Aspect ratio: Portrait 1440x2560. The pen should have an OpenAI logo on it. The language throughout the manga should be Japanese. Think carefully first to make this a good story with good split of manga panels. The page should appear as a photo of a physical page, not a digital page.",
+      "image": "/assets/styles/open-14311.webp",
+      "tags": [
+        "少年漫画",
+        "动态透视",
+        "纸页质感"
+      ],
+      "eyebrow": "角色与分镜",
+      "icon": "auto_stories",
+      "needsReference": false,
+      "source": {
+        "id": 14311,
+        "author": "宝玉",
+        "authorUrl": "https://x.com/dotey",
+        "url": "https://x.com/dotey/status/2046781861502779523",
+        "imageUrl": "https://cms-assets.youmind.com/media/1776936741209_393t3k_HGehCXkXYAAWo-E.jpg",
+        "license": "CC BY 4.0"
+      }
+    },
+    {
+      "id": "open-14719",
+      "name": "美式叙事漫画",
+      "englishName": "American Comic Strip Template",
+      "description": "美式多格叙事漫画, 对角线构图, 清楚的阅读动线, 电影式镜头转换与明确角色表情, 根据故事需要配置对白气泡.",
+      "group": "角色与分镜",
+      "prompt": "美式多格叙事漫画, 对角线构图, 清楚的阅读动线, 电影式镜头转换与明确角色表情, 根据故事需要配置对白气泡.",
+      "template": "your simple story idea, american comic multi-panel illustration, diagonal layout, six panels, cinematic storytelling, clear reading flow, with speech bubbles.",
+      "image": "/assets/styles/open-14719.webp",
+      "tags": [
+        "美式漫画",
+        "对角构图",
+        "对白气泡"
+      ],
+      "eyebrow": "角色与分镜",
+      "icon": "auto_stories",
+      "needsReference": false,
+      "source": {
+        "id": 14719,
+        "author": "Latte",
+        "authorUrl": "https://x.com/0xbisc",
+        "url": "https://x.com/0xbisc/status/2046901840911233381",
+        "imageUrl": "https://cms-assets.youmind.com/media/1776936733068_yzil8o_HGf3EceaAAAIzXZ.jpg",
+        "license": "CC BY 4.0"
+      }
+    },
+    {
+      "id": "open-15158",
+      "name": "商业广告分镜",
+      "englishName": "Commercial Ad Storyboard Layout",
+      "description": "写实商业广告分镜风格, 干净中性底色, 受控柔光, 同一角色和环境贯穿叙事, 清晰呈现铺垫, 冲突, 展示和收尾的镜头节奏.",
+      "group": "角色与分镜",
+      "prompt": "写实商业广告分镜风格, 干净中性底色, 受控柔光, 同一角色和环境贯穿叙事, 清晰呈现铺垫, 冲突, 展示和收尾的镜头节奏.",
+      "template": "Create a cinematic commercial storyboard sheet.\n\nLAYOUT:\n- Fixed 6-panel grid (2x3), evenly spaced\n- Clean white or neutral background\n- Each panel clearly separated, no UI, no clutter\n\nGLOBAL STYLE:\n- Cinematic realism, high-end commercial look\n- Soft controlled lighting, consistent across all panels\n- No character or environment drift\n\nSTORY ARC (strict order):\n1. Setup\n2. Tension\n3. Product reveal\n4. Product interaction\n5. Transformation (impact)\n6. Clean closing shot\n\nSCENE CONCEPT:\nA woman lives in a quiet apartment with a tense, unpredictable tiger. The tiger behaves like a domestic cat but carries constant danger. When she serves the product (cat food), the tiger visibly relaxes and transforms into a calm domestic house cat.\n\nPANEL REQUIREMENTS (for EACH panel include):\n- Cinematic frame (clear composition, subject readable)\n- Shot / Action (focused on character + product when applicable)\n- Camera (shot type, angle, movement)\n\nPRODUCT RULES:\n- Product must be sharp, readable, and well-lit in panels 3, 4, 6\n- No distortion, no redesign\n- Packaging must remain consistent\n\nVISUAL PRIORITIES:\n- Strong contrast between tension (tiger) and relief (cat)\n- Clear readability in every frame\n- No abstract or surreal distortion, grounded realism\n\nTEXT:\n- Minimal, small, professional labels only (panel number + short shot note)\n- No extra graphics",
+      "image": "/assets/styles/open-15158.webp",
+      "tags": [
+        "广告叙事",
+        "受控柔光",
+        "连贯镜头"
+      ],
+      "eyebrow": "角色与分镜",
+      "icon": "auto_stories",
+      "needsReference": false,
+      "source": {
+        "id": 15158,
+        "author": "Kōda",
+        "authorUrl": "https://x.com/aimikoda",
+        "url": "https://x.com/aimikoda/status/2047198651605250088",
+        "imageUrl": "https://cms-assets.youmind.com/media/1777022494912_ippn5w_HGkb2gvXoAAsztF.jpg",
+        "license": "CC BY 4.0"
+      }
+    },
+    {
+      "id": "open-15216",
+      "name": "晴空动漫镜头",
+      "englishName": "Professional Anime Cinematic Storyboard",
+      "description": "院线动漫分镜风格, 清晰赛璐璐渲染, 立体积云, 温暖金色日光, 天蓝和翡翠绿搭配黄铜点缀, 广角空间与动态动作.",
+      "group": "角色与分镜",
+      "prompt": "院线动漫分镜风格, 清晰赛璐璐渲染, 立体积云, 温暖金色日光, 天蓝和翡翠绿搭配黄铜点缀, 广角空间与动态动作.",
+      "template": "一份专业的动漫院线分镜头（16：9），标题为《天空之击》，副标题为“战士与圣石”。干净的浅米色背景，圆角矩形面板排列成三列网格，共 9 个场景。每个场景面板显示：橙色“场景 XX”标签、时间码、场景标题，然后是两个并排的画面，分别标有“开始帧”→“结束帧”，通过白色箭头连接，下面有注释（镜头/对白/特效/动作）。艺术风格：清晰的卡通渲染 新海诚的×工作室机智，×进击的巨人——柔和的画风光线、立体云朵、温暖的金色阳光、电影般的广角镜头、动态动作姿势、浓郁的天蓝和翡翠绿调，搭配黄铜和铜色点缀。需要描绘的场景：1. 广角景——一艘雄伟的蒸汽朋克飞艇，黄铜螺旋桨和飘扬的帆，在高空穿透积云海洋（慢速无人机推入）2.低角度特写一名女战士的靴子和交叉的双腿悬挂在飞艇木制栏杆上，风中头发飘动（静电→微微向上倾斜） 3.鸟瞰视角俯瞰栏杆下方：广阔的翡翠山谷，蜿蜒的河流和远处一个茅草屋顶的小中世纪村庄（眩晕变焦）4.飞艇桥内部——海盗船长戴着三角帽和长大衣，举着一块比蛋稍大、发着蓝光的圣石，脸上有耀眼的青色光（中→石头放大）5.甲板上的船员发现入侵者——一名满脸胡渣的海盗举起一把黄铜中世纪左轮手枪对准她，其他人震惊地转身（两枪→跟着瞄准）6.子弹飞行中极近距离，旋转穿过空中，伴随着运动模糊和烟雾轨迹，朝栏杆方向飞去（子弹时间追踪镜头）7.栏杆——空的。 她被放置的地方什么都没有，子弹穿过空气（快速剪辑，杂音）8。女战士在空中优雅地做月面翻身，背景是明亮的天空，头发和斗篷在动作中拖曳（慢动作，宽→近）9。着陆镜头——她悄无声息地在射手身后降落，低蹲着，手放在剑柄上，海盗转身半空震惊僵住（低角度→对峙） 底部部分包括：“关键角色”一行，有 4 个角色肖像（女战士、海盗船长、射手海盗、一名船员）;一个“音调与方向”盒子（动态动作、风和云粒子，吉卜力风格的奇观与武士的强烈情感）;“音乐与特效计划”时间线（环境风→紧张弦乐→子弹→→沉默）;以及“技术规格”盒装（30 秒，16：9 1920×1080,24 帧，全彩，mp4 H.264）。布局：简洁的信息图，细边框，粉彩色格，每帧内高度细致的动漫关键视觉，专业制作文档美学。",
+      "image": "/assets/styles/open-15216.webp",
+      "tags": [
+        "赛璐璐",
+        "金色日光",
+        "动漫镜头"
+      ],
+      "eyebrow": "角色与分镜",
+      "icon": "auto_stories",
+      "needsReference": false,
+      "source": {
+        "id": 15216,
+        "author": "路飞 🏴‍☠️ AI 研究员🧐",
+        "authorUrl": "https://x.com/0xluffy_eth",
+        "url": "https://x.com/0xluffy_eth/status/2047224465097134172",
+        "imageUrl": "https://cms-assets.youmind.com/media/1777022520442_ihfa67_HGkzy6faIAAOiNp.jpg",
+        "license": "CC BY 4.0"
+      }
+    },
+    {
+      "id": "open-16252",
+      "name": "三维游戏角色卡",
+      "englishName": "3D Gaming Character Sheet Prompt",
+      "description": "三维游戏角色设定卡, 稳定的角色比例和服装材质, 展示完整造型与局部装备细节, 清晰摄影棚照明, 规整角色开发版式.",
+      "group": "角色与分镜",
+      "prompt": "三维游戏角色设定卡, 稳定的角色比例和服装材质, 展示完整造型与局部装备细节, 清晰摄影棚照明, 规整角色开发版式.",
+      "template": "a highly detailed 3D gaming character sheet, \n- on the left side a beautiful female french student , head front view + side view, assesoire samples, character front view and back viere, \n- on the right side details about her: name, age, job, city, size, weight, character descritpion, hobbies, streghts, weaknesses, backstory,",
+      "image": "/assets/styles/open-16252.webp",
+      "tags": [
+        "游戏角色",
+        "三维材质",
+        "装备细节"
+      ],
+      "eyebrow": "角色与分镜",
+      "icon": "auto_stories",
+      "needsReference": false,
+      "source": {
+        "id": 16252,
+        "author": "Shira Wiggles",
+        "authorUrl": "https://x.com/ImperfectEngel",
+        "url": "https://x.com/ImperfectEngel/status/2048515758507036955",
+        "imageUrl": "https://cms-assets.youmind.com/media/1777280767269_zsr5aa_HG3KOe4bEAARYZG.jpg",
+        "license": "CC BY 4.0"
+      }
+    },
+    {
+      "id": "open-13975",
+      "name": "手绘城市美食图",
+      "englishName": "Hand-drawn Chengdu Food Map",
+      "description": "水彩和彩铅混合的手绘地图, 简化鸟瞰城市道路, 精细可爱的食物小插画, 暖红姜黄和翠绿, 手写标签与植物装饰边框.",
+      "group": "信息与品牌",
+      "prompt": "水彩和彩铅混合的手绘地图, 简化鸟瞰城市道路, 精细可爱的食物小插画, 暖红姜黄和翠绿, 手写标签与植物装饰边框.",
+      "template": "一张手绘风格的城市美食地图，以成都为主题。画面以鸟瞰视角的手绘简化城市地图为底，标注主要道路和地标但不追求精确比例而是追求可爱的手绘感。地图上分布着 12 个美食地点的精致手绘小插画：春熙路的串串香（一把竹签插着各种食材冒着热气）、宽窄巷子的三大炮（三个糯米团子飞向铜盘）、建设路的蛋烘糕（金黄酥脆正在翻面）、玉林路的火锅（九宫格锅翻滚冒泡）等，每个插画约占地图的 5% 面积，旁边用手写体标注店名和一句推荐语\"凌晨两点还在排队的那家\"。地图边缘用手绘藤蔓和辣椒装饰形成边框。右下角有一个手绘指南针和图例说明。左上角标题\"成都·吃货暴走地图\"使用胖圆的手绘美术字配辣椒装饰。整体画风为水彩+彩铅混合的手绘质感，颜色以暖色系（辣椒红、姜黄、翠绿）为主，图片比例 1:1。",
+      "image": "/assets/styles/open-13975.webp",
+      "tags": [
+        "美食地图",
+        "水彩彩铅",
+        "手写标签"
+      ],
+      "eyebrow": "信息与品牌",
+      "icon": "dashboard",
+      "needsReference": false,
+      "source": {
+        "id": 13975,
+        "author": "终极小谢",
+        "authorUrl": "https://x.com/Panda20230902",
+        "url": "https://x.com/Panda20230902/status/2045396918965285111",
+        "imageUrl": "https://cms-assets.youmind.com/media/1776699409871_8vrr24_HGKoqQ9bgAA3wLt.jpg",
+        "license": "CC BY 4.0"
+      }
+    },
+    {
+      "id": "open-13977",
+      "name": "博物馆拆解图鉴",
+      "englishName": "Museum Style Infographic Breakdown",
+      "description": "博物馆专题图鉴, 写实主视觉搭配结构拆解与中文引线标注, 材质纹理小样, 色板和流程信息, 米白绢纸底色与克制专业版式.",
+      "group": "信息与品牌",
+      "prompt": "博物馆专题图鉴, 写实主视觉搭配结构拆解与中文引线标注, 材质纹理小样, 色板和流程信息, 米白绢纸底色与克制专业版式.",
+      "template": "请根据【主题：汉服】自动生成一张“博物馆图鉴式中文拆解信息图”。\n\n要求整张图兼具真实写实主视觉、结构拆解、中文标注、材质说明、纹样寓意、色彩含义和核心特征总结。你需要根据【主题】自动判断最合适的主体对象、服饰体系、器物结构、时代风格、关键部件、材质工艺、颜色方案与版式结构，用户无需再提供其他信息。\n\n整体风格应为：国家博物馆展板、历史服饰图鉴、文博专题信息图，而不是普通海报、古风写真、电商详情页或动漫插画。背景采用米白、绢纸白、浅茶色等纸张质感，整体高级、克制、专业、可收藏。\n\n版式固定为：\n- 顶部：中文主标题 + 副标题 + 导语\n- 左侧：结构拆解区，中文引线标注关键部件，并配局部特写\n- 右上：材质 / 工艺 / 质感区，展示真实纹理小样并附说明\n- 右中：纹样 / 色彩 / 寓意区，展示主色板、纹样样本和文化解释\n- 底部：穿着顺序 / 构成流程图 + 核心特征总结\n\n若主题适合人物展示，则以真实人物全身站姿为中央主体；若更适合器物或单体结构，则改为中心主体拆解图，但整体仍保持完整中文信息图形式。所有文字必须为简体中文，清晰、规整、可读，不要乱码、错字、英文或拼音。重点突出真实结构、材质差异、文化说明与图鉴气质。",
+      "image": "/assets/styles/open-13977.webp",
+      "tags": [
+        "结构拆解",
+        "材质图鉴",
+        "中文标注"
+      ],
+      "eyebrow": "信息与品牌",
+      "icon": "dashboard",
+      "needsReference": false,
+      "source": {
+        "id": 13977,
+        "author": "Larus Canus",
+        "authorUrl": "https://x.com/MrLarus",
+        "url": "https://x.com/MrLarus/status/2045504669401653414",
+        "imageUrl": "https://cms-assets.youmind.com/media/1776699410061_mqk1jh_HGMWXPObQAAPnA0.jpg",
+        "license": "CC BY 4.0"
+      }
+    },
+    {
+      "id": "open-14129",
+      "name": "模块化百科卡",
+      "englishName": "Encyclopedia Style Infographic Generator",
+      "description": "现代百科卡片, 清晰主视觉配局部放大细节, 圆角模块与有层级的标题, 浅色背景和柔和配色, 高信息密度但保持阅读留白.",
+      "group": "信息与品牌",
+      "prompt": "现代百科卡片, 清晰主视觉配局部放大细节, 圆角模块与有层级的标题, 浅色背景和柔和配色, 高信息密度但保持阅读留白.",
+      "template": "请根据动物生成一张高质量竖版「科普百科图」。 \n\n这张图不是普通海报，也不是单纯插画，而是一张兼具“图鉴感、百科感、信息结构感、收藏感”的模块化科普信息图。整体风格参考高级博物图鉴、现代百科书页、生活方式知识卡和社交媒体高传播信息图的结合。\n\n请让画面包含：\n- 一个清晰漂亮的主题主视觉\n- 若干局部特征放大细节\n- 多个圆角模块化信息分区\n- 清楚的标题层级与重点标签\n- 简洁但丰富的百科内容\n- 可视化评分、要点总结或Top 5模块\n\n内容栏目请根据主题自动适配，优先从这些方向中选择并合理组合：\n基础档案、分类信息、外观特征、习性/生态、形成机制/结构组成、生长或使用条件、养护或维护建议、风险与注意事项、适合人群或适用场景、优缺点对比、快速评分卡。\n\n视觉要求：\n浅色干净背景，柔和配色，轻阴影，精致小图标，圆角信息框，整洁排版，信息密度高但不拥挤，阅读体验好。整体必须像真正可以发布、阅读、收藏、系列化生产的科普百科卡，而不是广告图。\n\n请不要做成普通商业宣传海报。要突出“知识整理 + 模块信息 + 图鉴式展示”的特征。",
+      "image": "/assets/styles/open-14129.webp",
+      "tags": [
+        "百科模块",
+        "信息层级",
+        "柔和配色"
+      ],
+      "eyebrow": "信息与品牌",
+      "icon": "dashboard",
+      "needsReference": false,
+      "source": {
+        "id": 14129,
+        "author": "阿兰AI",
+        "authorUrl": "https://x.com/alanlovelq",
+        "url": "https://x.com/alanlovelq/status/2046378199681257920",
+        "imageUrl": "https://cms-assets.youmind.com/media/1776756768129_szlpze_HGYyHmBaQAA6qFD.jpg",
+        "license": "CC BY 4.0"
+      }
+    },
+    {
+      "id": "open-14744",
+      "name": "手绘知识便笺",
+      "englishName": "Hand-drawn Infographic Card Prompt",
+      "description": "质朴亲切的手绘信息卡, 米色纸张纹理, 红黑毛笔标题, 二至四个清楚的小节, 简单有趣的插画图标与充足留白.",
+      "group": "信息与品牌",
+      "prompt": "质朴亲切的手绘信息卡, 米色纸张纹理, 红黑毛笔标题, 二至四个清楚的小节, 简单有趣的插画图标与充足留白.",
+      "template": "创作一张手绘风格的信息图卡片，比例为9:16竖版。卡片主题鲜明，背景为带有纸质肌理的米色或米白色，整体设计体现质朴、亲切的手绘美感。\n\n卡片上方以红黑相间、对比鲜明的大号毛笔草书字体突出标题，吸引视觉焦点。文字内容均采用中文草书，整体布局分为2至4个清晰的小节，每节以简短、精炼的中文短语表达核心要点。字体保持草书流畅的韵律感，既清晰可读又富有艺术气息。\n\n卡片中点缀简单、有趣的手绘插画或图标，例如人物或象征符号，以增强视觉吸引力，引发读者思考与共鸣。整体布局注意视觉平衡，预留足够的空白空间，确保画面简洁明了，易于阅读和理解。\n\n主题是：“做IP是长期复利，坚持每日出摊，持续做，肯定会有结果，因为99%都坚持不住的。”",
+      "image": "/assets/styles/open-14744.webp",
+      "tags": [
+        "纸质便笺",
+        "红黑标题",
+        "手绘图标"
+      ],
+      "eyebrow": "信息与品牌",
+      "icon": "dashboard",
+      "needsReference": false,
+      "source": {
+        "id": 14744,
+        "author": "宝玉",
+        "authorUrl": "https://x.com/dotey",
+        "url": "https://x.com/dotey/status/2046765093883662706",
+        "imageUrl": "https://cms-assets.youmind.com/media/1776936746567_iv2p98_HGeR_nJXkAAGao5.jpg",
+        "license": "CC BY 4.0"
+      }
+    },
+    {
+      "id": "open-15179",
+      "name": "包装展开设计",
+      "englishName": "3D Packaging to 2D Net Unfolding",
+      "description": "专业包装结构展示, 将立体包装与平面展开关系清楚呈现, 保持图案和品牌视觉的对应, 干净背景, 精确边缘和清楚的结构层次.",
+      "group": "信息与品牌",
+      "prompt": "专业包装结构展示, 将立体包装与平面展开关系清楚呈现, 保持图案和品牌视觉的对应, 干净背景, 精确边缘和清楚的结构层次.",
+      "template": "Flatten 3D packaging into 2D net. Expand all panels and tabs. Orthographic projection, no distortion. Map textures precisely. Add contrasting die-lines. Pure white background.",
+      "image": "/assets/styles/open-15179.webp",
+      "tags": [
+        "包装结构",
+        "平面展开",
+        "品牌设计"
+      ],
+      "eyebrow": "信息与品牌",
+      "icon": "dashboard",
+      "needsReference": false,
+      "source": {
+        "id": 15179,
+        "author": "Mia Taylor | Ad Creative & Meta Ads",
+        "authorUrl": "https://x.com/ammiamia_",
+        "url": "https://x.com/ammiamia_/status/2047370522384846968",
+        "imageUrl": "https://cms-assets.youmind.com/media/1777022503526_whhz1o_HGm3EfaaEAA61ZN.jpg",
+        "license": "CC BY 4.0"
+      }
+    },
+    {
+      "id": "open-15161",
+      "name": "食物质感广告",
+      "englishName": "Pizza Food Photography and Infographic",
+      "description": "高端食物广告摄影与信息图视觉, 细腻呈现烘烤和融化质地, 温暖木色背景, 柔和电影光线, 清晰主视觉搭配有序的食材信息.",
+      "group": "信息与品牌",
+      "prompt": "高端食物广告摄影与信息图视觉, 细腻呈现烘烤和融化质地, 温暖木色背景, 柔和电影光线, 清晰主视觉搭配有序的食材信息.",
+      "template": "A high-end food product photograph of a loaded pizza slice centered against a warm rustic wooden-toned background. The slice features a thick golden crust with a crispy edge, stretchy melted mozzarella cheese with visible pull strands, rich tomato sauce underneath, and toppings including pepperoni slices, black olives, capsicum, and herbs. The textures are highly detailed with glossy melted cheese, slightly oily toppings, and realistic baked crust texture. Soft cinematic lighting creates depth and subtle shadows. Ultra-sharp focus, premium food advertisement style, hyper realistic, Create a hyper-realistic exploded vertical infographic composition of a gourmet pizza slice.\nTop → Bottom structure:\nMelted Cheese Layer (stretchy, glossy mozzarella with pull texture)\n→ Toppings Layer (pepperoni, olives, capsicum with natural detail)\n→ Herb Seasoning (oregano flakes and spice particles lightly scattered)\n→ Tomato Sauce Layer (rich red smooth sauce with slight gloss)\n→ Dough Crust Base (thick baked crust with crispy edge texture)\nAll layers must be perfectly centered, evenly spaced, and aligned vertically. Use a warm rustic background with soft studio lighting and realistic shadows beneath each floating layer. The composition should feel like a premium food campaign combined with a clean infographic layout.\nAdd clean infographic labels with thin pointer lines using these exact labels:\n“Cheese”\n“Toppings”\n“Seasoning”\n“Sauce”\n“Crust”\n\nUltra-detailed food texture, DSLR macro quality, hyper realistic, premium advertisement aesthetic,",
+      "image": "/assets/styles/open-15161.webp",
+      "tags": [
+        "食物摄影",
+        "温暖质地",
+        "食材信息"
+      ],
+      "eyebrow": "信息与品牌",
+      "icon": "dashboard",
+      "needsReference": false,
+      "source": {
+        "id": 15161,
+        "author": "𝐌",
+        "authorUrl": "https://x.com/Strength04_X",
+        "url": "https://x.com/Strength04_X/status/2047283829652812276",
+        "imageUrl": "https://cms-assets.youmind.com/media/1777022496150_zxxl34_HGlptubakAAQ3DF.jpg",
+        "license": "CC BY 4.0"
+      }
+    }
+  ]
+}

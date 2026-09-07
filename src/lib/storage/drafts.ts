@@ -12,7 +12,9 @@ export function writeDraft(key: string, value: string) {
   try {
     if (value && value.trim()) localStorage.setItem(PREFIX + key, value);
     else localStorage.removeItem(PREFIX + key);
+    return true;
   } catch {
-    // ignore quota / privacy mode errors
+    window.dispatchEvent(new CustomEvent('sprout:storage-error', { detail: '草稿未能保存, 请检查浏览器可用空间' }));
+    return false;
   }
 }

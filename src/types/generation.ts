@@ -1,4 +1,6 @@
 import type { GenerationMode } from './provider';
+import type { GenerationRecipe, SeriesTemplate } from '../../shared/generation-contract.mjs';
+export type { GenerationRecipe, SeriesTemplate } from '../../shared/generation-contract.mjs';
 
 export type StudioMode = 'text' | 'reference' | 'edit';
 export type AspectRatio = '1:1' | '16:9' | '9:16' | '4:3' | '3:4' | '3:2' | '2:3' | '21:9' | 'auto';
@@ -11,6 +13,7 @@ export interface RefImage {
   name: string;
   dataUrl: string;
   size: number;
+  recordId?: string;
 }
 
 export interface GenerationConfig {
@@ -27,7 +30,8 @@ export interface GenerationConfig {
   background: 'auto' | 'transparent' | 'opaque';
   outputFormat: ImageOutputFormat;
   outputCompression: number;
-  refImages: RefImage[];}
+  refImages: RefImage[];
+}
 
 export type ResultKind = 'single' | 'series';
 
@@ -41,6 +45,19 @@ export interface ResultRecord {
   kind: ResultKind;
   outputFormat?: ImageOutputFormat;
   createdAt: number;
+  jobId?: string;
+  requestId?: string;
+  width?: number;
+  height?: number;
+  bytes?: number;
+  previewOnly?: boolean;
+  recipe?: GenerationRecipe;
+  revisedPrompt?: string;
+  sceneId?: string;
+  sceneIndex?: number;
+  version?: number;
+  parentId?: string;
+  template?: SeriesTemplate;
   /** 系列聚合 (v3.5): 同一 seriesId 的记录在展馆归为一张叠层卡 */
   seriesId?: string;
   /** 系列主提示词 (世界观) */

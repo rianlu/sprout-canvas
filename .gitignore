@@ -4,6 +4,7 @@ config/local.config.json
 node_modules/
 logs/
 output/
+data/
 scratch/
 ecosystem.local.cjs
 dist/

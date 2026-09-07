@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import * as queue from '../server/queue.mjs';
+import { PNG_BASE64, PNG_URL, MASK_URL } from './fixtures.mjs';
 
 const providers = [
   { id: 'anyrouter', name: 'AnyRouter', baseUrl: 'https://anyrouter.test', generationMode: 'responses', imageModel: 'gpt-5.3-codex' },
@@ -59,7 +60,7 @@ const semanticEditBody = Buffer.from(JSON.stringify({
   size: '1024x1024',
   quality: 'low',
   background: 'opaque',
-  ref_images: [{ name: 'ref.png', image_url: 'data:image/png;base64,ZmFrZS1pbWFnZQ==', mask_url: 'data:image/png;base64,bWFzaw==' }],
+  ref_images: [{ name: 'ref.png', image_url: PNG_URL, mask_url: MASK_URL }],
 }));
 
 {
@@ -83,8 +84,8 @@ async function runProviderConversionJob(provider, expectedUrl, inspect) {
   globalThis.fetch = async (url, options = {}) => {
     fetchCalls.push({ url, options });
     const body = expectedUrl.endsWith('/v1/responses')
-      ? `data: ${JSON.stringify({ result: 'a'.repeat(1200) })}\n\n`
-      : JSON.stringify({ data: [{ b64_json: 'b'.repeat(1200) }] });
+      ? `data: ${JSON.stringify({ type: 'response.completed', response: { output: [{ type: 'image_generation_call', id: 'image-result', result: PNG_BASE64 }] } })}\n\n`
+      : JSON.stringify({ data: [{ b64_json: PNG_BASE64 }] });
     return {
       ok: true,
       status: 200,
@@ -143,7 +144,7 @@ await runProviderConversionJob(providers[0], 'https://anyrouter.test/v1/response
   assert.equal(payload.model, 'gpt-5.3-codex');
   assert.equal(payload.tools[0].type, 'image_generation');
   assert.equal(payload.tools[0].action, 'edit');
-  assert.equal(payload.tools[0].input_image_mask.image_url, 'data:image/png;base64,bWFzaw==');
+  assert.equal(payload.tools[0].input_image_mask.image_url, MASK_URL);
   assert.equal(payload.input[1].content[0].type, 'input_text');
   assert.match(payload.input[1].content[0].text, /蒙版透明区域/);
   assert.equal(payload.input[1].content[1].type, 'input_image');
@@ -171,7 +172,7 @@ console.log('queue provider conversion tests passed');
       status: 200,
       statusText: 'OK',
       headers: { get: () => 'application/json' },
-      arrayBuffer: async () => Buffer.from(JSON.stringify({ data: [{ b64_json: 'd'.repeat(1200) }] })),
+      arrayBuffer: async () => Buffer.from(JSON.stringify({ data: [{ b64_json: PNG_BASE64 }] })),
     };
   };
   queue.init({
@@ -285,7 +286,7 @@ async function runForcedJob(provider, rawBody, fetchImpl) {
       status: 200,
       statusText: 'OK',
       headers: { get: () => 'application/json' },
-      arrayBuffer: async () => Buffer.from(JSON.stringify({ data: [{ b64_json: 'c'.repeat(1200) }] })),
+      arrayBuffer: async () => Buffer.from(JSON.stringify({ data: [{ b64_json: PNG_BASE64 }] })),
     };
   };
   const retry = queue.retryFailedJob(job.id, 'user-1');

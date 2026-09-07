@@ -1,0 +1,51 @@
+html { color-scheme: light; }
+html.dark { color-scheme: dark; }
+body {
+  margin: 0;
+  overscroll-behavior: none;
+  font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-size: 14px;
+  line-height: 22px;
+  color: rgb(var(--sc-on-surface));
+  background: rgb(var(--sc-surface));
+}
+::-webkit-scrollbar { display: none; }
+button, a, input, select, textarea { -webkit-tap-highlight-color: transparent; }
+button:disabled { cursor: not-allowed; }
+:focus-visible { outline: 2px solid rgb(var(--sc-primary)); outline-offset: 3px; }
+textarea:focus-visible, input:focus-visible { outline-offset: 1px; }
+.studio-layout { display: grid; grid-template-columns: 440px minmax(0, 1fr); align-items: start; gap: 24px; }
+.studio-rail { min-width: 0; position: sticky; top: 80px; }
+.studio-rail > section { position: static; }
+.stitch-page { padding-top: 64px; min-height: calc(100dvh - 4rem); }
+.stitch-viewer { touch-action: pan-x pan-y; }
+.stitch-viewer-image { max-height: 65vh; width: auto; max-width: 100%; object-fit: contain; }
+.stitch-inpaint-frame { max-width: 100%; max-height: 54vh; }
+.stitch-style-card-list { display: grid; grid-template-columns: 220px 1fr; gap: 24px; }
+.stitch-style-card-list .stitch-style-image { height: 180px; margin: 0; }
+.stitch-mobile-nav { display: none; }
+.font-serif-sc { font-family: 'Noto Serif SC', 'Songti SC', 'STSong', serif; }
+.stitch-paper-frame:fullscreen { width: 100%; height: 100%; justify-content: center; border-radius: 0; }
+.stitch-paper-frame:fullscreen img { max-height: 90vh; }
+@media (max-width: 1023px) {
+  .studio-layout { grid-template-columns: minmax(0, 1fr); }
+  .studio-rail { position: static; }
+  .studio-rail > section { width: 100%; }
+}
+@media (max-width: 767px) {
+  .stitch-page, main.pt-16 { padding-top: 116px; }
+  .stitch-header-brand { font-size: 15px; }
+  .stitch-header-tagline { display: none; }
+  .stitch-desktop-nav { display: none; }
+  .stitch-mobile-nav { display: flex; height: 52px; align-items: center; overflow-x: auto; padding: 0 16px 8px; }
+  .stitch-queue { top: 116px; width: min(100vw, 352px); }
+  .stitch-style-filters { top: 116px; }
+  .stitch-style-card-list { grid-template-columns: 1fr; gap: 16px; }
+  .stitch-viewer-image { max-height: 48vh; }
+  .stitch-viewer-content { overflow-y: auto; }
+  .stitch-viewer-stage { flex: none; min-height: 50dvh; }
+  .stitch-viewer-inspector { overflow-y: visible; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; scroll-behavior: auto !important; }
+}

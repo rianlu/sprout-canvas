@@ -1,0 +1,186 @@
+来源: https://github.com/gpt-image2/awesome-gptimage2-prompts
+原始来源: https://github.com/YouMind-OpenLab/awesome-gpt-image-2
+Copyright (c) 2026 YouMind OpenLab
+许可: CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/)
+修改: 选取独立条目, 翻译名称, 提炼可复用画风, 解析模板默认值, 移除其他工具专用参数与未经验证的分辨率标注, 缩放示例图并转为 WebP.
+不代表原作者认可或背书.
+
+open-15563 轻柔水彩绘本
+作者: 蜡笔进化论
+原始作品: https://x.com/crayon1267/status/2047482132952645646
+示例图: https://cms-assets.youmind.com/media/1777106763975_1u28ok_HGoeJjJacAAIIcv.jpg
+
+open-15548 工笔重彩花鸟
+作者: 宝玉
+原始作品: https://x.com/dotey/status/2047807925519814947
+示例图: https://cms-assets.youmind.com/media/1777193300725_0r2oih_HGtGbqAaoAA9_xG.jpg
+
+open-15526 古典植物装饰
+作者: 宝玉
+原始作品: https://x.com/dotey/status/2047803054422901046
+示例图: https://cms-assets.youmind.com/media/1777106745811_qsd971_HGtB_mLbMAABMIl.jpg
+
+open-14343 层叠纸雕剧场
+作者: 蜡笔进化论
+原始作品: https://x.com/crayon1267/status/2046618693489320005
+示例图: https://cms-assets.youmind.com/media/1776883060054_8747vb_HGcMPembIAEG0Do.jpg
+
+open-13860 即兴涂鸦速写
+作者: BLANPLAN | 空界計劃
+原始作品: https://x.com/blanplan/status/2045190582453350748
+示例图: https://cms-assets.youmind.com/media/1776697070400_yf2trn_HGH5vgyaUAA30Z7.jpg
+
+open-14714 复古植物石版
+作者: Shami
+原始作品: https://x.com/ShamiWeb3/status/2046913292309066073
+示例图: https://cms-assets.youmind.com/media/1776936731299_i65h9p_HGgYkNMXUAAlkTE.jpg
+
+open-13608 百叶窗电影光
+作者: 栗
+原始作品: https://x.com/Kukkuree/status/2043525834640613591#reversed-3
+示例图: https://cms-assets.youmind.com/media/1776676864153_14klxf_HFvf4mcbEAE57Hq.jpg
+
+open-13750 晴日复古胶片
+作者: BubbleBrain
+原始作品: https://x.com/BubbleBrain/status/2044783836329087081#reversed-0
+示例图: https://cms-assets.youmind.com/media/1776695090062_2bncke_HGCIAhwbIAA1WW1.jpg
+
+open-15164 热带商品摄影
+作者: ShaHid WaNii
+原始作品: https://x.com/meng_dagg695/status/2047227172486824002
+示例图: https://cms-assets.youmind.com/media/1777022497285_zju5tf_HGk2PldaEAE0u_f.jpg
+
+open-13661 生态微距摄影
+作者: Replica
+原始作品: https://x.com/John82924749/status/2044347291600113933#reversed-0
+示例图: https://cms-assets.youmind.com/media/1776701492866_ff51qg_HF76-Z3bwAAAfnq.jpg
+
+open-13706 纯白棚拍时尚
+作者: BubbleBrain
+原始作品: https://x.com/BubbleBrain/status/2044846335728467996
+示例图: https://cms-assets.youmind.com/media/1776695069830_o2y9py_HGDAtXuaAAASgnW.jpg
+
+open-15507 拍立得记忆
+作者: sankalp
+原始作品: https://x.com/dejavucoder/status/2047723352417329411
+示例图: https://cms-assets.youmind.com/media/1777106738445_hxsi37_HGr5KkJbwAA0uw1.png
+
+open-13957 复古黏土玩具
+作者: 可可耐特coconut
+原始作品: https://x.com/coconut_256/status/2045026556561719581#reversed-0
+示例图: https://cms-assets.youmind.com/media/1776697137709_1m4dcb_HGFky2DbMAEzWSU.jpg
+
+open-14256 微缩城市沙盘
+作者: boon陈庚阳
+原始作品: https://x.com/A9Quant/status/2046197741685260384#reversed-1
+示例图: https://cms-assets.youmind.com/media/1776756846562_olp28w_HGWN5KnbwAAKuoE.jpg
+
+open-15567 微缩世界剖面
+作者: Larus Canus
+原始作品: https://x.com/MrLarus/status/2047709029804155226
+示例图: https://cms-assets.youmind.com/media/1777106764191_1bshfh_HGrnL-7WMAA0Eyp.jpg
+
+open-15883 微缩工坊广告
+作者: 𝐌
+原始作品: https://x.com/Strength04_X/status/2048074514278563949
+示例图: https://cms-assets.youmind.com/media/1777193307108_gqlfkd_HGw417FboAAQNrp.jpg
+
+open-16562 折纸立体书
+作者: Gadgetify
+原始作品: https://x.com/Gdgtify/status/2048870299894939916#reversed-0
+示例图: https://cms-assets.youmind.com/media/1777367287481_qb2uv8_HGt_lR9a0AEsJQK.jpg
+
+open-14123 等距像素博物馆
+作者: 知识猫图解
+原始作品: https://x.com/GeekCatX/status/2046172416716759171
+示例图: https://cms-assets.youmind.com/media/1776756764350_ol31ju_HGV2lMFasAAlw3Z.jpg
+
+open-13486 东方极简城市
+作者: 李岳
+原始作品: https://x.com/liyue_ai/status/2045744531686166878
+示例图: https://cms-assets.youmind.com/media/1776661947089_hneqys_HGPxyjwbAAAYkgo.jpg
+
+open-13647 复古海岸旅行
+作者: Riccardo Wolf
+原始作品: https://x.com/WolfRiccardo/status/2044562722491121718
+示例图: https://cms-assets.youmind.com/media/1776701486254_6knj7d_HF--qboXoAA8isD.jpg
+
+open-14126 清晨水墨山水
+作者: 李岳
+原始作品: https://x.com/liyue_ai/status/2046215276249993720
+示例图: https://cms-assets.youmind.com/media/1776756766247_xswfzf_HGWd3PRbAAA0IZ3.jpg
+
+open-14315 新浪潮拼贴海报
+作者: 宝玉
+原始作品: https://x.com/dotey/status/2046783507511287906
+示例图: https://cms-assets.youmind.com/media/1776936743893_vm83rs_HGeimRSXoAA6X6k.jpg
+
+open-14313 复古像素电影
+作者: PromptlyAI
+原始作品: https://x.com/PromptlyAI_YT/status/2046716273556598979
+示例图: https://cms-assets.youmind.com/media/1776883045257_vgzmee_HGdlmX0aEAE-eiF.jpg
+
+open-13621 碳纤维字形
+作者: SRKDAN
+原始作品: https://x.com/SRKDAN/status/2043871921889001824
+示例图: https://cms-assets.youmind.com/media/1776678795269_2t2ahw_HF1Krn_WIAABfGj.jpg
+
+open-14324 角色设定图鉴
+作者: Neo
+原始作品: https://x.com/NeoAIForecast/status/2046795552650936695
+示例图: https://cms-assets.youmind.com/media/1776936740187_pzxhix_HGetCnrbIAAq6T0.jpg
+
+open-14311 热血漫画分镜
+作者: 宝玉
+原始作品: https://x.com/dotey/status/2046781861502779523
+示例图: https://cms-assets.youmind.com/media/1776936741209_393t3k_HGehCXkXYAAWo-E.jpg
+
+open-14719 美式叙事漫画
+作者: Latte
+原始作品: https://x.com/0xbisc/status/2046901840911233381
+示例图: https://cms-assets.youmind.com/media/1776936733068_yzil8o_HGf3EceaAAAIzXZ.jpg
+
+open-15158 商业广告分镜
+作者: Kōda
+原始作品: https://x.com/aimikoda/status/2047198651605250088
+示例图: https://cms-assets.youmind.com/media/1777022494912_ippn5w_HGkb2gvXoAAsztF.jpg
+
+open-15216 晴空动漫镜头
+作者: 路飞 🏴‍☠️ AI 研究员🧐
+原始作品: https://x.com/0xluffy_eth/status/2047224465097134172
+示例图: https://cms-assets.youmind.com/media/1777022520442_ihfa67_HGkzy6faIAAOiNp.jpg
+
+open-16252 三维游戏角色卡
+作者: Shira Wiggles
+原始作品: https://x.com/ImperfectEngel/status/2048515758507036955
+示例图: https://cms-assets.youmind.com/media/1777280767269_zsr5aa_HG3KOe4bEAARYZG.jpg
+
+open-13975 手绘城市美食图
+作者: 终极小谢
+原始作品: https://x.com/Panda20230902/status/2045396918965285111
+示例图: https://cms-assets.youmind.com/media/1776699409871_8vrr24_HGKoqQ9bgAA3wLt.jpg
+
+open-13977 博物馆拆解图鉴
+作者: Larus Canus
+原始作品: https://x.com/MrLarus/status/2045504669401653414
+示例图: https://cms-assets.youmind.com/media/1776699410061_mqk1jh_HGMWXPObQAAPnA0.jpg
+
+open-14129 模块化百科卡
+作者: 阿兰AI
+原始作品: https://x.com/alanlovelq/status/2046378199681257920
+示例图: https://cms-assets.youmind.com/media/1776756768129_szlpze_HGYyHmBaQAA6qFD.jpg
+
+open-14744 手绘知识便笺
+作者: 宝玉
+原始作品: https://x.com/dotey/status/2046765093883662706
+示例图: https://cms-assets.youmind.com/media/1776936746567_iv2p98_HGeR_nJXkAAGao5.jpg
+
+open-15179 包装展开设计
+作者: Mia Taylor | Ad Creative & Meta Ads
+原始作品: https://x.com/ammiamia_/status/2047370522384846968
+示例图: https://cms-assets.youmind.com/media/1777022503526_whhz1o_HGm3EfaaEAA61ZN.jpg
+
+open-15161 食物质感广告
+作者: 𝐌
+原始作品: https://x.com/Strength04_X/status/2047283829652812276
+示例图: https://cms-assets.youmind.com/media/1777022496150_zxxl34_HGlptubakAAQ3DF.jpg
