@@ -122,20 +122,29 @@ export function CreativeStudio({ onOpenStyles, onSubmitBatch, onCancel, onUseRec
       if (!alive) return;
       const draft = { ...stored, ...transfer };
       if (draft.config) setConfig((current) => ({ ...current, ...stored?.config, ...transfer?.config, prompt: transfer?.config?.prompt ?? stored?.config?.prompt ?? current.prompt }));
+      if (draft.styleId !== undefined) setStyleId(findImageStyle(draft.styleId)?.id || 'default');
       if (draft.refImage !== undefined) setRefImage(draft.refImage);
       setSourceRecord(draft.sourceRecord || null);
       if (draft.mask !== undefined) setMask(draft.mask);
       if (draft.tone) setTone(draft.tone);
       setRestoredMask(draft.maskDataUrl || '');
-      if (transfer) await writeWorkspaceDraft('studio-transfer', undefined);
-      if (alive) setDraftLoaded(true);
+      const transferredStyle = transfer?.styleId ? findImageStyle(transfer.styleId) : undefined;
+      if (transferredStyle) setMaskEditorOpen(false);
+      if (transfer) {
+        await writeWorkspaceDraft('studio', { ...draft, config: { ...stored?.config, ...transfer.config } });
+        await writeWorkspaceDraft('studio-transfer', undefined);
+      }
+      if (alive) {
+        setDraftLoaded(true);
+        if (transferredStyle) pushToast('success', `已载入 ${transferredStyle.name} 的中文模板, 可修改后开始绘制`);
+      }
     })().catch((error) => { if (alive) { setDraftLoaded(true); pushToast('error', error instanceof Error ? error.message : '草稿读取失败'); } });
     return () => { alive = false; };
   }, [pushToast]);
   useEffect(() => {
     if (!draftLoaded) return;
-    void writeWorkspaceDraft('studio', { config, refImage, sourceRecord, mask, tone, maskDataUrl: restoredMask }).catch(() => pushToast('error', '草稿未能保存, 请检查本地空间'));
-  }, [config, refImage, sourceRecord, mask, tone, restoredMask, draftLoaded, pushToast]);
+    void writeWorkspaceDraft('studio', { config, styleId, refImage, sourceRecord, mask, tone, maskDataUrl: restoredMask }).catch(() => pushToast('error', '草稿未能保存, 请检查本地空间'));
+  }, [config, styleId, refImage, sourceRecord, mask, tone, restoredMask, draftLoaded, pushToast]);
 
   // 草稿持久化 (v2 兼容键名)
   useEffect(() => {

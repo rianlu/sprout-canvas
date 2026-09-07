@@ -15,7 +15,8 @@ import type { QueueSubmitInput } from '../lib/api/queue';
 import type { GenerationConfig, ResultRecord } from '../types/generation';
 import type { ServerConfig } from '../types/provider';
 import { getRecordDataUrl, writeWorkspaceDraft } from '../lib/storage/gallery-db';
-import { recipeDraft, sourceImageDraft } from '../lib/image/recipe';
+import { recipeDraft, sourceImageDraft, type StudioDraft } from '../lib/image/recipe';
+import { findImageStyle } from '../lib/styles/image-styles';
 import { sizePreset, resolveSize } from '../lib/api/generation';
 import { randomId } from '../lib/random/id';
 import type { SeriesCard } from '../lib/image/gallery';
@@ -152,6 +153,23 @@ export function App() {
     } catch (error) { setMessage(error instanceof Error ? error.message : '配方读取失败'); }
   }, [setPage]);
 
+  const useStyle = useCallback(async (styleId: string) => {
+    const style = findImageStyle(styleId);
+    if (!style) throw new Error('该风格已不存在, 请重新选择');
+    if (styleTarget === 'series') {
+      if (!writeDraft('batch_style', style.id)) throw new Error('画风未能保存, 请检查浏览器可用空间');
+      setPage('series');
+      return;
+    }
+    const draft: StudioDraft = {
+      config: { mode: 'text', prompt: style.template, imageCount: 1, refImages: [] },
+      styleId: style.id, refImage: null, sourceRecord: null, mask: null, maskDataUrl: '', tone: 'none',
+    };
+    await writeWorkspaceDraft('studio-transfer', draft);
+    setStudioRevision((value) => value + 1);
+    setPage('studio');
+  }, [setPage, styleTarget]);
+
   const deriveSeries = useCallback(async (card: SeriesCard) => {
     try {
       const first = card.records[0];
@@ -245,10 +263,7 @@ export function App() {
       {page === 'styles' && (
         <StylesLibrary
           target={styleTarget}
-          onUseInStudio={(styleId) => {
-            writeDraft(styleTarget === 'series' ? 'batch_style' : 'studio_style', styleId);
-            setPage(styleTarget);
-          }}
+          onUseInStudio={useStyle}
         />
       )}
       {page === 'gallery' && (

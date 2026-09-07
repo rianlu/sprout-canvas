@@ -31,9 +31,9 @@ interface GalleryProps {
 type TypeFilter = 'all' | 'studio' | 'storyboard';
 type Group = 'today' | 'week' | 'earlier';
 const GROUPS: Group[] = ['today', 'week', 'earlier'];
-const GROUP_LABEL = { today: '今日作品 (Today)', week: '近7天 (This Week)', earlier: '往期作品 (Earlier Works)' };
+const GROUP_LABEL = { today: '今日作品', week: '近 7 天', earlier: '往期作品' };
 const SELECT_CLASS =
-  'appearance-none bg-surface-container-lowest border border-outline-variant/40 hover:border-outline text-on-surface text-xs py-1.5 pl-3 pr-7 rounded-xl cursor-pointer shadow-xs transition-colors focus:ring-1 focus:ring-primary max-w-full';
+  'appearance-none bg-surface-container-lowest border border-outline-variant/40 hover:border-outline text-on-surface font-body-sm text-body-sm py-1.5 pl-3 pr-7 rounded-xl cursor-pointer shadow-xs transition-colors focus:ring-1 focus:ring-primary max-w-full';
 
 function timeGroup(timestamp: number): Group {
   const today = new Date();
@@ -176,30 +176,28 @@ export function GalleryGrid({ records, onClear, onDeleteMany, onUseRecipe, onUse
   const openViewer = (card: GalleryCard) => setViewer({ cards: filtered, index: filtered.indexOf(card) });
 
   return (
-    <main className="stitch-page w-full bg-surface relative overflow-hidden">
-      <div className="absolute top-0 left-0 w-[600px] h-[600px] bg-primary-fixed/20 rounded-full blur-[100px] -translate-x-1/3 -translate-y-1/4 pointer-events-none" />
-      <div className="absolute top-64 right-0 w-[500px] h-[500px] bg-secondary-fixed/20 rounded-full blur-[100px] translate-x-1/3 pointer-events-none" />
-      <div className="relative max-w-[1560px] mx-auto px-4 sm:px-6 lg:px-8 pt-7 pb-12 flex flex-col gap-6">
-        <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-4 border-b border-outline-variant/30 pb-6">
+    <main className="stitch-page w-full bg-surface">
+      <div className="w-full px-gutter-canvas pt-space-lg pb-space-xl flex flex-col gap-space-lg">
+        <div className="flex flex-col md:flex-row md:items-end justify-between gap-space-lg">
           <div className="flex flex-col">
-            <div className="flex items-center gap-2 text-primary font-meta-sm text-[11px] tracking-widest uppercase">
-              <span className="w-2 h-2 rounded-full bg-primary/70" />
-              <span>自然心流 · 历史作品 · 浏览与下载</span>
+            <div className="flex items-center gap-2 mb-space-2xs text-secondary font-meta-sm text-meta-sm tracking-wider uppercase font-medium">
+              <StitchIcon name="photo_library" size={18} />
+              <span>创作记录 · 本地保存 · 浏览与下载</span>
             </div>
-            <div className="mt-2 flex flex-wrap items-baseline gap-3">
-              <h1 className="font-headline-lg font-serif-sc text-2xl sm:text-3xl lg:text-[34px] text-on-surface tracking-tight font-medium">
+            <div className="flex flex-wrap items-baseline gap-space-sm">
+              <h1 className="font-headline-lg text-headline-lg text-on-surface tracking-tight">
                 作品展馆 · 浏览画作
               </h1>
-              <span className="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full bg-surface-container text-secondary text-xs font-meta-sm border border-outline-variant/30">
-                <span className="w-1.5 h-1.5 rounded-full bg-primary" />共 {records.length} 幅作品 · 高保真原画
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-surface-container-low text-on-surface-variant font-meta-sm text-meta-sm">
+                共 {records.length} 幅作品
               </span>
             </div>
-            <p className="mt-2 text-sm text-on-surface-variant max-w-3xl leading-relaxed">
+            <p className="mt-1 font-body-md text-body-md text-on-surface-variant max-w-4xl leading-relaxed">
               查看你生成的所有单图与系列作品, 支持按条件检索, 查看大图与批量下载原图.
             </p>
           </div>
         </div>
-        <div className="flex flex-col gap-3.5 bg-surface-container-low/70 border border-outline-variant/35 p-4 rounded-2xl shadow-[0_2px_12px_rgba(85,95,75,0.03)] backdrop-blur-sm">
+        <div className="flex flex-col gap-space-md bg-surface-container-low border border-outline-variant/30 p-space-md rounded-2xl">
           <div className="flex flex-col xl:flex-row items-stretch xl:items-center justify-between gap-3.5">
             <div className="flex items-center gap-1.5 p-1 bg-surface-container rounded-xl overflow-x-auto select-none border border-outline-variant/30">
               {(
@@ -371,7 +369,7 @@ export function GalleryGrid({ records, onClear, onDeleteMany, onUseRecipe, onUse
                       >
                         <StitchIcon name={group === 'today' ? 'wb_sunny' : 'calendar_month'} size={16} />
                       </div>
-                      <h2 className="font-headline-sm font-serif-sc text-lg font-medium text-on-surface">
+                      <h2 className="font-headline-sm text-headline-sm text-on-surface">
                         {GROUP_LABEL[group]}
                       </h2>
                       <span
@@ -482,10 +480,10 @@ export function GalleryGrid({ records, onClear, onDeleteMany, onUseRecipe, onUse
                               </span>
                               <span className="font-meta-sm text-outline shrink-0">{cover.outputFormat?.toUpperCase()}</span>
                             </div>
-                            <h3 className="text-xs text-on-surface font-medium truncate" title={title}>
+                            <h3 className="font-body-md text-body-md text-on-surface font-medium truncate" title={title}>
                               {title}
                             </h3>
-                            <p className="text-[11px] text-on-surface-variant/75 truncate">
+                            <p className="font-body-sm text-body-sm text-on-surface-variant truncate">
                               {series ? `风格与分镜: ${cover.prompt}` : cover.prompt}
                             </p>
                             <div className="flex items-center justify-between pt-1.5 mt-0.5 border-t border-outline-variant/25 text-[11px] text-on-surface-variant">

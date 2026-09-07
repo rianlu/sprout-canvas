@@ -23,6 +23,7 @@ import { formatRequestSize, qualityLabel, resolveSize } from '../../lib/api/gene
 import { imageFileExtension } from '../../lib/image/format';
 import { RecordImage } from '../gallery/RecordImage';
 import type { ImageCapabilities } from '../../types/provider';
+import { MAX_PROMPT_LENGTH } from '../../../shared/generation-contract.mjs';
 
 /* ============ 单图创作 · 控制轨 (照搬 Stitch 单图稿 LEFT CONTROL PANEL, 类名原样) ============ */
 
@@ -197,7 +198,7 @@ export function StitchStudioRail(props: StitchStudioRailProps) {
         <div className="relative bg-surface-container-low rounded-xl p-space-md shadow-sm transition-all focus-within:shadow-[0_0_0_2px_#597445]">
           <textarea
             className="w-full bg-transparent border-0 outline-none resize-none font-body-md text-body-md text-on-surface placeholder:text-outline placeholder:italic leading-relaxed"
-            maxLength={1000}
+            maxLength={MAX_PROMPT_LENGTH}
             aria-label={isEdit ? '局部修改要求' : '画面提示词'}
             placeholder={isEdit ? '描述涂抹区域需要怎样修改, 例如: 把衣服改成红色, 保持人物姿势和背景.' : '描述清晨第一缕阳光穿透温室玻璃，照亮案头破土新芽的轻柔笔触，苔藓与湿润泥土的水彩质感...'}
             rows={4}
@@ -224,7 +225,7 @@ export function StitchStudioRail(props: StitchStudioRailProps) {
                 <span>{polishing ? '润色中...' : '润色扩写'}</span>
               </button>}
             </div>
-            <span className="text-outline">{prompt.length} / 1000</span>
+            <span className="text-outline">{prompt.length} / {MAX_PROMPT_LENGTH}</span>
           </div>
         </div>
       </div>

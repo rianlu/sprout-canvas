@@ -17,6 +17,7 @@ import { imageFileExtension } from '../../lib/image/format';
 import { useOriginalImage } from '../../hooks/useOriginalImage';
 import { StitchIcon } from '../ui/StitchIcon';
 import { RecordImage } from './RecordImage';
+import { ImageViewport } from './ImageViewport';
 
 interface ViewerProps {
   cards: GalleryCard[];
@@ -38,14 +39,13 @@ export function StitchGalleryViewer({ cards, initialIndex, initialSceneIndex = 0
     cards[initialIndex]?.kind === 'series' ? 'series' : 'single',
   );
   const [layout, setLayout] = useState<'carousel' | 'waterfall'>('carousel');
-  const [zoom, setZoom] = useState(1);
+  const [detailsOpen, setDetailsOpen] = useState(() => window.matchMedia('(min-width: 1024px)').matches);
+  const [fullscreen, setFullscreen] = useState(false);
   const dialogRef = useFocusTrap<HTMLDivElement>(true);
-  const frameRef = useRef<HTMLDivElement>(null);
   const stripRef = useRef<HTMLDivElement>(null);
-  const stageRef = useRef<HTMLDivElement>(null);
   const card = cards[cardIndex] ?? cards[0];
   const records = useMemo(() => (card ? cardRecords(card) : []), [card]);
-  const metadata = useImageMetadata(records);
+  const metadata = useImageMetadata(card?.kind === 'series' ? card.versions || records : records);
   const latestRecord = records[sceneIndex] ?? records[0];
   const versions = card?.kind === 'series' && latestRecord?.sceneId ? (card.versions || records).filter((item) => item.sceneId === latestRecord.sceneId).sort((a, b) => (b.version || 1) - (a.version || 1)) : [];
   const record = versions.find((item) => item.id === versionId) || latestRecord;
@@ -64,7 +64,6 @@ export function StitchGalleryViewer({ cards, initialIndex, initialSceneIndex = 0
       setVersionId('');
       setPreviewMode(cards[next]?.kind === 'series' ? 'series' : 'single');
       setLayout('carousel');
-      setZoom(1);
     },
     [cardIndex, cards],
   );
@@ -73,7 +72,6 @@ export function StitchGalleryViewer({ cards, initialIndex, initialSceneIndex = 0
     (delta: number) => {
       setVersionId('');
       setSceneIndex((current) => (current + delta + records.length) % records.length);
-      setZoom(1);
       setLayout('carousel');
     },
     [records.length],
@@ -88,8 +86,29 @@ export function StitchGalleryViewer({ cards, initialIndex, initialSceneIndex = 0
   }, []);
 
   useEffect(() => {
+    const media = window.matchMedia('(min-width: 1024px)');
+    const changed = () => setDetailsOpen(media.matches);
+    media.addEventListener('change', changed);
+    return () => media.removeEventListener('change', changed);
+  }, []);
+
+  useEffect(() => {
+    const changed = () => setFullscreen(document.fullscreenElement === dialogRef.current);
+    document.addEventListener('fullscreenchange', changed);
+    return () => document.removeEventListener('fullscreenchange', changed);
+  }, [dialogRef]);
+
+  const toggleFullscreen = async () => {
+    try {
+      if (document.fullscreenElement) await document.exitFullscreen();
+      else if (dialogRef.current?.requestFullscreen) await dialogRef.current.requestFullscreen();
+      else onNotify('info', '当前浏览器无法进入全屏');
+    } catch { onNotify('info', '当前浏览器无法进入全屏'); }
+  };
+
+  useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape' && !document.fullscreenElement) onClose();
+      if (event.key === 'Escape' && !fullscreen && !document.fullscreenElement) onClose();
       if (event.target instanceof HTMLElement && event.target.matches('input, textarea, select')) return;
       if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
         event.preventDefault();
@@ -100,25 +119,13 @@ export function StitchGalleryViewer({ cards, initialIndex, initialSceneIndex = 0
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [changeCard, changeScene, onClose, showSeries]);
+  }, [changeCard, changeScene, onClose, showSeries, fullscreen]);
 
   useEffect(() => {
     stripRef.current
       ?.querySelector<HTMLElement>('[aria-current="true"]')
       ?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
   }, [sceneIndex]);
-
-  useEffect(() => {
-    const stage = stageRef.current;
-    if (!stage) return;
-    const wheel = (event: WheelEvent) => {
-      if (!event.ctrlKey && !event.metaKey) return;
-      event.preventDefault();
-      setZoom((current) => Math.min(4, Math.max(0.5, current + (event.deltaY < 0 ? 0.1 : -0.1))));
-    };
-    stage.addEventListener('wheel', wheel, { passive: false });
-    return () => stage.removeEventListener('wheel', wheel);
-  }, []);
 
   if (!card || !record) return null;
 
@@ -143,7 +150,7 @@ export function StitchGalleryViewer({ cards, initialIndex, initialSceneIndex = 0
 
   return (
     <div
-      className="stitch-viewer fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 md:p-6 bg-inverse-surface/60 backdrop-blur-md"
+      className="stitch-viewer fixed inset-0 z-50 flex items-center justify-center sm:p-4 bg-inverse-surface/50 backdrop-blur-sm"
       onClick={(event) => {
         if (event.target === event.currentTarget) onClose();
       }}
@@ -153,9 +160,9 @@ export function StitchGalleryViewer({ cards, initialIndex, initialSceneIndex = 0
         role="dialog"
         aria-modal="true"
         aria-label="作品检视"
-        className="relative w-full h-full max-h-[94dvh] bg-surface-bright rounded-2xl shadow-[0_20px_60px_rgba(40,48,36,0.28)] flex flex-col overflow-hidden"
+        className="stitch-viewer-dialog relative w-full h-full bg-surface sm:rounded-2xl shadow-[0_20px_60px_rgba(40,48,36,0.20)] flex flex-col overflow-hidden"
       >
-        <div className="h-16 px-3 md:px-space-lg bg-surface-container-low/90 backdrop-blur-md flex items-center justify-between gap-2 md:gap-space-md shrink-0">
+        <div className="h-16 px-3 md:px-space-lg bg-surface-container-lowest border-b border-outline-variant/30 flex items-center justify-between gap-2 md:gap-space-md shrink-0">
           <div className="flex items-center gap-space-md min-w-0 flex-1">
             <div className="hidden sm:flex w-10 h-10 rounded-xl bg-primary/10 text-primary items-center justify-center shrink-0">
               <StitchIcon name={series ? 'dynamic_feed' : 'brush'} size={24} />
@@ -166,43 +173,15 @@ export function StitchGalleryViewer({ cards, initialIndex, initialSceneIndex = 0
                   {title}
                 </h2>
                 <span className="hidden xl:inline px-2 py-0.5 rounded-full bg-secondary-container text-on-secondary-container font-meta-sm text-meta-sm font-medium shrink-0">
-                  {series ? `共 ${records.length} 幕分镜 · 连续生息` : '单图创作'}
+                  {series ? `共 ${records.length} 幕分镜` : '单图创作'}
                 </span>
               </div>
               <div className="text-on-surface-variant font-meta-sm text-meta-sm mt-0.5 truncate">
                 {new Date(cardTimestamp(card)).toLocaleString('zh-CN', { hour12: false })} 生成
                 <span className="px-2">·</span>
-                <span className="text-primary">算力引擎: {record.providerName || '未提供'}</span>
+                <span>{record.providerName || '未提供'}</span>
               </div>
             </div>
-          </div>
-          <div
-            className="hidden lg:flex items-center bg-surface-container p-1 rounded-xl shadow-inner shrink-0"
-            aria-label="检视模式"
-          >
-            {(
-              [
-                ['series', 'cloud_download', '系列多图连贯态'],
-                ['single', 'aspect_ratio', '单图高保真检视态'],
-              ] as const
-            ).map(([mode, icon, label]) => (
-              <button
-                key={mode}
-                type="button"
-                disabled={mode === 'series' && !series}
-                aria-pressed={previewMode === mode}
-                title={mode === 'series' && !series ? '此作品为独立单图' : label}
-                className={`flex items-center gap-1.5 px-3 py-1 rounded-lg font-body-sm text-body-sm transition-all disabled:opacity-40 ${previewMode === mode ? 'bg-primary text-on-primary font-medium shadow-sm' : 'text-on-surface-variant hover:bg-surface-container-high'}`}
-                onClick={() => {
-                  setPreviewMode(mode);
-                  setLayout('carousel');
-                  setZoom(1);
-                }}
-              >
-                <StitchIcon name={icon} size={16} />
-                {label}
-              </button>
-            ))}
           </div>
           <div className="flex items-center gap-space-xs shrink-0">
             <div className="hidden sm:flex items-center bg-surface-container rounded-lg p-0.5">
@@ -236,8 +215,19 @@ export function StitchGalleryViewer({ cards, initialIndex, initialSceneIndex = 0
             >
               <StitchIcon name={series ? 'folder_zip' : 'download'} size={18} />
               <span className="hidden xl:inline font-body-sm text-body-sm font-medium">
-                {series ? '打包下载全套ZIP' : '下载高保真原图'}
+                {series ? '下载全系列 ZIP' : '下载原图'}
               </span>
+            </button>
+            <button
+              type="button"
+              className="viewer-tool-button px-2 gap-1 font-body-sm text-body-sm"
+              aria-label={detailsOpen ? '收起详情' : '查看详情'}
+              aria-expanded={detailsOpen}
+              aria-controls="viewer-details"
+              onClick={() => setDetailsOpen((current) => !current)}
+            >
+              <StitchIcon name="tune" size={20} />
+              <span className="hidden sm:inline">{detailsOpen ? '收起详情' : '查看详情'}</span>
             </button>
             <button
               type="button"
@@ -250,163 +240,78 @@ export function StitchGalleryViewer({ cards, initialIndex, initialSceneIndex = 0
             </button>
           </div>
         </div>
-        <div className="stitch-viewer-content flex-1 flex flex-col md:flex-row min-h-0 relative">
-          <div className="stitch-viewer-stage flex-1 flex flex-col min-w-0 min-h-0 bg-surface-dim/40 relative">
-            <div className="absolute top-4 left-4 z-20 flex items-center gap-1.5 bg-surface-bright/90 backdrop-blur-md p-1 rounded-xl shadow-md">
-              <button
-                type="button"
-                className="p-1.5 rounded-lg hover:bg-surface-container text-on-surface-variant"
-                onClick={() => setZoom((current) => Math.min(4, current + 0.1))}
-                title="放大细节"
-              >
-                <StitchIcon name="zoom_in" size={18} />
-              </button>
-              <span className="font-meta-sm text-meta-sm text-on-surface-variant px-1.5">
-                {Math.round(zoom * 100)}%
-              </span>
-              <button
-                type="button"
-                className="p-1.5 rounded-lg hover:bg-surface-container text-on-surface-variant"
-                onClick={() => setZoom((current) => Math.max(0.5, current - 0.1))}
-                title="缩小画面"
-              >
-                <StitchIcon name="zoom_out" size={18} />
-              </button>
-              <button
-                type="button"
-                className="p-1.5 rounded-lg hover:bg-surface-container text-on-surface-variant"
-                onClick={() => setZoom(1)}
-                title="还原比例"
-              >
-                <StitchIcon name="fit_screen" size={18} />
-              </button>
-              {showSeries && (
-                <>
-                  <div className="w-px h-4 bg-outline-variant/60 mx-0.5" />
-                  {(
-                    [
-                      ['carousel', 'movie', '焦点剧场'],
-                      ['waterfall', 'view_stream', '连贯拼版'],
-                    ] as const
-                  ).map(([mode, icon, label]) => (
+        <div className="stitch-viewer-content flex-1 flex min-h-0 relative overflow-hidden">
+          <div className={`stitch-viewer-stage flex-1 flex-col min-w-0 min-h-0 ${detailsOpen ? 'hidden lg:flex' : 'flex'}`}>
+            {series && (
+              <div className="flex items-center flex-wrap gap-2 px-3 py-2 bg-surface-container-lowest border-b border-outline-variant/30 shrink-0">
+                <div className="flex items-center bg-surface-container-low p-0.5 rounded-lg" aria-label="检视模式">
+                  {([['series', 'view_carousel', '系列预览'], ['single', 'image', '当前图片']] as const).map(([mode, icon, label]) => (
+                    <button
+                      key={mode}
+                      type="button"
+                      aria-pressed={previewMode === mode}
+                      className={`flex items-center gap-1 px-2 py-1.5 rounded-lg font-body-sm text-body-sm ${previewMode === mode ? 'bg-primary text-on-primary' : 'text-on-surface-variant hover:bg-surface-container'}`}
+                      onClick={() => { setPreviewMode(mode); setLayout('carousel'); }}
+                    ><StitchIcon name={icon} size={16} />{label}</button>
+                  ))}
+                </div>
+                {showSeries && <div className="flex items-center gap-1 ml-auto" aria-label="分镜布局">
+                  {([['carousel', 'image', '逐镜'], ['waterfall', 'view_stream', '拼版']] as const).map(([mode, icon, label]) => (
                     <button
                       key={mode}
                       type="button"
                       aria-pressed={layout === mode}
-                      className={`px-2 py-1 rounded font-meta-sm text-meta-sm flex items-center gap-1 ${layout === mode ? 'bg-secondary-container text-on-secondary-container' : 'hover:bg-surface-container text-on-surface-variant'}`}
-                      onClick={() => {
-                        setLayout(mode);
-                        setZoom(1);
-                      }}
-                    >
-                      <StitchIcon name={icon} size={14} />
-                      <span className="hidden sm:inline">{label}</span>
-                      <span className="sm:hidden">{mode === 'carousel' ? '单幕' : '拼版'}</span>
-                    </button>
+                      className={`flex items-center gap-1 px-2 py-1.5 rounded-lg font-body-sm text-body-sm ${layout === mode ? 'bg-secondary-container text-on-secondary-container' : 'text-on-surface-variant hover:bg-surface-container'}`}
+                      onClick={() => setLayout(mode)}
+                    ><StitchIcon name={icon} size={16} />{label}</button>
                   ))}
-                </>
-              )}
-            </div>
-            <div
-              ref={stageRef}
-              className={`flex-1 min-h-0 flex justify-center p-4 md:p-8 overflow-auto relative ${layout === 'carousel' ? 'items-center' : 'items-start'}`}
-            >
-              {layout === 'carousel' ? (
-                <div
-                  className="relative max-w-full flex items-center justify-center my-auto pt-12 pb-12"
-                  style={{ zoom }}
-                >
-                  <div
-                    ref={frameRef}
-                    className="stitch-paper-frame relative min-w-0 max-w-full bg-surface-container-lowest p-2 md:p-3 rounded-2xl shadow-[0_12px_40px_rgba(40,48,36,0.16)] flex flex-col items-center"
-                    style={{
-                      width: imageInfo
-                        ? `min(${imageInfo.width + 24}px, calc(56vh * ${imageInfo.width / imageInfo.height} + 24px))`
-                        : undefined,
-                    }}
-                  >
-                    <div className="relative rounded-xl group/stage">
-                      <img
-                        className="max-h-[50vh] md:max-h-[56vh] w-auto max-w-full object-contain rounded-lg"
-                        src={original.url || record.dataUrl || undefined}
-                        alt={record.prompt || '生成的画作'}
-                        draggable={false}
-                      />
-                      <div className="absolute top-3 right-3 opacity-0 group-hover/stage:opacity-100 group-focus-within/stage:opacity-100 transition-opacity flex items-center gap-1.5 bg-surface-bright/90 backdrop-blur-md p-1 rounded-lg shadow-sm">
-                        <button
-                          type="button"
-                          className="p-1 rounded hover:text-primary"
-                          title="单独下载当前分镜"
-                          onClick={() => void downloadRecord(record).catch(() => onNotify('error', '下载失败, 请检查本地原图'))}
-                        >
-                          <StitchIcon name="download" size={18} />
-                        </button>
-                        <button
-                          type="button"
-                          className="p-1 rounded hover:text-primary"
-                          title="全屏沉浸"
-                          onClick={() => {
-                            void frameRef.current
-                              ?.requestFullscreen?.()
-                              .catch(() => onNotify('info', '当前浏览器无法进入全屏'));
-                          }}
-                        >
-                          <StitchIcon name="fullscreen" size={18} />
-                        </button>
-                      </div>
-                    </div>
-                    <div className="w-full mt-2 pt-1 flex items-center justify-between gap-4 text-on-surface-variant font-meta-sm text-meta-sm px-1">
-                      <span className="truncate min-w-0">
-                        {series ? `Scene ${String(sceneIndex + 1).padStart(2, '0')}: ` : ''}
-                        {record.prompt || '未命名作品'}
-                      </span>
-                      <span className="text-outline shrink-0">{format} 原图</span>
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                <div className="w-full max-w-4xl space-y-6 pt-14 pb-4" aria-label="连贯拼版">
+                </div>}
+                {layout === 'waterfall' && <button type="button" className="viewer-tool-button" aria-label={fullscreen ? '退出全屏' : '进入全屏'} onClick={() => void toggleFullscreen()}><StitchIcon name={fullscreen ? 'fullscreen_exit' : 'fullscreen'} size={20} /></button>}
+              </div>
+            )}
+            {layout === 'carousel' ? (
+              <ImageViewport
+                key={`${record.id}-${previewMode}`}
+                src={original.url || record.dataUrl || undefined}
+                alt={record.prompt || '生成的画作'}
+                error={original.error}
+                fullscreen={fullscreen}
+                onFullscreen={() => void toggleFullscreen()}
+                onDownload={() => void downloadRecord(record).catch(() => onNotify('error', '下载失败, 请检查本地原图'))}
+              />
+            ) : (
+              <div className="flex-1 min-h-0 overflow-y-auto bg-surface-container-low p-4 md:p-space-lg" aria-label="连贯拼版">
+                <div className="max-w-5xl mx-auto space-y-space-lg">
                   {records.map((scene, index) => (
-                    <article key={scene.id} className="p-4 bg-surface-container-lowest rounded-2xl shadow-md">
+                    <article key={scene.id} className="p-space-md bg-surface-container-lowest rounded-xl">
                       <h3 className="font-headline-sm text-headline-sm mb-2">第 {index + 1} 幕</h3>
                       <button
                         className="block w-full"
                         type="button"
                         title={`检视第 ${index + 1} 幕`}
-                        onClick={() => {
-                          setSceneIndex(index);
-                          setLayout('carousel');
-                        }}
-                      >
-                        <RecordImage record={scene} alt={scene.prompt} className="w-full h-auto rounded-xl mb-2" />
-                      </button>
+                        onClick={() => { setSceneIndex(index); setVersionId(''); setLayout('carousel'); }}
+                      ><RecordImage record={scene} alt={scene.prompt} className="w-full h-auto rounded-lg mb-2" /></button>
                       <p className="font-body-sm text-body-sm text-on-surface-variant">{scene.prompt}</p>
                     </article>
                   ))}
                 </div>
-              )}
-            </div>
+              </div>
+            )}
             {layout === 'carousel' && (
-              <div
-                className={`absolute left-6 z-10 pointer-events-none hidden sm:block ${showSeries ? 'bottom-28' : 'bottom-4'}`}
-              >
-                <div className="px-3 py-1.5 rounded-xl bg-surface-bright/85 backdrop-blur-md shadow-sm flex items-center gap-2 text-on-surface-variant font-meta-sm text-meta-sm">
-                  <span className="w-2 h-2 rounded-full bg-primary" />
-                  <span>{imageInfo ? `${imageInfo.size} (${imageInfo.ratio})` : '读取画幅中'}</span>
-                  <span>·</span>
-                  <span>{format} 原图</span>
-                </div>
+              <div className="flex items-center justify-between gap-3 px-3 py-2 bg-surface-container-lowest border-t border-outline-variant/30 font-meta-sm text-meta-sm text-on-surface-variant shrink-0">
+                <span className="truncate">{imageInfo ? `${imageInfo.size} · ${imageInfo.ratio}` : '读取画幅中'} · {format} 原图{series ? ` · 第 ${sceneIndex + 1} / ${records.length} 幕` : ''}</span>
+                <span className="hidden sm:inline shrink-0">滚轮缩放 · 拖动查看</span>
               </div>
             )}
             {showSeries && (
-              <div className="h-24 px-3 md:px-space-lg py-2 bg-surface-container-low/95 backdrop-blur-md flex items-center justify-between gap-2 md:gap-space-md shrink-0">
+              <div className="h-20 px-3 py-2 bg-surface-container-lowest border-t border-outline-variant/30 flex items-center justify-between gap-2 shrink-0">
                 <div className="hidden xl:flex items-center gap-space-xs text-on-surface-variant font-meta-sm text-meta-sm shrink-0">
                   <StitchIcon name="view_carousel" size={18} className="text-primary" />
                   <span>故事分镜轨道</span>
                 </div>
                 <div
                   ref={stripRef}
-                  className="flex-1 flex items-center [justify-content:safe_center] gap-space-sm overflow-x-auto py-1 min-w-0"
+                  className="flex-1 flex items-center [justify-content:safe_center] gap-space-xs overflow-x-auto py-1 min-w-0"
                   aria-label="故事分镜轨道"
                 >
                   {records.map((scene, index) => (
@@ -418,8 +323,8 @@ export function StitchGalleryViewer({ cards, initialIndex, initialSceneIndex = 0
                       className={`flex items-center gap-2 p-1.5 rounded-xl transition-all shrink-0 ${index === sceneIndex ? 'bg-surface-bright shadow-sm border-2 border-primary' : 'bg-surface-container-high/60 hover:bg-surface-bright opacity-80 hover:opacity-100'}`}
                       onClick={() => {
                         setSceneIndex(index);
+                        setVersionId('');
                         setLayout('carousel');
-                        setZoom(1);
                       }}
                     >
                       <div className="w-16 h-11 rounded-lg overflow-hidden bg-surface-container relative">
@@ -430,11 +335,11 @@ export function StitchGalleryViewer({ cards, initialIndex, initialSceneIndex = 0
                           {String(index + 1).padStart(2, '0')}
                         </span>
                       </div>
-                      <div className="flex flex-col text-left pr-2 max-w-24">
+                      <div className="hidden sm:flex flex-col text-left pr-2 max-w-24">
                         <span
                           className={`font-body-sm text-body-sm font-medium leading-tight ${index === sceneIndex ? 'text-primary' : 'text-on-surface'}`}
                         >
-                          Scene {String(index + 1).padStart(2, '0')}
+                          第 {index + 1} 幕
                         </span>
                         <span className="font-meta-sm text-meta-sm text-on-surface-variant truncate">
                           {scene.prompt || '未命名分镜'}
@@ -464,7 +369,7 @@ export function StitchGalleryViewer({ cards, initialIndex, initialSceneIndex = 0
               </div>
             )}
           </div>
-          <aside className="stitch-viewer-inspector w-full md:w-80 lg:w-96 bg-surface-container-lowest p-space-lg flex flex-col justify-between overflow-y-auto shrink-0 shadow-[-4px_0_24px_rgba(40,48,36,0.04)]">
+          {detailsOpen && <aside id="viewer-details" aria-label="作品详情" className="stitch-viewer-inspector w-full lg:w-80 min-h-0 bg-surface-container-lowest p-space-lg flex flex-col justify-between overflow-y-auto shrink-0 lg:border-l border-outline-variant/30">
             <div className="space-y-space-md">
               <div className="flex items-center gap-space-xs text-primary">
                 <StitchIcon name="tune" size={20} />
@@ -475,7 +380,7 @@ export function StitchGalleryViewer({ cards, initialIndex, initialSceneIndex = 0
                   <div className="flex items-center justify-between gap-2 text-on-surface-variant">
                     <span className="font-meta-sm text-meta-sm uppercase tracking-wider flex items-center gap-1">
                       <StitchIcon name="public" size={14} />
-                      全局故事世界观 (Master Prompt)
+                      系列故事梗概
                     </span>
                     <button
                       type="button"
@@ -486,7 +391,7 @@ export function StitchGalleryViewer({ cards, initialIndex, initialSceneIndex = 0
                       <StitchIcon name="content_copy" size={15} />
                     </button>
                   </div>
-                  <p className="font-body-sm text-body-sm text-on-surface italic leading-relaxed whitespace-pre-wrap break-words">
+                  <p className="font-body-sm text-body-sm text-on-surface leading-relaxed whitespace-pre-wrap break-words">
                     {card.masterPrompt || '未提供'}
                   </p>
                 </div>
@@ -495,7 +400,7 @@ export function StitchGalleryViewer({ cards, initialIndex, initialSceneIndex = 0
                 <div className="flex items-center justify-between gap-2 text-on-surface-variant">
                   <span className="font-meta-sm text-meta-sm uppercase tracking-wider flex items-center gap-1 text-primary">
                     <StitchIcon name={showSeries ? 'videocam' : 'psychology'} size={14} />
-                    {showSeries ? '当前幕镜头描摹 (Scene Prompt)' : '完整生成提示词 (Prompt)'}
+                    {showSeries ? '当前分镜提示词' : '完整生成提示词'}
                   </span>
                   <button
                     type="button"
@@ -578,7 +483,7 @@ export function StitchGalleryViewer({ cards, initialIndex, initialSceneIndex = 0
                 </button>}
               </div>
             </div>
-          </aside>
+          </aside>}
         </div>
       </div>
     </div>

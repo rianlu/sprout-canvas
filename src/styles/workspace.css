@@ -18,15 +18,17 @@ textarea:focus-visible, input:focus-visible { outline-offset: 1px; }
 .studio-rail { min-width: 0; position: sticky; top: 80px; }
 .studio-rail > section { position: static; }
 .stitch-page { padding-top: 64px; min-height: calc(100dvh - 4rem); }
-.stitch-viewer { touch-action: pan-x pan-y; }
-.stitch-viewer-image { max-height: 65vh; width: auto; max-width: 100%; object-fit: contain; }
+.stitch-viewer { overscroll-behavior: contain; }
+.stitch-viewer-dialog:fullscreen { width: 100%; height: 100dvh; border-radius: 0; }
+.viewer-tool-button { min-width: 36px; height: 36px; flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center; border-radius: 8px; color: rgb(var(--sc-on-surface-variant)); transition: background-color 150ms, color 150ms; }
+.viewer-tool-button:hover:not(:disabled), .viewer-tool-button[aria-pressed="true"] { background: rgb(var(--sc-surface-container)); color: rgb(var(--sc-primary)); }
+.viewer-tool-button:disabled { opacity: 0.4; }
+.gallery-image-viewport { overscroll-behavior: contain; }
+.gallery-viewer-image { transition-property: none; }
 .stitch-inpaint-frame { max-width: 100%; max-height: 54vh; }
 .stitch-style-card-list { display: grid; grid-template-columns: 220px 1fr; gap: 24px; }
 .stitch-style-card-list .stitch-style-image { height: 180px; margin: 0; }
 .stitch-mobile-nav { display: none; }
-.font-serif-sc { font-family: 'Noto Serif SC', 'Songti SC', 'STSong', serif; }
-.stitch-paper-frame:fullscreen { width: 100%; height: 100%; justify-content: center; border-radius: 0; }
-.stitch-paper-frame:fullscreen img { max-height: 90vh; }
 @media (max-width: 1023px) {
   .studio-layout { grid-template-columns: minmax(0, 1fr); }
   .studio-rail { position: static; }
@@ -41,11 +43,7 @@ textarea:focus-visible, input:focus-visible { outline-offset: 1px; }
   .stitch-queue { top: 116px; width: min(100vw, 352px); }
   .stitch-style-filters { top: 116px; }
   .stitch-style-card-list { grid-template-columns: 1fr; gap: 16px; }
-  .stitch-viewer-image { max-height: 48vh; }
-  .stitch-viewer-content { overflow-y: auto; }
-  .stitch-viewer-stage { flex: none; min-height: 50dvh; }
-  .stitch-viewer-inspector { overflow-y: visible; }
 }
 @media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; scroll-behavior: auto !important; }
+  *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0s !important; scroll-behavior: auto !important; }
 }

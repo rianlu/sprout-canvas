@@ -6,7 +6,7 @@ import { STITCH_STYLES, STITCH_STYLE_GROUPS, STYLE_ATTRIBUTION, type StitchStyle
 
 interface StylesLibraryProps {
   target?: 'studio' | 'series';
-  onUseInStudio: (styleId: string) => void;
+  onUseInStudio: (styleId: string) => Promise<void>;
 }
 
 export function StylesLibrary({ target = 'studio', onUseInStudio }: StylesLibraryProps) {
@@ -17,6 +17,9 @@ export function StylesLibrary({ target = 'studio', onUseInStudio }: StylesLibrar
   const [compact, setCompact] = useState(false);
   const [detail, setDetail] = useState<StitchStyle | null>(null);
   const [copied, setCopied] = useState('');
+  const [applying, setApplying] = useState('');
+  const [applyError, setApplyError] = useState('');
+  const applyLock = useRef(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const categoriesRef = useRef<HTMLDivElement>(null);
   const dialogRef = useFocusTrap<HTMLDivElement>(Boolean(detail));
@@ -64,6 +67,21 @@ export function StylesLibrary({ target = 'studio', onUseInStudio }: StylesLibrar
       window.setTimeout(() => setCopied(''), 2200);
     }
   }
+
+  async function apply(styleId: string) {
+    if (applyLock.current) return;
+    applyLock.current = true;
+    setApplying(styleId);
+    setApplyError('');
+    try {
+      await onUseInStudio(styleId);
+    } catch (error) {
+      setApplyError(error instanceof Error ? error.message : '模板载入失败, 请重试');
+    } finally {
+      applyLock.current = false;
+      setApplying('');
+    }
+  }
   const groupCount = (name: string) =>
     name === '全部' ? STITCH_STYLES.length : STITCH_STYLES.filter((s) => s.group === name).length;
 
@@ -82,7 +100,7 @@ export function StylesLibrary({ target = 'studio', onUseInStudio }: StylesLibrar
               灵感画风库 · 风格与创作模板
             </h1>
             <p className="font-body-md text-body-md text-on-surface-variant max-w-4xl mt-1 leading-relaxed">
-              从开源创作案例中整理画风, 涵盖纸本插画, 摄影, 三维微缩与视觉设计. 可复制完整模板, 或将画风应用到自己的创作内容.
+              从开源创作案例中整理画风, 涵盖纸本插画, 摄影, 三维微缩与视觉设计. {target === 'series' ? '可复制完整中文模板, 或为当前系列选用统一画风.' : '可复制完整中文模板, 或发送到单图创作后编辑使用.'}
             </p>
           </div>
         </div>
@@ -238,7 +256,7 @@ export function StylesLibrary({ target = 'studio', onUseInStudio }: StylesLibrar
                   {style.englishName}
                 </p>
                 <p className="font-body-sm text-body-sm text-on-surface-variant line-clamp-2 mb-space-md">
-                  {style.description}
+                  {style.template}
                 </p>
                 <div className="flex flex-wrap gap-1.5 mb-space-lg">
                   {style.tags.map((tag) => (
@@ -260,14 +278,15 @@ export function StylesLibrary({ target = 'studio', onUseInStudio }: StylesLibrar
                   }}
                 >
                   <StitchIcon name="content_copy" size={16} className="text-primary" />
-                  {copied === style.id ? '已复制' : '复制模版'}
+                  {copied === style.id ? '已复制' : '复制模板'}
                 </button>
                 <button
                   type="button"
                   className="flex-1 py-2 px-3 rounded-xl bg-primary hover:bg-primary-container text-on-primary font-body-sm text-body-sm font-medium transition-all shadow-sm flex items-center justify-center gap-1.5"
-                  onClick={() => onUseInStudio(style.id)}
+                  disabled={Boolean(applying)}
+                  onClick={() => void apply(style.id)}
                 >
-                  {applyLabel}
+                  {applying === style.id ? '载入中...' : applyLabel}
                   <StitchIcon name="north_east" size={16} />
                 </button>
               </div>
@@ -279,7 +298,7 @@ export function StylesLibrary({ target = 'studio', onUseInStudio }: StylesLibrar
         )}
         <p className="mt-space-xl font-meta-sm text-meta-sm text-on-surface-variant">
           来源: <a className="text-primary hover:underline" href={STYLE_ATTRIBUTION.source} target="_blank" rel="noreferrer">awesome-gptimage2-prompts</a>.
-          原始整理: YouMind OpenLab. 许可: CC BY 4.0. 名称, 分类和画风已适配, 示例图已缩放.
+          原始整理: YouMind OpenLab. 许可: CC BY 4.0. 名称和模板已中文化, 分类和画风已适配, 示例图已缩放.
           <a className="text-primary hover:underline ml-2" href="/assets/styles/ATTRIBUTION.txt" target="_blank" rel="noreferrer">完整署名说明</a>
         </p>
       </main>
@@ -334,9 +353,9 @@ export function StylesLibrary({ target = 'studio', onUseInStudio }: StylesLibrar
               </div>
               <div>
                 <p className="font-meta-sm text-meta-sm text-on-surface-variant mb-1">
-                  核心提示词模版 (Prompt Formula)
+                  中文提示词模板
                 </p>
-                <p className="p-space-md rounded-xl bg-surface-container-low font-meta-sm text-meta-sm leading-relaxed">
+                <p className="p-space-md rounded-xl bg-surface-container-low font-meta-sm text-meta-sm leading-relaxed whitespace-pre-wrap">
                   {detail.template}
                 </p>
               </div>
@@ -356,14 +375,15 @@ export function StylesLibrary({ target = 'studio', onUseInStudio }: StylesLibrar
                     void copy(detail);
                   }}
                 >
-                  {copied === detail.id ? '已复制' : '复制模版'}
+                  {copied === detail.id ? '已复制' : '复制模板'}
                 </button>
                 <button
                   type="button"
                   className="flex-1 py-2.5 rounded-xl bg-primary hover:bg-primary-container text-on-primary font-body-sm text-body-sm"
-                  onClick={() => onUseInStudio(detail.id)}
+                  disabled={Boolean(applying)}
+                  onClick={() => void apply(detail.id)}
                 >
-                  {applyLabel}
+                  {applying === detail.id ? '载入中...' : applyLabel}
                 </button>
               </div>
             </div>
@@ -371,7 +391,10 @@ export function StylesLibrary({ target = 'studio', onUseInStudio }: StylesLibrar
         </div>
       )}
       <ToastStack
-        toasts={copied === 'error' ? [{ id: 'copy-error', type: 'error', message: '复制失败, 请重试.' }] : []}
+        toasts={[
+          ...(copied === 'error' ? [{ id: 'copy-error', type: 'error' as const, message: '复制失败, 请重试.' }] : []),
+          ...(applyError ? [{ id: 'apply-error', type: 'error' as const, message: applyError }] : []),
+        ]}
       />
     </div>
   );

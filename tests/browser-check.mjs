@@ -15,6 +15,7 @@ const executablePath = process.env.SPROUT_BROWSER_EXECUTABLE || (existsSync('/Ap
 const browser = await chromium.launch({ executablePath, headless: true });
 const errors = [];
 const checks = [];
+const { styles } = JSON.parse(await readFile(new URL('../src/lib/styles/catalog.json', import.meta.url), 'utf8'));
 const images = await Promise.all(['studio-01.jpg', 'studio-02.jpg', 'studio-03.jpg', 'series-01.jpg'].map((name) => readFile(new URL(`../public/assets/stitch/${name}`, import.meta.url))));
 let imageCount = 0;
 let imagesPerResult = 1;
@@ -41,8 +42,8 @@ app.controls.respond = async (call, res) => {
   return true;
 };
 
-async function contextPage(init, initValue) {
-  const context = await browser.newContext({ viewport: { width: 1600, height: 1000 }, locale: 'zh-CN', reducedMotion: 'reduce', acceptDownloads: true });
+async function contextPage(init, initValue, options = {}) {
+  const context = await browser.newContext({ viewport: { width: 1600, height: 1000 }, locale: 'zh-CN', reducedMotion: 'reduce', acceptDownloads: true, ...options });
   if (init) await context.addInitScript(init, initValue);
   const page = await context.newPage();
   page.on('pageerror', (error) => errors.push(error.message));
@@ -63,6 +64,13 @@ async function rows(page, store = 'records') {
   }, store);
 }
 async function waitRecords(page, count) { return until(async () => { const records = await rows(page); return records.length === count && records; }, `${count} local records`, 15000); }
+async function workspaceDraft(page, key = 'studio') {
+  return page.evaluate(async (key) => {
+    const db = await new Promise((resolve, reject) => { const open = indexedDB.open('img-gen-gallery'); open.onsuccess = () => resolve(open.result); open.onerror = () => reject(open.error); });
+    const result = await new Promise((resolve, reject) => { const query = db.transaction('drafts').objectStore('drafts').get(key); query.onsuccess = () => resolve(query.result?.data); query.onerror = () => reject(query.error); });
+    db.close(); return result;
+  }, key);
+}
 async function jobs(page) { return page.evaluate(async () => (await (await fetch('/api/jobs/me')).json()).jobs); }
 async function closeQueue(page) {
   const close = page.getByLabel('关闭队列抽屉');
@@ -85,6 +93,56 @@ async function screenshot(page, name, fullPage = false) {
   for (const label of ['任务队列', '切换主题', '退出工作台']) {
     const bounds = await page.getByRole('button', { name: new RegExp(label) }).first().boundingBox();
     assert.ok(bounds && bounds.x >= 0 && bounds.x + bounds.width <= overflow.width + 1, `${name}: ${label} must stay inside viewport`);
+  }
+}
+async function imageGeometry(page) {
+  return page.evaluate(() => {
+    const viewport = document.querySelector('.gallery-image-viewport');
+    const image = viewport?.querySelector('img');
+    if (!image?.complete || !image.naturalWidth || !viewport.clientWidth) return null;
+    return { viewport: viewport.getBoundingClientRect().toJSON(), image: image.getBoundingClientRect().toJSON(), natural: { width: image.naturalWidth, height: image.naturalHeight } };
+  });
+}
+async function fittedImage(page) {
+  return until(async () => {
+    const info = await imageGeometry(page);
+    if (!info) return false;
+    const { viewport, image } = info;
+    return Math.abs(image.x + image.width / 2 - viewport.x - viewport.width / 2) < 1
+      && Math.abs(image.y + image.height / 2 - viewport.y - viewport.height / 2) < 1
+      && image.width <= viewport.width - 23 && image.height <= viewport.height - 23
+      && Math.max(image.width / (viewport.width - 24), image.height / (viewport.height - 24)) > 0.99 && info;
+  }, 'image fills the available viewport without a frame');
+}
+async function typography(locator) {
+  return locator.evaluate((element) => {
+    const style = getComputedStyle(element);
+    return { family: style.fontFamily, size: style.fontSize, weight: style.fontWeight, lineHeight: style.lineHeight, spacing: style.letterSpacing };
+  });
+}
+async function fixedViewerControls(page) {
+  return page.getByRole('toolbar', { name: '图片查看工具', exact: true }).getByRole('button').evaluateAll((buttons) => buttons.map((button) => ({ label: button.getAttribute('aria-label'), rect: button.getBoundingClientRect().toJSON() })));
+}
+async function readableViewerIcons(page) {
+  const icons = await page.locator('.viewer-image-toolbar button:not(:disabled) .material-symbols-outlined').evaluateAll((elements) => {
+    const luminance = (color) => {
+      const channels = color.match(/[\d.]+/g).slice(0, 3).map((value) => {
+        const srgb = Number(value) / 255;
+        return srgb <= 0.04045 ? srgb / 12.92 : ((srgb + 0.055) / 1.055) ** 2.4;
+      });
+      return channels[0] * 0.2126 + channels[1] * 0.7152 + channels[2] * 0.0722;
+    };
+    return elements.map((element) => {
+      const style = getComputedStyle(element);
+      const foreground = luminance(style.color);
+      const background = luminance(getComputedStyle(element.closest('.viewer-image-toolbar')).backgroundColor);
+      return { name: element.textContent, width: element.getBoundingClientRect().width, size: parseFloat(style.fontSize), contrast: (Math.max(foreground, background) + 0.05) / (Math.min(foreground, background) + 0.05) };
+    });
+  });
+  assert.ok(icons.length >= 4, 'the viewer exposes its image controls');
+  for (const icon of icons) {
+    assert.ok(Math.abs(icon.width - icon.size) < 1, `${icon.name} renders as a complete icon, not text`);
+    assert.ok(icon.contrast >= 3, `${icon.name} remains readable after switching theme: ${icon.contrast}`);
   }
 }
 const main = await contextPage();
@@ -114,11 +172,91 @@ try {
   assert.equal((await rows(page))[0].createdAt, times[remaining[0].id]);
   await page.getByRole('button', { name: /检视作品:/ }).first().click();
   const viewer = page.getByRole('dialog', { name: '作品检视', exact: true });
-  await viewer.locator('.stitch-paper-frame img').waitFor();
-  await page.waitForFunction(() => { const img = document.querySelector('.stitch-paper-frame img'); return img?.complete && img.naturalWidth > 100; });
+  const initialView = await fittedImage(page);
+  assert.ok(initialView.viewport.height > 750, 'the image gets most of the dialog height');
   await screenshot(page, 'viewer-single-desktop');
+  const viewport = viewer.getByRole('region', { name: '图片查看区', exact: true });
+  const zoomIn = viewer.getByRole('button', { name: '放大图片', exact: true });
+  const fitImage = viewer.getByRole('button', { name: '适应窗口', exact: true });
+  const controlsBeforeZoom = await fixedViewerControls(page);
+  for (let index = 0; index < 40 && await zoomIn.isEnabled(); index++) await zoomIn.click();
+  assert.ok(await zoomIn.isDisabled());
+  assert.equal(await viewer.getByLabel('缩放比例', { exact: true }).innerText(), '800%');
+  const enlargedView = await imageGeometry(page);
+  assert.ok(enlargedView.image.width > initialView.image.width * 3);
+  assert.ok(enlargedView.image.height > enlargedView.viewport.height, 'zoom is not capped by the old picture frame');
+  assert.deepEqual(await fixedViewerControls(page), controlsBeforeZoom, 'zoom must not resize or move controls');
+  const point = { x: enlargedView.viewport.x + enlargedView.viewport.width / 2, y: enlargedView.viewport.y + enlargedView.viewport.height / 2 };
+  await page.mouse.move(point.x, point.y);
+  await page.mouse.down();
+  await page.mouse.move(point.x + 120, point.y + 80, { steps: 6 });
+  await page.mouse.up();
+  const pannedView = await imageGeometry(page);
+  assert.ok(Math.abs(pannedView.image.x - enlargedView.image.x - 120) < 1, JSON.stringify({ enlargedView, pannedView, point }));
+  assert.ok(Math.abs(pannedView.image.y - enlargedView.image.y - 80) < 1, JSON.stringify({ enlargedView, pannedView, point }));
+  await viewport.press('Shift+ArrowRight');
+  assert.ok(Math.abs((await imageGeometry(page)).image.x - pannedView.image.x + 48) < 1);
+  await screenshot(page, 'viewer-zoomed-desktop');
+  await fitImage.click();
+  await fittedImage(page);
+  for (let index = 0; index < 12; index++) {
+    const info = await imageGeometry(page);
+    if (info.image.width > info.viewport.width * 1.15 && info.image.height > info.viewport.height * 1.15) break;
+    await zoomIn.click();
+  }
+  const beforeWheel = await imageGeometry(page);
+  const anchor = { x: point.x + 70, y: point.y + 35 };
+  const sourcePoint = { x: (anchor.x - beforeWheel.image.x) / beforeWheel.image.width, y: (anchor.y - beforeWheel.image.y) / beforeWheel.image.height };
+  await page.mouse.move(anchor.x, anchor.y);
+  await page.mouse.wheel(0, -100);
+  const afterWheel = await until(async () => { const info = await imageGeometry(page); return info.image.width > beforeWheel.image.width * 1.1 && info; }, 'wheel zoom');
+  assert.ok(Math.abs(afterWheel.image.x + sourcePoint.x * afterWheel.image.width - anchor.x) < 1, 'wheel zoom preserves the point under the cursor');
+  assert.ok(Math.abs(afterWheel.image.y + sourcePoint.y * afterWheel.image.height - anchor.y) < 1);
+  await viewer.getByRole('button', { name: '原始大小', exact: true }).click();
+  const nativeView = await imageGeometry(page);
+  assert.ok(Math.abs(nativeView.image.width - nativeView.natural.width) < 1);
+  assert.ok(Math.abs(nativeView.image.height - nativeView.natural.height) < 1);
+  await viewport.dblclick();
+  await fittedImage(page);
+  await viewport.dblclick();
+  assert.ok((await imageGeometry(page)).image.width > initialView.image.width * 1.5);
+  await fitImage.click();
+  await fittedImage(page);
+  await viewer.getByRole('button', { name: '收起详情', exact: true }).click();
+  const expandedView = await fittedImage(page);
+  assert.ok(expandedView.viewport.width > initialView.viewport.width + 300);
+  await viewer.getByRole('button', { name: '进入全屏', exact: true }).click();
+  await page.waitForFunction(() => document.fullscreenElement?.classList.contains('stitch-viewer-dialog'));
+  await fittedImage(page);
+  assert.ok(await viewer.getByRole('button', { name: '下载当前图片', exact: true }).isVisible());
+  await readableViewerIcons(page);
+  await page.screenshot({ path: path.join(target, 'viewer-fullscreen.png') });
+  await viewer.getByRole('button', { name: '退出全屏', exact: true }).click();
+  await page.waitForFunction(() => !document.fullscreenElement);
+  await fittedImage(page);
+  for (const theme of ['light', 'dark']) {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.evaluate((theme) => document.documentElement.classList.toggle('dark', theme === 'dark'), theme);
+    const mobileView = await fittedImage(page);
+    assert.ok(mobileView.viewport.height > 650, 'mobile shows the picture before details');
+    for (const { label, rect } of await fixedViewerControls(page)) assert.ok(rect.x >= 0 && rect.right <= 390, `${label} stays reachable on mobile`);
+    await readableViewerIcons(page);
+    await screenshot(page, `viewer-single-mobile-${theme}`);
+    await viewer.getByRole('button', { name: '查看详情', exact: true }).click();
+    await viewer.getByRole('complementary', { name: '作品详情', exact: true }).waitFor();
+    assert.ok(await viewer.getByRole('button', { name: '复用完整配方', exact: true }).isVisible());
+    await screenshot(page, `viewer-details-mobile-${theme}`);
+    await viewer.getByRole('button', { name: '收起详情', exact: true }).click();
+    await fittedImage(page);
+  }
+  await page.setViewportSize({ width: 1600, height: 1000 });
+  await page.evaluate(() => document.documentElement.classList.remove('dark'));
+  await viewer.getByRole('complementary', { name: '作品详情', exact: true }).waitFor();
+  await fittedImage(page);
+  await zoomIn.click();
+  checks.push('大图适应窗口与原始大小, 连续放大到 800% 按钮位置尺寸不变, 拖动和鼠标锚点缩放, 双击, 全屏退出, 手机详情收起与深浅主题');
   const downloadEvent = page.waitForEvent('download');
-  await viewer.getByRole('button', { name: '单张下载', exact: true }).click();
+  await viewer.getByRole('button', { name: '下载当前图片', exact: true }).click();
   const download = await downloadEvent;
   assert.match(download.suggestedFilename(), /\.jpg$/);
   const downloadPath = path.join(target, download.suggestedFilename());
@@ -292,8 +430,29 @@ try {
   await page.getByTitle('全屏预览大图', { exact: true }).first().click();
   await page.getByLabel('本镜版本', { exact: true }).waitFor();
   assert.equal(await page.getByLabel('本镜版本').locator('option').count(), 3);
+  await fittedImage(page);
+  await page.getByRole('button', { name: '放大图片', exact: true }).click();
+  await page.getByLabel('本镜版本', { exact: true }).selectOption({ index: 2 });
+  await fittedImage(page);
+  assert.equal(await page.getByRole('button', { name: '适应窗口', exact: true }).getAttribute('aria-pressed'), 'true');
+  await page.getByRole('button', { name: '查看第 2 幕', exact: true }).click();
+  await fittedImage(page);
+  assert.equal(await page.getByRole('button', { name: '查看第 2 幕', exact: true }).getAttribute('aria-current'), 'true');
+  await page.getByRole('button', { name: '拼版', exact: true }).click();
+  assert.equal(await page.getByLabel('连贯拼版', { exact: true }).locator('article').count(), 4);
+  await page.getByTitle('检视第 3 幕', { exact: true }).click();
+  await fittedImage(page);
+  await page.keyboard.press('ArrowLeft');
+  await fittedImage(page);
+  assert.equal(await page.getByRole('button', { name: '查看第 2 幕', exact: true }).getAttribute('aria-current'), 'true');
+  await page.getByRole('button', { name: '当前图片', exact: true }).click();
+  await fittedImage(page);
+  assert.equal(await page.getByRole('button', { name: '查看第 2 幕', exact: true }).count(), 0);
+  await page.getByRole('button', { name: '系列预览', exact: true }).click();
+  await fittedImage(page);
   await screenshot(page, 'viewer-series-desktop');
   await page.getByLabel('关闭查看器').click();
+  checks.push('系列大图切换分镜和版本后重置缩放, 拼版回到单幕, 键盘切换, 当前图片与系列预览均可用');
   await nav(page, '展馆');
   await page.getByLabel('作品来源', { exact: true }).selectOption('picture-book');
   assert.equal(await page.locator('.gallery-card').count(), 1);
@@ -332,17 +491,120 @@ try {
   await page.getByLabel('搜索风格').fill('');
   checks.push('风格 36 款和六类真实计数, 搜索, 署名, 移除不支持的参数');
 
+  // Use the real clipboard and persisted drafts to cover both library actions.
+  for (const style of styles) assert.match(style.template, /\p{Script=Han}/u, `${style.name} has a Chinese template`);
+  const watercolor = styles.find((style) => style.id === 'open-15563');
+  const longStyle = styles.find((style) => style.id === 'open-15567');
+  assert.ok(longStyle.template.length > 1000);
+  const styleFlow = await contextPage();
+  const sp = styleFlow.page;
+  await styleFlow.context.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: app.base });
+  const stylePrompt = sp.getByLabel('画面提示词', { exact: true });
+  const imagesBeforeStyles = imageCount;
+  const pasteShortcut = process.platform === 'darwin' ? 'Meta+V' : 'Control+V';
+  await stylePrompt.fill('这是尚未被替换的旧草稿');
+  await sp.getByRole('button', { name: '4 张', exact: true }).click();
+  await sp.getByRole('button', { name: /16:9 宽屏/ }).click();
+  await until(async () => (await workspaceDraft(sp))?.config?.prompt === '这是尚未被替换的旧草稿', 'old studio draft saved');
+  await nav(sp, '风格库');
+  const watercolorCard = sp.locator('main article').filter({ has: sp.getByRole('heading', { name: watercolor.name, exact: true }) });
+  assert.equal(await watercolorCard.locator('p.line-clamp-2').textContent(), watercolor.template);
+  await watercolorCard.getByRole('button', { name: '复制模板', exact: true }).click();
+  await watercolorCard.getByRole('button', { name: '已复制', exact: true }).waitFor();
+  assert.equal(await sp.evaluate(() => navigator.clipboard.readText()), watercolor.template);
+  await nav(sp, '单图创作');
+  await stylePrompt.fill('');
+  await stylePrompt.press(pasteShortcut);
+  assert.equal(await stylePrompt.inputValue(), watercolor.template, 'pasting uses the displayed Chinese template');
+  await stylePrompt.fill('这份旧草稿不能覆盖刚发送的模板');
+  await until(async () => (await workspaceDraft(sp))?.config?.prompt === '这份旧草稿不能覆盖刚发送的模板', 'stale draft saved before sending');
+  await nav(sp, '风格库');
+  await watercolorCard.getByRole('button', { name: '发送到单图', exact: true }).click();
+  await sp.getByText(`已载入 ${watercolor.name} 的中文模板, 可修改后开始绘制`, { exact: true }).waitFor();
+  assert.equal(await stylePrompt.inputValue(), watercolor.template);
+  await sp.getByRole('button', { name: watercolor.name, exact: true }).waitFor();
+  const sentStyle = await workspaceDraft(sp);
+  assert.equal(sentStyle.styleId, watercolor.id);
+  assert.equal(sentStyle.config.mode, 'text');
+  assert.equal(sentStyle.config.aspectRatio, '16:9');
+  assert.equal(sentStyle.config.imageCount, 1);
+  assert.equal(await workspaceDraft(sp, 'studio-transfer'), undefined, 'the transfer is consumed after saving');
+  await sp.reload();
+  await stylePrompt.waitFor();
+  assert.equal(await stylePrompt.inputValue(), watercolor.template);
+  await sp.getByRole('button', { name: watercolor.name, exact: true }).waitFor();
+  assert.equal(await sp.getByText(/^已载入 .* 的中文模板/).count(), 0, 'reload does not replay the transfer');
+  assert.equal((await jobs(sp)).length, 0);
+  assert.equal((await rows(sp, 'outbox')).length, 0);
+  assert.equal(imageCount, imagesBeforeStyles);
+  checks.push('卡片预览与真实剪贴板中文模板一致, 发送单图覆盖旧草稿并同步画风, 刷新保留且不自动生图');
+
+  await nav(sp, '风格库');
+  await sp.getByLabel('搜索风格').fill(longStyle.name);
+  await sp.getByRole('button', { name: `查看 ${longStyle.name} 详情`, exact: true }).click();
+  const longStyleDialog = sp.getByRole('dialog', { name: `风格详情 ${longStyle.name}`, exact: true });
+  assert.equal(await longStyleDialog.locator('p.whitespace-pre-wrap').textContent(), longStyle.template);
+  await longStyleDialog.getByRole('button', { name: '复制模板', exact: true }).click();
+  await longStyleDialog.getByRole('button', { name: '已复制', exact: true }).waitFor();
+  assert.equal(await sp.evaluate(() => navigator.clipboard.readText()), longStyle.template);
+  await screenshot(sp, 'style-long-template-desktop', true);
+  await sp.getByLabel('关闭详情').click();
+  await nav(sp, '单图创作');
+  await stylePrompt.fill('');
+  await stylePrompt.press(pasteShortcut);
+  assert.equal(await stylePrompt.inputValue(), longStyle.template, 'pasting a template longer than 1000 characters must not truncate it');
+  await nav(sp, '风格库');
+  await sp.getByLabel('搜索风格').fill(longStyle.name);
+  await sp.getByRole('button', { name: `查看 ${longStyle.name} 详情`, exact: true }).click();
+  await longStyleDialog.getByRole('button', { name: '发送到单图', exact: true }).click();
+  await sp.getByText(`已载入 ${longStyle.name} 的中文模板, 可修改后开始绘制`, { exact: true }).waitFor();
+  assert.equal(await stylePrompt.inputValue(), longStyle.template);
+  await sp.getByRole('button', { name: longStyle.name, exact: true }).waitFor();
+  const reviewedTemplate = `${longStyle.template}\n主题: 植物研究所, 使用薄荷绿与奶油黄色.`;
+  await stylePrompt.fill(reviewedTemplate);
+  await until(async () => (await workspaceDraft(sp))?.config?.prompt === reviewedTemplate, 'reviewed long template saved');
+  await sp.reload();
+  await stylePrompt.waitFor();
+  assert.equal(await stylePrompt.inputValue(), reviewedTemplate);
+  for (const [device, width, height] of [['desktop', 1600, 1000], ['mobile', 390, 844]]) {
+    await sp.setViewportSize({ width, height });
+    await screenshot(sp, `style-sent-${device}`, true);
+  }
+  assert.equal((await jobs(sp)).length, 0);
+  assert.equal((await rows(sp, 'outbox')).length, 0);
+  assert.equal(imageCount, imagesBeforeStyles, 'copying, sending, editing and reloading never generate automatically');
+  await sp.getByRole('button', { name: /开始绘制/ }).click();
+  const styleResult = (await waitRecords(sp, 1))[0];
+  assert.equal(imageCount, imagesBeforeStyles + 1);
+  assert.equal(styleResult.prompt, reviewedTemplate);
+  assert.equal(styleResult.recipe.styleId, longStyle.id);
+  assert.equal(styleResult.recipe.tone, 'none');
+  const styleCall = app.calls.filter((call) => call.path.includes('/images/')).at(-1);
+  assert.match(styleCall.path, /\/images\/generations$/);
+  assert.ok(styleCall.json.prompt.startsWith(reviewedTemplate));
+  assert.ok(styleCall.json.prompt.includes(longStyle.prompt));
+  await styleFlow.context.close();
+  checks.push('详情复制与发送使用完整长模板, 超过 1000 字仍可粘贴和编辑, 桌面手机布局正常, 确认后请求使用修改内容');
+
   for (const [width, height, device] of [[1600, 1000, 'desktop'], [1024, 900, 'tablet'], [390, 844, 'mobile']]) {
     await page.setViewportSize({ width, height });
     for (const theme of ['light', 'dark']) {
       await page.evaluate((theme) => { document.documentElement.classList.toggle('dark', theme === 'dark'); }, theme);
+      let libraryTypography;
       for (const [label, key] of [['单图创作', 'studio'], ['系列策划', 'series'], ['风格库', 'styles'], ['展馆', 'gallery']]) {
         await nav(page, label);
         await page.waitForTimeout(100);
+        if (key === 'styles') libraryTypography = { heading: await typography(page.locator('h1')), section: await typography(page.locator('article h3').first()), background: await page.locator('.stitch-page').evaluate((element) => getComputedStyle(element).backgroundColor) };
+        if (key === 'gallery') {
+          assert.deepEqual(await typography(page.locator('h1')), libraryTypography.heading, `${device} ${theme}: gallery title uses the shared typography`);
+          assert.deepEqual(await typography(page.locator('main section h2').first()), libraryTypography.section, `${device} ${theme}: gallery section headings use the shared typography`);
+          assert.equal(await page.locator('.stitch-page').evaluate((element) => getComputedStyle(element).backgroundColor), libraryTypography.background);
+        }
         await screenshot(page, `${key}-${device}-${theme}`);
       }
     }
   }
+  checks.push('桌面, 平板, 手机深浅主题下展馆与风格库的标题字体, 字号, 字重, 行高及背景颜色一致');
   await page.getByLabel('退出工作台').click();
   await page.getByLabel('访问密码').waitFor();
   await page.getByLabel('访问密码').fill(TEST_PASSWORD);
@@ -396,14 +658,24 @@ try {
 
   await nav(op, '系列策划');
   await op.getByRole('button', { name: '电商长图', exact: true }).click();
+  const commerceBrief = '森林主题陶瓷杯, 展示商品外形, 材质和使用场景';
+  await op.locator('#series-story-prompt').fill(commerceBrief);
   await op.getByTitle('在风格库选择基底风格').click();
   await op.getByRole('button', { name: '发送到系列', exact: true }).first().click();
   await op.getByTitle('在风格库选择基底风格').filter({ hasText: '轻柔水彩绘本' }).waitFor();
-  await op.locator('#series-story-prompt').fill('森林主题陶瓷杯, 展示商品外形, 材质和使用场景');
+  assert.equal(await op.locator('#series-story-prompt').inputValue(), commerceBrief, 'applying a series style keeps the story');
   await op.getByLabel('系列生成质量').selectOption('high');
   holdImage = new Promise((resolve) => { releaseImage = resolve; });
   await op.getByRole('button', { name: '智能拆解分镜', exact: true }).click();
   await until(() => op.getByRole('button', { name: '确认并生成 4 张图片', exact: true }).isEnabled(), 'commerce plan ready for review');
+  const commerceScene = await op.locator('#scene-prompt-0').inputValue();
+  const imagesBeforeSeriesStyle = imageCount;
+  await op.getByTitle('在风格库选择基底风格').click();
+  await op.getByRole('button', { name: '发送到系列', exact: true }).first().click();
+  await until(() => op.getByRole('button', { name: '确认并生成 4 张图片', exact: true }).isEnabled(), 'reviewed scenes restored after applying a style');
+  assert.equal(await op.locator('#series-story-prompt').inputValue(), commerceBrief);
+  assert.equal(await op.locator('#scene-prompt-0').inputValue(), commerceScene);
+  assert.equal(imageCount, imagesBeforeSeriesStyle);
   await op.getByRole('button', { name: '确认并生成 4 张图片', exact: true }).click();
   await op.getByRole('dialog', { name: '任务队列', exact: true }).waitFor();
   await until(async () => (await jobs(op)).filter((job) => job.status === 'pending').length === 3, 'series pending scenes');
@@ -573,8 +845,78 @@ try {
   await assertEditSettings();
   assert.ok(await ep.getByRole('button', { name: /开始局部重绘/ }).isDisabled());
   checks.push('清空蒙版保持编辑模式并阻止提交, 显式切换参考图后可修改参数, 展馆编辑入口一致');
+
+  // An explicit template transfer starts text creation, even after editing an output.
+  await ep.locator('.studio-rail').getByRole('button', { name: '局部涂抹修改', exact: true }).click();
+  await wideMask.waitFor();
+  await drawMask(ep, wideMask);
+  await wideMask.getByLabel('局部重绘提示词').fill('这份旧蒙版要求不能影响风格模板');
+  await wideMask.getByRole('button', { name: '保存并应用蒙版', exact: true }).click();
+  await wideMask.waitFor({ state: 'hidden' });
+  await until(async () => Boolean((await workspaceDraft(ep))?.mask), 'old brush mask saved');
+  const imagesBeforeMaskTransfer = imageCount;
+  await nav(ep, '风格库');
+  await ep.locator('main article').filter({ has: ep.getByRole('heading', { name: watercolor.name, exact: true }) }).getByRole('button', { name: '发送到单图', exact: true }).click();
+  await ep.getByText(`已载入 ${watercolor.name} 的中文模板, 可修改后开始绘制`, { exact: true }).waitFor();
+  const assertStyleReplacedEdit = async () => {
+    const prompt = ep.getByLabel('画面提示词', { exact: true });
+    await prompt.waitFor();
+    assert.equal(await prompt.inputValue(), watercolor.template);
+    await ep.getByRole('button', { name: watercolor.name, exact: true }).waitFor();
+    assert.equal(await ep.getByRole('region', { name: '局部重绘参数', exact: true }).count(), 0);
+    assert.equal(await wideMask.count(), 0);
+    const draft = await workspaceDraft(ep);
+    assert.equal(draft.config.mode, 'text');
+    assert.deepEqual(draft.config.refImages, []);
+    for (const key of ['refImage', 'sourceRecord', 'mask']) assert.equal(draft[key], null);
+    assert.equal(draft.maskDataUrl, '');
+  };
+  await assertStyleReplacedEdit();
+  await ep.reload();
+  await assertStyleReplacedEdit();
+  assert.equal(imageCount, imagesBeforeMaskTransfer);
+  await ep.getByRole('button', { name: /开始绘制/ }).click();
+  const afterMaskStyle = (await waitRecords(ep, 4)).find((record) => record.prompt === watercolor.template);
+  assert.equal(imageCount, imagesBeforeMaskTransfer + 1);
+  assert.equal(afterMaskStyle.mode, 'text');
+  assert.equal(afterMaskStyle.kind, 'single');
+  assert.equal(afterMaskStyle.parentId, undefined);
+  assert.equal(afterMaskStyle.recipe.styleId, watercolor.id);
+  assert.equal(afterMaskStyle.recipe.hasMask, false);
+  assert.deepEqual(afterMaskStyle.recipe.references, []);
+  assert.match(app.calls.filter((call) => call.path.includes('/images/')).at(-1).path, /\/images\/generations$/);
+  checks.push('发送单图退出旧局部编辑, 清除参考图和蒙版身份, 刷新不恢复旧编辑, 用户确认后独立生成');
   imageOverride = undefined;
   await editFlow.context.close();
+
+  const touchFlow = await contextPage(undefined, undefined, { viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+  const tp = touchFlow.page;
+  await tp.getByLabel('画面提示词', { exact: true }).fill('检查触屏缩放的森林插画');
+  await tp.getByRole('button', { name: /开始绘制/ }).click();
+  await waitRecords(tp, 1);
+  await nav(tp, '展馆');
+  await tp.getByRole('button', { name: /检视作品:/ }).click();
+  const touchInitial = await fittedImage(tp);
+  const touchControls = await fixedViewerControls(tp);
+  const center = { x: touchInitial.viewport.x + touchInitial.viewport.width / 2, y: touchInitial.viewport.y + touchInitial.viewport.height / 2 };
+  const cdp = await touchFlow.context.newCDPSession(tp);
+  const touch = (id, x, y) => ({ id, x, y, radiusX: 5, radiusY: 5, force: 1 });
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [touch(1, center.x - 35, center.y), touch(2, center.x + 35, center.y)] });
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [touch(1, center.x - 75, center.y), touch(2, center.x + 75, center.y)] });
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+  const pinched = await until(async () => { const info = await imageGeometry(tp); return info?.image.width > touchInitial.image.width * 1.8 && info; }, 'native two-finger pinch');
+  assert.equal(await tp.evaluate(() => visualViewport.scale), 1, 'pinch zooms the image instead of the page');
+  assert.deepEqual(await fixedViewerControls(tp), touchControls);
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [touch(1, center.x, center.y)] });
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [touch(1, center.x + 35, center.y + 30)] });
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+  assert.ok((await imageGeometry(tp)).image.x > pinched.image.x + 15, 'one finger pans the zoomed image');
+  await screenshot(tp, 'viewer-touch-zoomed');
+  await tp.getByRole('button', { name: '适应窗口', exact: true }).tap();
+  await fittedImage(tp);
+  await cdp.detach();
+  await touchFlow.context.close();
+  checks.push('移动浏览器原生双指捏合只缩放图片, 单指拖动查看, 工具栏不缩放且可恢复完整画面');
 
   const legacyRecord = { id: 'legacy-art', prompt: '旧作品', dataUrl: `data:image/png;base64,${png(12, 8).toString('base64')}`, providerId: 'legacy', providerName: '旧通道', createdAt: 1700000000000, mode: 'text', kind: 'single' };
   for (const source of ['indexeddb-v3', 'localstorage']) {

@@ -2,7 +2,7 @@
 原始来源: https://github.com/YouMind-OpenLab/awesome-gpt-image-2
 Copyright (c) 2026 YouMind OpenLab
 许可: CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/)
-修改: 选取独立条目, 翻译名称, 提炼可复用画风, 解析模板默认值, 移除其他工具专用参数与未经验证的分辨率标注, 缩放示例图并转为 WebP.
+修改: 选取独立条目, 翻译名称与完整模板, 保留画内指定文字和品牌名, 提炼可复用画风, 解析模板默认值, 移除其他工具专用参数与未经验证的分辨率标注, 缩放示例图并转为 WebP.
 不代表原作者认可或背书.
 
 open-15563 轻柔水彩绘本
