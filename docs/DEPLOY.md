@@ -221,6 +221,24 @@ server {
 - 上线前执行 `npm test`, `npm run test:browser`, `docker build -t sprout-canvas:verify .`, `npm run test:docker` 和 `git diff --check`.
 - 在 Linux CI 中先运行 `npx playwright install --with-deps chromium`. 在本机可使用系统 Chrome 或 `SPROUT_BROWSER_EXECUTABLE`.
 - 使用 `SPROUT_TEST_OUTPUT` 指定测试产物目录, 使用 `SPROUT_TEST_IMAGE` 指定容器验收镜像. 自动测试均使用虚拟密钥/上游, 不消费真实生成额度.
+- 在本机先完成相关验证, 再提交推送. 涉及浏览器交互时, 使用与项目 Playwright 版本一致的 Linux Chromium 容器补充验证:
+
+```sh
+npm test
+sprout_playwright_version=$(node -p "require('playwright/package.json').version")
+sprout_browser_output=$(mktemp -d /tmp/sprout-linux-browser.XXXXXX)
+docker run --rm --platform linux/amd64 --init --ipc=host \
+  --mount "type=bind,source=$PWD,target=/workspace,readonly" \
+  --mount "type=bind,source=$sprout_browser_output,target=/artifacts" \
+  --workdir /workspace --env SPROUT_TEST_OUTPUT=/artifacts \
+  "mcr.microsoft.com/playwright:v${sprout_playwright_version}-noble" \
+  npm run test:browser
+docker build -t sprout-canvas:verify .
+SPROUT_TEST_OUTPUT="$sprout_browser_output/docker" npm run test:docker
+git diff --check
+```
+
+- 对容器验收使用独立 Docker 原生数据卷, 避免 macOS 共享目录掩盖 Linux 文件权限差异. 在服务容器内检查 SQLite 的 0600 权限与 token 非明文存储, 再用非拥有者容器验证读取被拒绝. 验收结束后自动移除测试容器和测试卷.
 - 查看 `.github/workflows/verify.yml` 的自动流程. 工作流配置存在不等于远端已运行成功.
 
 ## 6. 运维与能力边界

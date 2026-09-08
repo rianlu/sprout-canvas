@@ -14,7 +14,7 @@ const docker = async (...args) => (await execute('docker', args, { maxBuffer: 10
 const image = process.env.SPROUT_TEST_IMAGE || 'sprout-canvas:verify';
 const directory = await mkdtemp(path.join(tmpdir(), 'sprout-docker-check-'));
 const output = process.env.SPROUT_TEST_OUTPUT || directory;
-for (const name of ['config', 'data', 'logs']) await mkdir(path.join(directory, name));
+for (const name of ['config', 'logs']) await mkdir(path.join(directory, name));
 await mkdir(output, { recursive: true });
 const password = 'isolated-container-password';
 const adminPassword = 'isolated-container-admin-password';
@@ -23,8 +23,10 @@ await writeFile(path.join(directory, 'config/local.config.json'), JSON.stringify
   imageProviders: [{ id: 'fixture', name: '容器验证通道', baseUrl: 'http://127.0.0.1:9', apiKey: 'fixture-container-image-key', imageModel: 'gpt-image-2', generationMode: 'images', capabilities: { outputFormats: ['png'], exactSize: false } }],
   textProviders: [{ id: 'fixture-text', name: '容器验证文本通道', baseUrl: 'http://127.0.0.1:9', apiKey: 'fixture-container-text-key', model: 'fixture-text-model' }],
 }), { mode: 0o600 });
-const name = `sprout-canvas-verify-${process.pid}`;
+const name = `sprout-canvas-verify-${process.pid}-${randomUUID().slice(0, 8)}`;
+const dataVolume = `${name}-data`;
 let started = false;
+let volumeCreated = false;
 let browser;
 async function waitFor(check, message, timeout = 20000) {
   const end = Date.now() + timeout;
@@ -35,8 +37,10 @@ async function waitFor(check, message, timeout = 20000) {
   throw new Error(`Timed out: ${message}`);
 }
 try {
+  await docker('volume', 'create', dataVolume);
+  volumeCreated = true;
   await docker('run', '-d', '--rm', '--name', name, '--health-interval=2s', '--health-start-period=1s', '-p', '127.0.0.1::8787',
-    '-v', `${path.join(directory, 'config')}:/app/config:ro`, '-v', `${path.join(directory, 'data')}:/app/data`, '-v', `${path.join(directory, 'logs')}:/app/logs`, image);
+    '-v', `${path.join(directory, 'config')}:/app/config:ro`, '-v', `${dataVolume}:/app/data`, '-v', `${path.join(directory, 'logs')}:/app/logs`, image);
   started = true;
   const containerUrl = async () => `http://127.0.0.1:${JSON.parse(await docker('inspect', name))[0].NetworkSettings.Ports['8787/tcp'][0].HostPort}`;
   let base = await containerUrl();
@@ -128,7 +132,7 @@ try {
   await docker('stop', '--time', '10', name);
   started = false;
   await docker('run', '-d', '--rm', '--name', name, '--health-interval=2s', '--health-start-period=1s', '-p', '127.0.0.1::8787',
-    '-v', path.join(directory, 'config') + ':/app/config:ro', '-v', path.join(directory, 'data') + ':/app/data', '-v', path.join(directory, 'logs') + ':/app/logs', image);
+    '-v', path.join(directory, 'config') + ':/app/config:ro', '-v', dataVolume + ':/app/data', '-v', path.join(directory, 'logs') + ':/app/logs', image);
   started = true;
   base = await containerUrl();
   await waitFor(healthy, 'container ready after recreation with the same data volume');
@@ -140,14 +144,32 @@ try {
   assert.equal(imported.status, 200);
   assert.deepEqual(Buffer.from(await (await fetch(base + style.image, { headers: { Cookie: adminCookie } })).arrayBuffer()), example);
   await waitFor(async () => (await docker('inspect', '--format', '{{.State.Health.Status}}', name)) === 'healthy', 'Docker healthcheck');
-  const database = await readFile(path.join(directory, 'data/runtime.sqlite'));
-  assert.equal(database.includes(Buffer.from(cookie.split('=')[1])), false);
-  const styleDatabase = await readFile(path.join(directory, 'data/styles/library.sqlite'));
-  assert.equal(styleDatabase.includes(Buffer.from(adminCookie.split('=')[1])), false);
-  const checks = ['生产环境启动与鉴权', '单 worker 与通道格式约束', '容器/本地 JS 与 CSS 哈希一致', '桌面页面与动态初始风格图片', 'SQLite 会话跨重启恢复', 'Docker 健康检查', '管理权限隔离与增删改', '重建容器保留风格文本/图片且不恢复已删除种子', '备份预览与图片恢复'];
-  await writeFile(path.join(output, 'docker-report.json'), JSON.stringify({ image, nodeVersion, passed: checks, assetHashes: hashes, directory }, null, 2));
+  // Inspect private files as the service user, not the owner of the host checkout.
+  await docker('exec', name, 'node', '--input-type=module', '-e', `
+    import assert from 'node:assert/strict';
+    import { readFile, stat } from 'node:fs/promises';
+    for (const [file, token] of JSON.parse(process.argv[1])) {
+      assert.equal((await stat(file)).mode & 0o777, 0o600, 'session databases must remain private');
+      assert.equal((await readFile(file)).includes(Buffer.from(token)), false, 'session tokens must not be stored in plaintext');
+    }
+  `, JSON.stringify([
+    ['/app/data/runtime.sqlite', cookie.split('=')[1]],
+    ['/app/data/styles/library.sqlite', adminCookie.split('=')[1]],
+  ]));
+  await docker('run', '--rm', '--user', '65534:65534',
+    '-v', dataVolume + ':/app/data:ro', image,
+    'node', '--input-type=module', '-e', `
+      import assert from 'node:assert/strict';
+      import { readFile } from 'node:fs/promises';
+      for (const file of ['/app/data/runtime.sqlite', '/app/data/styles/library.sqlite']) {
+        await assert.rejects(readFile(file), { code: 'EACCES' });
+      }
+    `);
+  const checks = ['生产环境启动与鉴权', '单 worker 与通道格式约束', '容器/本地 JS 与 CSS 哈希一致', '桌面页面与动态初始风格图片', 'SQLite 会话跨重启恢复与私有文件权限', 'Docker 健康检查', '管理权限隔离与增删改', '重建容器保留风格文本/图片且不恢复已删除种子', '备份预览与图片恢复'];
+  await writeFile(path.join(output, 'docker-report.json'), JSON.stringify({ image, nodeVersion, passed: checks, assetHashes: hashes, directory, dataVolume }, null, 2));
   console.log(JSON.stringify({ passed: checks.length, nodeVersion, artifacts: output }));
 } finally {
   if (browser) await browser.close();
   if (started) await docker('stop', '--time', '10', name);
+  if (volumeCreated) await docker('volume', 'rm', dataVolume);
 }
