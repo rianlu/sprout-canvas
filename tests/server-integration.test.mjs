@@ -149,12 +149,26 @@ try {
   const forced = await submit(forcedInput);
   const forcedFailure = await finished(forced.id);
   assert.equal(forcedFailure.status, 'failed');
+  assert.equal(forcedFailure.supersededBy, '');
   assert.doesNotMatch(JSON.stringify(forcedFailure), /fixture-primary-key/);
   assert.match(forcedFailure.error, /\[redacted\]/);
-  const retry = await submit({ ...submission('manual-retry'), retryOf: forced.id });
+  const retryInput = { ...submission('manual-retry'), retryOf: forced.id };
+  assert.equal((await api('/api/jobs', { method: 'POST', body: retryInput, cookie: otherCookie })).status, 404);
+  assert.equal((await api(`/api/jobs/${forced.id}`)).data.supersededBy, '', 'a rejected retry must not supersede its source');
+  const retry = await submit(retryInput);
+  assert.equal((await submit(retryInput)).id, retry.id, 'retry delivery is idempotent');
+  assert.equal((await api('/api/jobs', { method: 'POST', body: { ...retryInput, requestId: 'duplicate-manual-retry' } })).status, 409, 'one failed attempt cannot produce duplicate retries');
+  const superseded = (await api(`/api/jobs/${forced.id}`)).data;
+  assert.equal(superseded.status, 'failed', 'retain the original failure for history');
+  assert.equal(superseded.supersededBy, retry.id);
+  assert.equal(superseded.canRetry, false);
   assert.equal((await finished(retry.id)).status, 'succeeded');
   assert.match(app.calls.at(-1).path, /^\/secondary\//);
   await api(`/api/jobs/${retry.id}/ack`, { method: 'POST' });
+  await api('/api/jobs/archive', { method: 'POST' });
+  const retryHistory = (await api(`/api/jobs/me?limit=1&requests=${forced.requestId}`)).data.jobs;
+  assert.equal(retryHistory.find((job) => job.id === forced.id).supersededBy, retry.id, 'retry association survives when the successor is outside visible history');
+  assert.ok(!retryHistory.some((job) => job.id === retry.id));
   app.controls.respond = null;
 
   // Crash recovery persists intent metadata, not request images or the result bytes.
@@ -172,6 +186,8 @@ try {
   release(); app.controls.respond = null;
   await app.start();
   assert.equal((await api('/api/auth/status')).data.authenticated, true);
+  assert.equal((await api(`/api/jobs/${forced.id}`)).data.supersededBy, retry.id, 'derive retry association from durable metadata after restart');
+  assert.equal((await api('/api/jobs', { method: 'POST', body: { ...retryInput, requestId: 'duplicate-after-restart' } })).status, 409);
   assert.equal((await api(`/api/jobs/${running.id}`)).data.outcomeUnknown, true);
   assert.equal((await api(`/api/jobs/${waiting.id}`)).data.interruptionReason, 'pending-restart');
   assert.equal((await api(`/api/jobs/${unclaimed.id}`)).data.status, 'expired');

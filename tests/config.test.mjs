@@ -15,7 +15,7 @@ const config = {
 };
 await writeFile(path.join(directory, 'config/local.config.json'), JSON.stringify(config));
 const { readLocalConfig, publicConfig } = await import(pathToFileURL(path.join(directory, 'server/config.mjs')));
-const keys = ['NODE_ENV', 'OPENAI_BASE_URL', 'OPENAI_API_KEY', 'ANYROUTER_BASE_URL', 'ANYROUTER_API_KEY', 'IMAGE_MODEL', 'GENERATION_MODE', 'DEFAULT_IMAGE_PROVIDER', 'DEFAULT_PROVIDER', 'TEXT_BASE_URL', 'TEXT_API_KEY', 'TEXT_MODEL', 'IMAGE_CONCURRENCY', 'SECURE_COOKIES', 'PORT', 'AUTH_SESSION_DAYS'];
+const keys = ['NODE_ENV', 'OPENAI_BASE_URL', 'OPENAI_API_KEY', 'ANYROUTER_BASE_URL', 'ANYROUTER_API_KEY', 'IMAGE_MODEL', 'GENERATION_MODE', 'DEFAULT_IMAGE_PROVIDER', 'DEFAULT_PROVIDER', 'TEXT_BASE_URL', 'TEXT_API_KEY', 'TEXT_MODEL', 'IMAGE_CONCURRENCY', 'SECURE_COOKIES', 'PORT', 'AUTH_SESSION_DAYS', 'DATA_DIR', 'STATE_FILE', 'ADMIN_PASSWORD', 'ACCESS_PASSWORD', 'COOKIE_NAMESPACE'];
 const previous = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
 try {
   for (const key of keys) delete process.env[key];
@@ -44,6 +44,26 @@ try {
   delete process.env.PORT;
   process.env.SECURE_COOKIES = 'invalid';
   await assert.rejects(readLocalConfig(), /SECURE_COOKIES/);
+  delete process.env.SECURE_COOKIES;
+  process.env.DATA_DIR = path.join(directory, 'isolated-local-data');
+  process.env.ADMIN_PASSWORD = 'distinct-admin-test-password';
+  const local = await readLocalConfig();
+  assert.equal(local.stateFile, path.join(directory, 'isolated-local-data/runtime.sqlite'));
+  assert.equal(local.styleDataDir, path.join(directory, 'isolated-local-data/styles'));
+  assert.doesNotMatch(JSON.stringify(publicConfig(local)), /adminPassword|distinct-admin/);
+  process.env.STATE_FILE = path.join(directory, 'explicit.sqlite');
+  assert.equal((await readLocalConfig()).stateFile, process.env.STATE_FILE);
+  process.env.ACCESS_PASSWORD = process.env.ADMIN_PASSWORD;
+  await assert.rejects(readLocalConfig(), /工作台访问密码不同/);
+  delete process.env.ACCESS_PASSWORD;
+  process.env.ADMIN_PASSWORD = 'short';
+  await assert.rejects(readLocalConfig(), /12 到 256/);
+  process.env.ADMIN_PASSWORD = '';
+  assert.equal((await readLocalConfig()).adminPassword, '');
+  process.env.COOKIE_NAMESPACE = 'local_test';
+  assert.equal((await readLocalConfig()).cookieNamespace, 'local_test');
+  process.env.COOKIE_NAMESPACE = 'bad;namespace';
+  await assert.rejects(readLocalConfig(), /cookieNamespace/);
   console.log('Provider-specific environment overrides and configuration validation passed');
 } finally {
   for (const [key, value] of Object.entries(previous)) {

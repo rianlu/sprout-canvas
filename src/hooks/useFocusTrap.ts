@@ -6,7 +6,7 @@ const FOCUSABLE =
 function focusableItems(container: HTMLElement) {
   return Array.from(container.querySelectorAll<HTMLElement>(FOCUSABLE)).filter(
     (item) =>
-      item.getClientRects().length > 0 && getComputedStyle(item).visibility !== 'hidden' && !item.closest('[inert]'),
+      item.getClientRects().length > 0 && getComputedStyle(item).visibility !== 'hidden' && !item.matches(':disabled') && !item.closest('[inert]'),
   );
 }
 

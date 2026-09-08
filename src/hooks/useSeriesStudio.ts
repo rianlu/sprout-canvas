@@ -6,10 +6,9 @@ import type { ImageCapabilities } from '../types/provider';
 import type { QueueSubmitInput } from '../lib/api/queue';
 import { buildGenerationPayload, resolveSize } from '../lib/api/generation';
 import { requestTextGeneration } from '../lib/api/text';
-import { getOutboxInput, getRecordDataUrl, readWorkspaceDraft, writeWorkspaceDraft } from '../lib/storage/gallery-db';
+import { getOutboxInput, getRecordDataUrl, readWorkspaceDraft, writeWorkspaceDraft, registerWorkspaceSubmission } from '../lib/storage/gallery-db';
 import { randomId } from '../lib/random/id';
 import { readDraft, writeDraft } from '../lib/storage/drafts';
-import { applyAnyImageStyleToPrompt, findImageStyle } from '../lib/styles/image-styles';
 import { downloadRecords, latestSceneVersions } from '../lib/image/gallery';
 import { prepareImageFile } from '../lib/image/compress';
 import { useImageMetadata } from './useImageMetadata';
@@ -40,7 +39,7 @@ export interface SeriesActions {
   results: ResultRecord[]; jobs: QueueJob[];
   imageCapabilities?: ImageCapabilities;
 }
-interface SeriesDraft { version: 1; seriesId: string; reference: RefImage | null; sceneIds: string[]; shotIds: string[]; overrides: Record<string, Partial<GenerationConfig>>; stagedIds: string[]; config?: GenerationConfig }
+interface SeriesDraft { version: 1; seriesId: string; reference: RefImage | null; sceneIds: string[]; shotIds: string[]; overrides: Record<string, Partial<GenerationConfig>>; stagedIds: string[]; config?: GenerationConfig; brief?: string; taskText?: string; template?: SeriesTemplate; count?: number }
 type ShotState = { kind: 'done' | 'generating' | 'waiting' | 'planned' | 'failed'; task: BatchTask; record?: ResultRecord; job?: QueueJob };
 function readIds(key: string): string[] { try { const ids: unknown = JSON.parse(readDraft(key) || '[]'); return Array.isArray(ids) ? ids.filter((id): id is string => typeof id === 'string') : []; } catch { return []; } }
 function parseTaskLines(text: string): BatchTask[] {
@@ -54,7 +53,6 @@ export function useSeriesStudio({ onSubmit, onSubmitBatch, onUpdate, results, jo
   const [template, rawSetTemplate] = useState<SeriesTemplate>(() => TEMPLATES.find((item) => item.id === readDraft('batch_template'))?.id || 'picture-book');
   const [brief, setBrief] = useState(() => readDraft('batch_brief'));
   const [taskText, setTaskText] = useState(() => readDraft('batch_tasks'));
-  const [styleId, setStyleId] = useState(() => findImageStyle(readDraft('batch_style'))?.id || '');
   const [count, setCount] = useState(() => Math.min(8, Math.max(3, Number(readDraft('batch_count') || '4') || 4)));
   const [config, setConfig] = useState<GenerationConfig>(() => {
     const aspectRatio = (readDraft('batch_aspect_ratio') || '16:9') as AspectRatio;
@@ -69,6 +67,7 @@ export function useSeriesStudio({ onSubmit, onSubmitBatch, onUpdate, results, jo
   const [reference, setReference] = useState<RefImage | null>(null);
   const [overrides, setOverrides] = useState<Record<string, Partial<GenerationConfig>>>({});
   const [staged, setStaged] = useState<QueueSubmitInput[]>([]);
+  const [stagedIds, setStagedIds] = useState<string[]>([]);
   const [ready, setReady] = useState(false);
   const [busy, setBusy] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -87,7 +86,6 @@ export function useSeriesStudio({ onSubmit, onSubmitBatch, onUpdate, results, jo
     });
   }, [imageCapabilities, ready]);
   function pushToast(type: 'info' | 'success' | 'error', message: string) { const id = randomId(); setToasts((old) => [...old, { id, type, message }]); window.setTimeout(() => setToasts((old) => old.filter((item) => item.id !== id)), 5000); }
-  const selectedStyle = useMemo(() => findImageStyle(styleId), [styleId]);
   const tasks = useMemo(() => { const parsed = parseTaskLines(taskText); return Array.from({ length: count }, (_, index) => parsed[index] || { title: `分镜 ${index + 1}`, prompt: '' }); }, [taskText, count]);
   const allSeriesResults = useMemo(() => results.filter((record) => record.kind === 'series' && record.seriesId === seriesId), [results, seriesId]);
   const seriesResults = useMemo(() => latestSceneVersions(allSeriesResults), [allSeriesResults]);
@@ -110,9 +108,12 @@ export function useSeriesStudio({ onSubmit, onSubmitBatch, onUpdate, results, jo
       const draft = await readWorkspaceDraft<SeriesDraft>('series');
       if (!alive) return;
       if (draft && draft.seriesId === readDraft('batch_series_id') && readDraft('batch_transfer') !== '1') {
+        if (draft.brief !== undefined) setBrief(draft.brief);
+        if (draft.taskText !== undefined) setTaskText(draft.taskText);
         setReference(draft.reference); setOverrides(draft.overrides || {});
         if (draft.config) setConfig(draft.config);
         setSceneIds(draft.sceneIds); setShotIds(draft.shotIds);
+        setStagedIds(draft.stagedIds || []);
         const inputs = [];
         for (const id of draft.stagedIds || []) { const input = await getOutboxInput(id); if (input) inputs.push(input); }
         if (alive) setStaged(inputs);
@@ -122,16 +123,16 @@ export function useSeriesStudio({ onSubmit, onSubmitBatch, onUpdate, results, jo
     })().catch((error) => { if (alive) { setReady(true); pushToast('error', error instanceof Error ? error.message : '系列草稿读取失败'); } });
     return () => { alive = false; };
   }, []);
+  const currentDraft = useMemo<SeriesDraft>(() => ({ version: 1, seriesId, reference, sceneIds, shotIds, overrides, config, stagedIds, brief, taskText, template, count }), [seriesId, reference, sceneIds, shotIds, overrides, config, stagedIds, brief, taskText, template, count]);
   useEffect(() => {
     if (!ready) return;
-    const draft: SeriesDraft = { version: 1, seriesId, reference, sceneIds, shotIds, overrides, config, stagedIds: staged.map((input) => input.requestId) };
-    void writeWorkspaceDraft('series', draft).catch(() => pushToast('error', '系列草稿保存失败, 请检查本地空间'));
-    for (const [key, value] of Object.entries({ batch_template: template, batch_brief: brief, batch_tasks: taskText, batch_style: styleId, batch_count: String(count), batch_aspect_ratio: config.aspectRatio, batch_quality: config.quality, batch_output_format: config.outputFormat, batch_series_id: seriesId, batch_scene_ids: JSON.stringify(sceneIds), batch_shot_ids: JSON.stringify(shotIds) })) writeDraft(key, value);
-  }, [ready, template, brief, taskText, styleId, count, config, seriesId, sceneIds, shotIds, reference, overrides, staged]);
+    void writeWorkspaceDraft('series', currentDraft).catch(() => pushToast('error', '系列草稿保存失败, 请检查本地空间'));
+    for (const [key, value] of Object.entries({ batch_template: template, batch_brief: brief, batch_tasks: taskText, batch_style: '', batch_count: String(count), batch_aspect_ratio: config.aspectRatio, batch_quality: config.quality, batch_output_format: config.outputFormat, batch_series_id: seriesId, batch_scene_ids: JSON.stringify(sceneIds), batch_shot_ids: JSON.stringify(shotIds) })) writeDraft(key, value);
+  }, [ready, currentDraft, template, brief, taskText, count, config, seriesId, sceneIds, shotIds]);
 
   function updateTask(index: number, prompt: string) { const next = [...tasks]; next[index] = { ...next[index], prompt }; setTaskText(next.map((task) => `${task.title}: ${task.prompt.replaceAll('\n', ' ')}`).join('\n')); }
-  function resetSeries() { if (lock.current) return; setBrief(''); setTaskText(''); setSeriesId(''); setSceneIds([]); setShotIds([]); setStaged([]); setOverrides({}); setReference(null); setEditing(null); setPreview(null); }
-  function setTemplate(value: SeriesTemplate) { if (lock.current || activeJobs || canContinue || value === template) return; rawSetTemplate(value); setTaskText(''); setSeriesId(''); setSceneIds([]); setShotIds([]); setStaged([]); setOverrides({}); }
+  function resetSeries() { if (lock.current) return; setBrief(''); setTaskText(''); setSeriesId(''); setSceneIds([]); setShotIds([]); setStaged([]); setStagedIds([]); setOverrides({}); setReference(null); setEditing(null); setPreview(null); }
+  function setTemplate(value: SeriesTemplate) { if (lock.current || activeJobs || canContinue || value === template) return; rawSetTemplate(value); setTaskText(''); setSeriesId(''); setSceneIds([]); setShotIds([]); setStaged([]); setStagedIds([]); setOverrides({}); }
   async function uploadReference(file: File) { try { setReference({ id: randomId(), ...await prepareImageFile(file) }); } catch (error) { pushToast('error', error instanceof Error ? error.message : '参考图读取失败'); } }
   async function splitStory() {
     if (lock.current || !ready || editing || preview || activeJobs || canContinue) return false;
@@ -139,7 +140,7 @@ export function useSeriesStudio({ onSubmit, onSubmitBatch, onUpdate, results, jo
     if (tasks.some((task) => task.prompt.trim()) && !window.confirm('重新拆解会替换当前分镜提示词, 包括手动修改的内容. 是否继续?')) return false;
     lock.current = true; setBusy(true);
     try {
-      const response = await requestTextGeneration(buildSeriesSplitPrompt(template, count), `系列梗概: ${brief}\n视觉风格: ${selectedStyle?.prompt || '自然, 简洁, 主体清楚'}`);
+      const response = await requestTextGeneration(buildSeriesSplitPrompt(template, count), `系列梗概: ${brief}\n从梗概中提取主体与画面风格要求, 保持全系列一致.`);
       const parsed = parseSeriesPlan(response.text, count);
       setTaskText(parsed.map((task) => `${task.title}: ${task.prompt.replaceAll('\n', ' ')}`).join('\n'));
       pushToast('success', `已拆解 ${parsed.length} 幕, 请逐镜检查后确认生成图片`);
@@ -154,10 +155,9 @@ export function useSeriesStudio({ onSubmit, onSubmitBatch, onUpdate, results, jo
     const previous = allSeriesResults.filter((item) => item.sceneId === identity.sceneId).sort((a, b) => (b.version || 1) - (a.version || 1))[0];
     const settings = { ...config, ...overrides[identity.sceneId], ...override };
     const size = resolveSize(settings.aspectRatio, settings.sizeTier);
-    const styled = applyAnyImageStyleToPrompt(task.prompt, selectedStyle);
-    const prompt = scenePrompt({ brief, prompt: styled, index, count });
+    const prompt = scenePrompt({ brief, prompt: task.prompt, index, count });
     const request = await buildGenerationPayload({ ...settings, requestSize: size.size, sizeHint: size.hint, prompt, refImages: refOverride ?? (reference ? [reference] : []) });
-    return { requestId: identity.requestId, request, ...(referenceJobId ? { referenceJobId } : {}), clientContext: { kind: 'series', placeholderId: identity.placeholderId, prompt: task.prompt, mode: request.references.length || referenceJobId ? 'reference' : 'text', seriesId: identity.seriesId, sceneId: identity.sceneId, sceneIndex: index, version: (previous?.version || 0) + 1, parentId: previous?.id, template, masterPrompt: brief.trim(), styleId: selectedStyle?.id, styleName: selectedStyle?.name } } satisfies QueueSubmitInput;
+    return { requestId: identity.requestId, request, ...(referenceJobId ? { referenceJobId } : {}), clientContext: { kind: 'series', placeholderId: identity.placeholderId, prompt: task.prompt, mode: request.references.length || referenceJobId ? 'reference' : 'text', seriesId: identity.seriesId, sceneId: identity.sceneId, sceneIndex: index, version: (previous?.version || 0) + 1, parentId: previous?.id, template, masterPrompt: brief.trim() } } satisfies QueueSubmitInput;
   }
 
   async function submitBatch(redraw = false) {
@@ -188,8 +188,10 @@ export function useSeriesStudio({ onSubmit, onSubmitBatch, onUpdate, results, jo
         inputs.push(await createInput(index, task, { seriesId: nextSeriesId, sceneId: nextSceneIds[index], placeholderId: nextShotIds[index], requestId: requestIds[index] }, anchor, undefined, refs));
       }
       if (!inputs.length) { pushToast('info', '所有分镜均已完成, 可选择单镜或整套重绘'); return; }
-      setSeriesId(nextSeriesId); setSceneIds(nextSceneIds); setShotIds(nextShotIds); setStaged(inputs);
-      await writeWorkspaceDraft('series', { version: 1, seriesId: nextSeriesId, reference, sceneIds: nextSceneIds, shotIds: nextShotIds, overrides, config, stagedIds: inputs.map((input) => input.requestId) });
+      setSeriesId(nextSeriesId); setSceneIds(nextSceneIds); setShotIds(nextShotIds); setStaged(inputs); setStagedIds(inputs.map((input) => input.requestId));
+      const draft: SeriesDraft = { ...currentDraft, seriesId: nextSeriesId, sceneIds: nextSceneIds, shotIds: nextShotIds, stagedIds: inputs.map((input) => input.requestId) };
+      const revision = await writeWorkspaceDraft('series', draft);
+      await registerWorkspaceSubmission('series', draft, inputs.map((input) => input.requestId), { revision });
       writeDraft('batch_series_id', nextSeriesId); writeDraft('batch_scene_ids', JSON.stringify(nextSceneIds)); writeDraft('batch_shot_ids', JSON.stringify(nextShotIds));
       await onSubmitBatch(inputs);
       pushToast('success', `已提交 ${inputs.length} 幕, 后续分镜会参考首镜主体`);
@@ -208,8 +210,14 @@ export function useSeriesStudio({ onSubmit, onSubmitBatch, onUpdate, results, jo
       const anchor = shot.record || seriesResults[0];
       const refs = anchor ? [{ id: anchor.id, recordId: anchor.id, name: '主体参考.png', dataUrl: await getRecordDataUrl(anchor), size: anchor.bytes || 0 }] : undefined;
       const input = await createInput(index, { ...shot.task, prompt: promptOverride ?? shot.task.prompt }, identity, undefined, override, refs);
-      setSeriesId(identity.seriesId); setSceneIds((old) => tasks.map((_, i) => i === index ? nextSceneId : old[i] || randomId()));
-      setShotIds((old) => tasks.map((_, i) => i === index ? identity.placeholderId : old[i] || ''));
+      const nextSceneIds = tasks.map((_, i) => i === index ? nextSceneId : sceneIds[i] || randomId());
+      const nextShotIds = tasks.map((_, i) => i === index ? identity.placeholderId : shotIds[i] || '');
+      const nextOverrides = override ? { ...overrides, [nextSceneId]: { ...overrides[nextSceneId], ...override } } : overrides;
+      const nextTaskText = promptOverride === undefined ? taskText : tasks.map((task, i) => `${task.title}: ${(i === index ? promptOverride : task.prompt).replaceAll('\n', ' ')}`).join('\n');
+      setSeriesId(identity.seriesId); setSceneIds(nextSceneIds); setShotIds(nextShotIds); setOverrides(nextOverrides); setTaskText(nextTaskText);
+      const draft: SeriesDraft = { ...currentDraft, seriesId: identity.seriesId, sceneIds: nextSceneIds, shotIds: nextShotIds, overrides: nextOverrides, taskText: nextTaskText };
+      const revision = await writeWorkspaceDraft('series', draft);
+      await registerWorkspaceSubmission('series', draft, [input.requestId], { revision, append: true });
       await onSubmit(input);
       pushToast('success', `第 ${index + 1} 镜已加入重绘队列`);
     } catch (error) { pushToast('error', error instanceof Error ? error.message : '单镜重绘失败'); }
@@ -221,6 +229,7 @@ export function useSeriesStudio({ onSubmit, onSubmitBatch, onUpdate, results, jo
     const { index, prompt, ...settings } = editing;
     const shot = shots[index];
     try {
+      const previousRevision = shot.job?.status === 'pending' ? await writeWorkspaceDraft('series', currentDraft) : undefined;
       if (shot.job?.status === 'pending') {
         const input = await getOutboxInput(shot.job.requestId);
         if (!input) throw new Error('此浏览器没有待执行任务的原始配方');
@@ -229,13 +238,20 @@ export function useSeriesStudio({ onSubmit, onSubmitBatch, onUpdate, results, jo
         await onUpdate(shot.job.id, updated);
       }
       const sceneId = sceneIds[index] || randomId();
-      setSceneIds((old) => tasks.map((_, i) => i === index ? sceneId : old[i] || randomId()));
-      setOverrides((old) => ({ ...old, [sceneId]: settings })); updateTask(index, prompt); setEditing(null);
+      const nextSceneIds = tasks.map((_, i) => i === index ? sceneId : sceneIds[i] || randomId());
+      const nextOverrides = { ...overrides, [sceneId]: settings };
+      const nextTaskText = tasks.map((task, i) => `${task.title}: ${(i === index ? prompt : task.prompt).replaceAll('\n', ' ')}`).join('\n');
+      setSceneIds(nextSceneIds); setOverrides(nextOverrides); setTaskText(nextTaskText); setEditing(null);
+      if (shot.job?.status === 'pending') {
+        const draft: SeriesDraft = { ...currentDraft, sceneIds: nextSceneIds, overrides: nextOverrides, taskText: nextTaskText };
+        const revision = await writeWorkspaceDraft('series', draft);
+        await registerWorkspaceSubmission('series', draft, [shot.job.requestId], { revision, append: true, previousRevision });
+      }
       if (shot.record && shot.job?.status !== 'pending') await redrawShot(index, settings, prompt);
       else pushToast('success', shot.job?.status === 'pending' ? '排队分镜已更新' : '本镜设置已保存');
     } catch (error) { pushToast('error', error instanceof Error ? error.message : '本镜设置保存失败'); }
   }
   async function exportSeries() { try { await downloadRecords(seriesResults, `sprout-series-${seriesId}`); pushToast('success', `已打包 ${seriesResults.length} 幕`); } catch { pushToast('error', '打包失败, 请检查本地原图'); } }
   function removeShot(index: number) { setTaskText(tasks.filter((_, i) => i !== index).map((task) => `${task.title}: ${task.prompt}`).join('\n')); setSceneIds((old) => old.filter((_, i) => i !== index)); setShotIds((old) => old.filter((_, i) => i !== index)); setCount((old) => Math.max(3, old - 1)); }
-  return { ready, template, setTemplate, brief, setBrief, taskText, setTaskText, styleId, setStyleId, count, setCount, config, setConfig, selectedStyle, tasks, busy, submitting, toasts, pushToast, seriesId, seriesResults, allSeriesResults, activeJobs, canContinue, metadata, view, setView, preview, setPreview, shots, shotIds, splitStory, submitBatch, exportSeries, updateTask, removeShot, resetSeries, redrawShot, reference, setReference, uploadReference, editing, setEditing, beginEdit, saveEdit };
+  return { ready, template, setTemplate, brief, setBrief, taskText, setTaskText, count, setCount, config, setConfig, tasks, busy, submitting, toasts, pushToast, seriesId, seriesResults, allSeriesResults, activeJobs, canContinue, metadata, view, setView, preview, setPreview, shots, shotIds, splitStory, submitBatch, exportSeries, updateTask, removeShot, resetSeries, redrawShot, reference, setReference, uploadReference, editing, setEditing, beginEdit, saveEdit };
 }

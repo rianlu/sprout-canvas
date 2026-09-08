@@ -79,6 +79,10 @@ export function findSubmission(userId, requestId) {
   return [...imageJobs.values()].find((job) => job.userId === userId && job.requestId === requestId);
 }
 
+function retrySuccessor(job) {
+  return [...imageJobs.values()].find((candidate) => candidate.userId === job.userId && candidate.retryOf === job.id);
+}
+
 /** Identical request IDs are accepted once, including across process restarts. */
 export function submitGeneration(input, userId, selectedProvider) {
   const hash = submissionHash(input);
@@ -97,6 +101,7 @@ export function submitGeneration(input, userId, selectedProvider) {
   if (input.retryOf) {
     const source = imageJobs.get(input.retryOf);
     if (!source || source.userId !== userId) throw requestError('原任务不存在', 404);
+    if (retrySuccessor(source)) throw requestError('此任务已重新提交, 请查看最新任务', 409);
     if (['running', 'pending', 'succeeded'].includes(source.status)) throw requestError('此任务无需重试', 409);
   }
   assertCapacity(userId, Buffer.byteLength(JSON.stringify(input)));
@@ -236,6 +241,7 @@ export function enqueue(job) {
 export function retryFailedJob(jobId, viewerUserId) {
   const source = imageJobs.get(jobId);
   if (!source || source.userId !== viewerUserId) return { ok: false, status: 404, error: '任务不存在或已过期' };
+  if (retrySuccessor(source)) return { ok: false, status: 409, error: '此任务已重新提交, 请查看最新任务' };
   if (source.status !== 'failed' || !source.originalBody?.length) return { ok: false, status: 400, error: '请从浏览器中的原始配方重新提交' };
   const retryJob = {
     ...source,
@@ -345,6 +351,7 @@ function terminalLabel(status) {
 
 function publicJob(job, viewerUserId) {
   const userQueue = pendingByUser.get(viewerUserId) || [];
+  const supersededBy = retrySuccessor(job)?.id || '';
   const yourPosition = job.status === 'pending' && job.userId === viewerUserId
     ? userQueue.indexOf(job) + 1
     : 0;
@@ -357,7 +364,8 @@ function publicJob(job, viewerUserId) {
     providerId: job.providerId || '',
     providerName: job.providerName || '',
     retryOf: job.retryOf || '',
-    canRetry: ['failed', 'expired', 'interrupted'].includes(job.status) && Boolean(job.submission || job.originalBody?.length),
+    supersededBy,
+    canRetry: !supersededBy && ['failed', 'expired', 'interrupted'].includes(job.status) && Boolean(job.submission || job.originalBody?.length),
     acknowledgedAt: job.acknowledgedAt || 0,
     archivedAt: job.archivedAt || 0,
     outcomeUnknown: Boolean(job.outcomeUnknown),

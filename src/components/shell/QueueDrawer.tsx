@@ -33,6 +33,7 @@ function statusLabel(job: QueueJob): {
   meta: string;
   icon: 'running' | 'queued' | 'failed' | 'succeeded';
 } {
+  if (job.supersededBy) return { title: jobTitle(job), meta: '已重新提交', icon: 'failed' };
   if (job.status === 'failed') return { title: jobTitle(job), meta: '生成失败 · 可换服务商重试', icon: 'failed' };
   if (job.status === 'interrupted') return { title: jobTitle(job), meta: job.outcomeUnknown ? '结果未知 · 需手动处理' : '等待恢复排队', icon: 'failed' };
   if (job.status === 'expired') return { title: jobTitle(job), meta: '临时结果已过期', icon: 'failed' };
@@ -168,6 +169,8 @@ export function QueueDrawer({ open, onClose, jobs, onCancelJob, onRetryJob, onPr
                     </div>
                   ) : job.status === 'running' ? (
                     <span title="请求已发往上游, 无法撤回" className="font-meta-sm text-meta-sm text-outline">生成中</span>
+                  ) : job.supersededBy ? (
+                    <span className="font-meta-sm text-meta-sm text-on-surface-variant">历史记录</span>
                   ) : ['failed', 'expired', 'interrupted'].includes(job.status) ? (
                     <button
                       type="button"

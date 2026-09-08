@@ -10,6 +10,9 @@ import { getTextProviderCircuitState, isTextProviderCircuitOpen } from './server
 import { createStateStore } from './server/state-store.mjs';
 import { validateGenerationSubmission, toImagesPayload, requestError } from './shared/generation-contract.mjs';
 import * as queue from './server/queue.mjs';
+import { createStyleStore } from './server/style-store.mjs';
+import { createAdminAuth } from './server/admin-auth.mjs';
+import { createStyleRoutes } from './server/style-routes.mjs';
 
 let shuttingDown = false;
 const MIME_TYPES = new Map([
@@ -25,7 +28,9 @@ const bootConfig = await readLocalConfig().catch((error) => {
 });
 const state = createStateStore(bootConfig.stateFile);
 globalThis.__LOG_FILE__ = bootConfig.logFile;
-initAuth(state);
+const styles = createStyleStore(bootConfig.styleDataDir, { log: logLine });
+const styleRoutes = createStyleRoutes({ store: styles, adminAuth: createAdminAuth(styles, bootConfig.cookieNamespace), readConfig: readLocalConfig, requireUser: requireApiAuth });
+initAuth(state, bootConfig.cookieNamespace);
 queue.init({ readLocalConfig, upstreamHeaders, timeoutSignal, stripHtml, logLine });
 queue.initializePersistence(state);
 
@@ -127,6 +132,7 @@ async function route(req, res) {
   if (url.pathname === '/api/auth/status' && req.method === 'GET') return await handleAuthStatus(req, res);
   if (url.pathname === '/api/auth/login' && req.method === 'POST') return await handleAuthLogin(req, res);
   if (url.pathname === '/api/auth/logout' && req.method === 'POST') return await handleAuthLogout(req, res);
+  if (await styleRoutes(req, res, url)) return;
   if (!url.pathname.startsWith('/api/')) return await serveStatic(req, res, url.pathname);
   if (!(await requireApiAuth(req, res))) return;
   const userId = sessionFromRequest(req).userId;
@@ -183,6 +189,7 @@ async function shutdown(signal) {
   await queue.stopWorker();
   await httpClosed;
   state.close();
+  styles.close();
   clearTimeout(deadline);
   process.exit(0);
 }

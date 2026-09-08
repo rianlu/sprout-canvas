@@ -11,6 +11,7 @@ export interface QueueJob {
   providerId: string;
   providerName: string;
   retryOf: string;
+  supersededBy?: string;
   canRetry: boolean;
   clientContext?: QueueClientContext | null;
   recipe?: GenerationRecipe | null;

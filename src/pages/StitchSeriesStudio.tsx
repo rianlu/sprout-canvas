@@ -11,7 +11,6 @@ import { RecordImage } from '../components/gallery/RecordImage';
 import { useSeriesStudio, TEMPLATES, seriesAspects, MIN_BATCH_COUNT, MAX_BATCH_COUNT, type SeriesActions } from '../hooks/useSeriesStudio';
 
 export interface SeriesStudioProps extends SeriesActions {
-  onOpenStyles: () => void;
   onEditRecord: (record: ResultRecord) => void;
   onUseRecipe: (record: ResultRecord) => void;
   onUseAsRef: (record: ResultRecord) => void;
@@ -21,8 +20,8 @@ export interface SeriesStudioProps extends SeriesActions {
 }
 
 export function SeriesStudio(props: SeriesStudioProps) {
-  const { onOpenStyles, onEditRecord, onUseRecipe, onRetry, onCancel, onPrioritize } = props;
-  const { ready, template, setTemplate, brief, setBrief, count, setCount, config, setConfig, selectedStyle, busy, submitting, toasts, pushToast, seriesId, seriesResults, allSeriesResults, activeJobs, canContinue, metadata, view, setView, preview, setPreview, shots, shotIds, splitStory, submitBatch, exportSeries, updateTask, removeShot, resetSeries, redrawShot, reference, setReference, uploadReference, editing, setEditing, beginEdit, saveEdit } = useSeriesStudio(props);
+  const { onEditRecord, onUseRecipe, onRetry, onCancel, onPrioritize } = props;
+  const { ready, template, setTemplate, brief, setBrief, count, setCount, config, setConfig, busy, submitting, toasts, pushToast, seriesId, seriesResults, allSeriesResults, activeJobs, canContinue, metadata, view, setView, preview, setPreview, shots, shotIds, splitStory, submitBatch, exportSeries, updateTask, removeShot, resetSeries, redrawShot, reference, setReference, uploadReference, editing, setEditing, beginEdit, saveEdit } = useSeriesStudio(props);
   const storyboardRef = useRef<HTMLElement>(null);
   const shotLabel = '分镜矩阵看板 (Storyboard Sequence)';
   const plannedTotal = shots.length;
@@ -65,7 +64,7 @@ export function SeriesStudio(props: SeriesStudioProps) {
               <div className="flex items-center gap-space-xs text-on-surface-variant font-meta-sm text-meta-sm self-start sm:self-center">
                 <span className="flex items-center gap-1 bg-surface-container-low px-2.5 py-1 rounded-lg">
                   <span className={`w-2 h-2 rounded-full ${busy ? 'bg-primary animate-pulse' : 'bg-primary'}`} />
-                  统一风格: <span className="text-primary font-medium">{selectedStyle?.name || '未选择'}</span>
+                  后续分镜参考首镜
                 </span>
               </div>
             </div>
@@ -207,27 +206,9 @@ export function SeriesStudio(props: SeriesStudioProps) {
                   <div className="flex flex-col gap-1.5">
                     <span className="font-body-sm text-body-sm font-medium text-on-surface flex items-center gap-1">
                       <Brush size={16} className="text-primary" aria-hidden />
-                      统一画风 / 基底
+                      系列参考图
                     </span>
-                    <button
-                      type="button"
-                      className="flex items-center justify-between bg-surface-container-lowest rounded-xl border border-outline-variant/30 px-3 py-1.5 hover:border-primary/50 transition-colors text-left group"
-                      title="在风格库选择基底风格"
-                      onClick={onOpenStyles}
-                      disabled={busy || submitting}
-                    >
-                      <div className="flex items-center gap-1.5 truncate">
-                        <span className="w-3.5 h-3.5 rounded-full bg-[#E5B582] border border-outline-variant/30 flex-shrink-0" />
-                        <span className="font-body-sm text-body-sm text-on-surface font-medium truncate">
-                          {selectedStyle?.name || '未选择 (可选)'}
-                        </span>
-                      </div>
-                      <RefreshCw
-                        size={16}
-                        className="text-primary group-hover:text-on-surface transition-colors"
-                        aria-hidden
-                      />
-                    </button>
+                    <p className="font-meta-sm text-meta-sm text-on-surface-variant">主体与画风要求写入故事梗概, 可添加图片辅助参考.</p>
                     <div className="flex flex-wrap items-center gap-1.5 font-meta-sm text-meta-sm text-on-surface-variant">
                       {reference && <img src={reference.dataUrl} alt="系列主体参考" className="w-7 h-7 rounded-lg object-cover flex-shrink-0" />}
                       <label className="flex items-center gap-1 px-1 py-1 rounded-lg cursor-pointer hover:text-primary focus-within:ring-2 focus-within:ring-primary/20">
@@ -566,7 +547,7 @@ export function SeriesStudio(props: SeriesStudioProps) {
                           <>
                             <span className="flex items-center gap-1 min-w-0">
                               <StitchIcon name="palette" size={14} className="text-primary" />
-                              <span className="truncate">{selectedStyle?.name || '系列风格'}基底</span>
+                              <span className="truncate">沿用系列画面要求</span>
                             </span>
                             <button
                               type="button"

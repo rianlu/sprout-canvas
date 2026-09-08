@@ -8,7 +8,8 @@ export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise
   const data = contentType.includes('application/json') ? await response.json().catch(() => null) : await response.text();
   if (!response.ok) {
     const message = typeof data === 'object' && data && 'error' in data ? String((data as { error: unknown }).error) : `HTTP ${response.status}`;
-    if (response.status === 401 && !path.startsWith('/api/auth/')) window.dispatchEvent(new Event('sprout:auth-expired'));
+    if (response.status === 401 && path.startsWith('/api/admin/') && !path.startsWith('/api/admin/auth/')) window.dispatchEvent(new Event('sprout:admin-expired'));
+    else if (response.status === 401 && !path.startsWith('/api/auth/') && !path.startsWith('/api/admin/')) window.dispatchEvent(new Event('sprout:auth-expired'));
     throw new ApiError(message, response.status);
   }
   return data as T;

@@ -2,6 +2,8 @@ import type { ResultRecord } from '../../types/generation';
 import type { GenerationSubmission } from '../../../shared/generation-contract.mjs';
 import { dataUrlToBlob, imageFromDataUrl } from '../image/data-url';
 import { dataUrlFormat, normalizeImageOutputFormat } from '../image/format';
+import { randomId } from '../random/id';
+import { writeDraft } from './drafts';
 
 const DB_NAME = 'img-gen-gallery';
 const DB_VERSION = 4;
@@ -10,6 +12,48 @@ type Metadata = Omit<ResultRecord, 'dataUrl'> & { legacyDataUrl?: string };
 export type Outbox = { requestId: string; input: GenerationSubmission; jobId?: string; savedAt: number; error?: string; retryRequestId?: string };
 let connection: Promise<IDBDatabase> | undefined;
 let migration: Promise<void> | undefined;
+type WorkspaceSubmission = { revision: string; requestIds: string[]; completedIds: string[]; scope?: unknown };
+type WorkspaceEntry = { version: number; data: unknown; revision?: string; submission?: WorkspaceSubmission };
+const draftWrites = new Map<string, Promise<unknown>>();
+
+function queueDraftWrite<T>(key: string, operation: () => Promise<T>): Promise<T> {
+  const next = (draftWrites.get(key) || Promise.resolve()).catch(() => {}).then(operation);
+  draftWrites.set(key, next);
+  void next.finally(() => { if (draftWrites.get(key) === next) draftWrites.delete(key); }).catch(() => {});
+  return next;
+}
+
+function sameDraftData(left: unknown, right: unknown): boolean {
+  if (Object.is(left, right)) return true;
+  if (!left || !right || typeof left !== 'object' || typeof right !== 'object' || Array.isArray(left) !== Array.isArray(right)) return false;
+  if (Array.isArray(left) && Array.isArray(right)) return left.length === right.length && left.every((item, index) => sameDraftData(item, right[index]));
+  const a = left as Record<string, unknown>, b = right as Record<string, unknown>;
+  const keys = Object.keys(a).filter((key) => a[key] !== undefined);
+  return keys.length === Object.keys(b).filter((key) => b[key] !== undefined).length && keys.every((key) => Object.hasOwn(b, key) && sameDraftData(a[key], b[key]));
+}
+
+function emptyWorkspaceContent(key: string, data: unknown) {
+  const value = (data || {}) as Record<string, unknown>;
+  if (key === 'studio') return {
+    ...value, config: { ...(value.config as object), mode: 'text', prompt: '', refImages: [] },
+    refImage: null, sourceRecord: null, mask: null, maskDataUrl: '', styleId: 'default', styleName: '',
+  };
+  return { ...value, brief: '', taskText: '', reference: null, seriesId: '', sceneIds: [], shotIds: [], stagedIds: [], overrides: {} };
+}
+
+function clearLegacyWorkspaceContent(key: string) {
+  const keys = key === 'studio' ? ['studio_prompt', 'studio_ref_image', 'studio_open_mask', 'studio_style']
+    : ['batch_brief', 'batch_tasks', 'batch_series_id', 'batch_scene_ids', 'batch_shot_ids', 'batch_transfer'];
+  for (const name of keys) writeDraft(name, '');
+}
+
+function settleWorkspaceSubmission(key: string, entry: WorkspaceEntry): { entry: WorkspaceEntry; cleared: boolean } {
+  const submission = entry.submission;
+  if (!submission || !submission.requestIds.every((id) => submission.completedIds.includes(id))) return { entry, cleared: false };
+  const { submission: _finished, ...retained } = entry;
+  if (entry.revision !== submission.revision) return { entry: retained, cleared: false };
+  return { entry: { version: 1, data: emptyWorkspaceContent(key, entry.data), revision: randomId() }, cleared: true };
+}
 
 function request<T>(operation: IDBRequest<T>): Promise<T> {
   return new Promise((resolve, reject) => {
@@ -328,15 +372,77 @@ async function collectReferencesInTransaction(tx: IDBTransaction) {
 }
 
 export async function readWorkspaceDraft<T>(key: string): Promise<T | undefined> {
+  await draftWrites.get(key);
   const db = await openGalleryDb();
   const value = await request(db.transaction('drafts').objectStore('drafts').get(key));
   return value?.version === 1 ? value.data as T : undefined;
 }
 
-export async function writeWorkspaceDraft(key: string, data: unknown) {
-  const db = await openGalleryDb();
-  await transact(db, ['drafts'], (tx) => {
-    if (data === undefined) tx.objectStore('drafts').delete(key);
-    else tx.objectStore('drafts').put({ version: 1, data }, key);
+export function writeWorkspaceDraft(key: string, data: unknown): Promise<string | undefined> {
+  return queueDraftWrite(key, async () => {
+    const db = await openGalleryDb();
+    return transact(db, ['drafts'], async (tx) => {
+      const drafts = tx.objectStore('drafts');
+      if (data === undefined) { drafts.delete(key); return; }
+      const previous: WorkspaceEntry | undefined = await request(drafts.get(key));
+      const revision = previous?.revision && sameDraftData(previous.data, data) ? previous.revision : randomId();
+      drafts.put({ ...previous, version: 1, data, revision }, key);
+      return revision;
+    });
+  });
+}
+
+/** Associate one unchanged draft revision with its logical image requests. */
+export function registerWorkspaceSubmission(key: 'studio' | 'series', data: unknown, requestIds: string[], options: { append?: boolean; revision?: string; previousRevision?: string } = {}): Promise<void> {
+  return queueDraftWrite(key, async () => {
+    if (!requestIds.length) return;
+    const db = await openGalleryDb();
+    const cleared = await transact(db, ['drafts', 'records'], async (tx) => {
+      const drafts = tx.objectStore('drafts');
+      const entry: WorkspaceEntry | undefined = await request(drafts.get(key));
+      if (!entry?.revision || !sameDraftData(entry.data, data) || options.revision && entry.revision !== options.revision) return;
+      const scope = (data as Record<string, unknown>).seriesId;
+      const previous = options.append && entry.submission?.scope === scope ? entry.submission : undefined;
+      if (previous && options.previousRevision && previous.revision !== options.previousRevision) return;
+      const ids = [...new Set([...(previous?.requestIds || []), ...requestIds])];
+      const completed = new Set(previous?.completedIds || []);
+      // A confirmed queue update can finish saving before its draft association is refreshed.
+      for (const id of ids) if (await request(tx.objectStore('records').index('requestId').getKey(id)) !== undefined) completed.add(id);
+      const settled = settleWorkspaceSubmission(key, { ...entry, submission: { revision: entry.revision, scope, requestIds: ids, completedIds: [...completed] } });
+      drafts.put(settled.entry, key);
+      return settled.cleared;
+    });
+    if (cleared) clearLegacyWorkspaceContent(key);
+  });
+}
+
+/** Keep the draft attached to a retry after its new request has been accepted. */
+export async function replaceWorkspaceRequest(previousId: string, nextId: string) {
+  for (const key of ['studio', 'series']) await queueDraftWrite(key, async () => {
+    const db = await openGalleryDb();
+    await transact(db, ['drafts'], async (tx) => {
+      const drafts = tx.objectStore('drafts');
+      const entry: WorkspaceEntry | undefined = await request(drafts.get(key));
+      if (!entry?.submission?.requestIds.includes(previousId)) return;
+      drafts.put({ ...entry, submission: { ...entry.submission, requestIds: entry.submission.requestIds.map((id) => id === previousId ? nextId : id), completedIds: entry.submission.completedIds.filter((id) => id !== previousId) } }, key);
+    });
+  });
+}
+
+/** Call only after the corresponding result has been saved to IndexedDB. */
+export async function completeWorkspaceRequest(requestId: string) {
+  for (const key of ['studio', 'series']) await queueDraftWrite(key, async () => {
+    const db = await openGalleryDb();
+    const cleared = await transact(db, ['drafts'], async (tx) => {
+      const drafts = tx.objectStore('drafts');
+      const entry: WorkspaceEntry | undefined = await request(drafts.get(key));
+      const submission = entry?.submission;
+      if (!entry || !submission?.requestIds.includes(requestId)) return false;
+      const completedIds = [...new Set([...submission.completedIds, requestId])];
+      const settled = settleWorkspaceSubmission(key, { ...entry, submission: { ...submission, completedIds } });
+      drafts.put(settled.entry, key);
+      return settled.cleared;
+    });
+    if (cleared) clearLegacyWorkspaceContent(key);
   });
 }

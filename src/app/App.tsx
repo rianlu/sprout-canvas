@@ -6,6 +6,7 @@ import { QueueDrawer } from '../components/shell/QueueDrawer';
 import { CreativeStudio } from '../pages/StitchCreativeStudio';
 import { SeriesStudio } from '../pages/StitchSeriesStudio';
 import { StylesLibrary } from '../pages/StitchStylesLibrary';
+import { StyleAdmin } from '../pages/StyleAdmin';
 import { useAuth } from '../hooks/useAuth';
 import { useGallery } from '../hooks/useGallery';
 import { useQueue } from '../hooks/useQueue';
@@ -16,12 +17,12 @@ import type { GenerationConfig, ResultRecord } from '../types/generation';
 import type { ServerConfig } from '../types/provider';
 import { getRecordDataUrl, writeWorkspaceDraft } from '../lib/storage/gallery-db';
 import { recipeDraft, sourceImageDraft, type StudioDraft } from '../lib/image/recipe';
-import { findImageStyle } from '../lib/styles/image-styles';
+import type { StyleRecord } from '../../shared/style-contract.mjs';
 import { sizePreset, resolveSize } from '../lib/api/generation';
 import { randomId } from '../lib/random/id';
 import type { SeriesCard } from '../lib/image/gallery';
 
-export type PageKey = 'studio' | 'series' | 'styles' | 'gallery';
+export type PageKey = 'studio' | 'series' | 'styles' | 'gallery' | 'admin';
 
 function LoginScreen({ onLogin, loading, passwordRequired = true }: { onLogin: (password: string) => Promise<void>; loading: boolean; passwordRequired?: boolean }) {
   const [password, setPassword] = useState('');
@@ -81,11 +82,10 @@ function LoginScreen({ onLogin, loading, passwordRequired = true }: { onLogin: (
 }
 
 export function App() {
-  const [page, setCurrentPage] = useState<PageKey>(() => ['studio', 'series', 'styles', 'gallery'].includes(location.hash.slice(1)) ? location.hash.slice(1) as PageKey : 'studio');
+  const [page, setCurrentPage] = useState<PageKey>(() => ['studio', 'series', 'styles', 'gallery', 'admin'].includes(location.hash.slice(1)) ? location.hash.slice(1) as PageKey : 'studio');
   const setPage = useCallback((next: PageKey) => { setCurrentPage(next); if (location.hash !== `#${next}`) history.pushState(null, '', `#${next}`); }, []);
-  useEffect(() => { const changed = () => { const value = location.hash.slice(1); if (['studio', 'series', 'styles', 'gallery'].includes(value)) setCurrentPage(value as PageKey); }; window.addEventListener('popstate', changed); return () => window.removeEventListener('popstate', changed); }, []);
+  useEffect(() => { const changed = () => { const value = location.hash.slice(1); if (['studio', 'series', 'styles', 'gallery', 'admin'].includes(value)) setCurrentPage(value as PageKey); }; window.addEventListener('popstate', changed); return () => window.removeEventListener('popstate', changed); }, []);
   const [studioRevision, setStudioRevision] = useState(0);
-  const [styleTarget, setStyleTarget] = useState<'studio' | 'series'>('studio');
   const [queueOpen, setQueueOpen] = useState(false);
   const [ready, setReady] = useState(false);
   const [serverConfig, setServerConfig] = useState<ServerConfig | null>(null);
@@ -153,22 +153,15 @@ export function App() {
     } catch (error) { setMessage(error instanceof Error ? error.message : '配方读取失败'); }
   }, [setPage]);
 
-  const useStyle = useCallback(async (styleId: string) => {
-    const style = findImageStyle(styleId);
-    if (!style) throw new Error('该风格已不存在, 请重新选择');
-    if (styleTarget === 'series') {
-      if (!writeDraft('batch_style', style.id)) throw new Error('画风未能保存, 请检查浏览器可用空间');
-      setPage('series');
-      return;
-    }
+  const useStyle = useCallback(async (style: StyleRecord) => {
     const draft: StudioDraft = {
-      config: { mode: 'text', prompt: style.template, imageCount: 1, refImages: [] },
-      styleId: style.id, refImage: null, sourceRecord: null, mask: null, maskDataUrl: '', tone: 'none',
+      config: { mode: 'text', prompt: style.prompt, imageCount: 1, refImages: [] },
+      styleId: style.id, styleName: style.name, refImage: null, sourceRecord: null, mask: null, maskDataUrl: '', tone: 'none',
     };
     await writeWorkspaceDraft('studio-transfer', draft);
     setStudioRevision((value) => value + 1);
     setPage('studio');
-  }, [setPage, styleTarget]);
+  }, [setPage]);
 
   const deriveSeries = useCallback(async (card: SeriesCard) => {
     try {
@@ -191,7 +184,7 @@ export function App() {
         batch_transfer: '', batch_brief: card.masterPrompt,
         batch_tasks: card.records.map((record, index) => `分镜 ${index + 1}: ${record.prompt.replaceAll('\n', ' ')}`).join('\n'),
         batch_count: String(card.records.length), batch_template: first.template || 'picture-book',
-        batch_style: recipe?.styleId || '', batch_quality: config.quality, batch_output_format: config.outputFormat,
+        batch_style: '', batch_quality: config.quality, batch_output_format: config.outputFormat,
         batch_aspect_ratio: config.aspectRatio, batch_series_id: seriesId, batch_scene_ids: JSON.stringify(sceneIds), batch_shot_ids: '',
       };
       for (const [key, value] of Object.entries(drafts)) if (!writeDraft(key, value)) throw new Error('系列草稿未能保存, 请检查浏览器可用空间');
@@ -199,6 +192,7 @@ export function App() {
     } catch (error) { setMessage(error instanceof Error ? error.message : '无法复用此系列'); }
   }, [setPage]);
 
+  if (page === 'admin') return <StyleAdmin onBack={() => setPage('styles')} />;
   if (auth.loading) {
     return (
       <main className="min-h-screen bg-surface flex items-center justify-center">
@@ -212,10 +206,7 @@ export function App() {
   return (
     <AppShell
       page={page}
-      onPageChange={(nextPage) => {
-        if (nextPage === 'styles') setStyleTarget('studio');
-        setPage(nextPage);
-      }}
+      onPageChange={setPage}
       ready={ready}
       statusText={!ready ? '连接服务中' : serverConfig?.imageChannels?.some((channel) => channel.status === 'available') ? '生图通道可用' : serverConfig?.imageChannels?.some((channel) => channel.status === 'degraded' || channel.status === 'cooldown') ? '通道需检查' : '已连接 · 通道待验证'}
       onOpenHelp={() => setHelpOpen(true)}
@@ -228,10 +219,7 @@ export function App() {
         <CreativeStudio
           key={studioRevision}
           imageCapabilities={serverConfig?.imageCapabilities}
-          onOpenStyles={() => {
-            setStyleTarget('studio');
-            setPage('styles');
-          }}
+          onOpenStyles={() => setPage('styles')}
           onSubmitBatch={submitBatch}
           onCancel={queue.cancel}
           onUseRecipe={(record) => void useRecipe(record)}
@@ -243,10 +231,6 @@ export function App() {
       {page === 'series' && (
         <SeriesStudio
           imageCapabilities={serverConfig?.imageCapabilities}
-          onOpenStyles={() => {
-            setStyleTarget('series');
-            setPage('styles');
-          }}
           onEditRecord={(record) => void useAsReference(record, true)}
           onUseAsRef={(record) => void useAsReference(record)}
           onUseRecipe={(record) => void useRecipe(record)}
@@ -262,7 +246,7 @@ export function App() {
       )}
       {page === 'styles' && (
         <StylesLibrary
-          target={styleTarget}
+          onManage={() => setPage('admin')}
           onUseInStudio={useStyle}
         />
       )}

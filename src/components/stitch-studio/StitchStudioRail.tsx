@@ -28,6 +28,7 @@ import { MAX_PROMPT_LENGTH } from '../../../shared/generation-contract.mjs';
 /* ============ 单图创作 · 控制轨 (照搬 Stitch 单图稿 LEFT CONTROL PANEL, 类名原样) ============ */
 
 export interface StitchStudioRailProps {
+  onNewCreation: () => void;
   onOpenStyles: () => void;
   prompt: string;
   onPromptChange: (value: string) => void;
@@ -35,9 +36,6 @@ export interface StitchStudioRailProps {
   polishing: boolean;
   pinnedStyleName: string | null;
   onUnpinStyle: () => void;
-  quickStyles: { id: string; label: string }[];
-  activeStyleId: string | null;
-  onPickStyle: (id: string) => void;
   refImage: { name: string; dataUrl: string } | null;
   onReplaceRef: (file: File) => void;
   onOpenMaskEditor: () => void;
@@ -157,9 +155,6 @@ export function StitchStudioRail(props: StitchStudioRailProps) {
     polishing,
     pinnedStyleName,
     onUnpinStyle,
-    quickStyles,
-    activeStyleId,
-    onPickStyle,
     refImage,
     onReplaceRef,
     onOpenMaskEditor,
@@ -173,13 +168,14 @@ export function StitchStudioRail(props: StitchStudioRailProps) {
   } = props;
   const fileRef = useRef<HTMLInputElement>(null);
   const isEdit = config.mode === 'edit';
+  const outputFormats = props.imageCapabilities?.formats ?? [];
   const sourceRecipe = props.sourceRecord?.recipe;
 
   return (
     <section className="w-full lg:w-[440px] shrink-0 bg-surface-container-lowest/80 backdrop-blur-xl rounded-xl p-space-lg shadow-[0_12px_36px_rgba(85,95,75,0.06)] flex flex-col gap-space-lg sticky top-20 z-20">
       {/* 灵感提示词 */}
       <div className="flex flex-col gap-space-xs">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-space-xs">
             <Lightbulb className="text-primary" size={20} aria-hidden />
             <span className="font-headline-sm text-headline-sm text-on-surface">{isEdit ? '局部修改要求' : '灵感提示词'}</span>
@@ -194,6 +190,7 @@ export function StitchStudioRail(props: StitchStudioRailProps) {
               <X size={12} aria-hidden />
             </button>
           )}
+          <button type="button" className="font-meta-sm text-meta-sm text-on-surface-variant hover:text-primary disabled:opacity-50" title="清空文案, 参考图和蒙版, 保留常用生成设置" disabled={submitting || polishing} onClick={props.onNewCreation}>新建创作</button>
         </div>
         <div className="relative bg-surface-container-low rounded-xl p-space-md shadow-sm transition-all focus-within:shadow-[0_0_0_2px_#597445]">
           <textarea
@@ -230,41 +227,7 @@ export function StitchStudioRail(props: StitchStudioRailProps) {
         </div>
       </div>
 
-      {/* 快捷笔触风格 */}
-      {!isEdit && <div className="flex flex-col gap-space-xs">
-        <div className="flex items-center justify-between">
-          <span className="font-meta-sm text-meta-sm text-on-surface-variant tracking-wider uppercase">
-            快捷笔触风格
-          </span>
-          <button
-            type="button"
-            className="font-meta-sm text-meta-sm text-primary hover:text-primary-container flex items-center gap-0.5"
-            onClick={props.onOpenStyles}
-          >
-            更多风格
-            <StitchIcon name="north_east" size={14} />
-          </button>
-        </div>
-        <div className="flex flex-wrap gap-1.5">
-          {quickStyles.map((style) => {
-            const active = style.id === (activeStyleId || 'default');
-            return (
-              <button
-                key={style.id}
-                type="button"
-                className={
-                  active
-                    ? 'px-3 py-1 rounded-full text-meta-sm font-meta-sm bg-primary text-on-primary transition-all shadow-sm'
-                    : 'px-3 py-1 rounded-full text-meta-sm font-meta-sm bg-surface-container text-on-surface-variant hover:bg-surface-container-high transition-all'
-                }
-                onClick={() => onPickStyle(active ? '' : style.id)}
-              >
-                {style.label}
-              </button>
-            );
-          })}
-        </div>
-      </div>}
+      {!isEdit && <button type="button" onClick={props.onOpenStyles} className="flex items-center justify-between w-full p-3 rounded-xl border border-outline-variant/30 bg-surface-container-low hover:bg-surface-container text-primary font-body-sm text-body-sm"><span className="flex items-center gap-2"><StitchIcon name="palette" size={18} />从风格库挑选提示词模板</span><StitchIcon name="north_east" size={16} /></button>}
 
       {/* 基底垫图与局部重绘 */}
       <div className="bg-surface-container-low rounded-xl p-space-md flex flex-col gap-space-sm">
@@ -403,19 +366,19 @@ export function StitchStudioRail(props: StitchStudioRailProps) {
         </div>
 
         {/* 渲染调性 (PRD v3.1 新增, prompt 注入) */}
-        <div className="bg-surface-container-low p-2.5 rounded-xl flex flex-col gap-2">
+        <div role="group" aria-label="渲染调性" className="bg-surface-container-low p-2.5 rounded-xl flex flex-col gap-2">
           <div className="flex items-center justify-between">
-            <span className="font-meta-sm text-meta-sm text-on-surface font-medium">渲染调性 (style)</span>
-            <span className="font-meta-sm text-[10px] text-outline">精研美学滤镜</span>
+            <span className="font-meta-sm text-meta-sm text-on-surface font-medium">渲染调性</span>
+            <span className="font-meta-sm text-[10px] text-outline">可选的画面氛围</span>
           </div>
           <SegmentedControl
-            columns={2}
+            columns={3}
             value={tone}
             onChange={onToneChange}
             options={[
-              ...(tone === 'none' ? [{ id: 'none' as const, label: '原始配方', sub: '保持配方中的提示词' }] : []),
-              { id: 'soft', label: '柔和自然', sub: '光影真实温润 · 自然摄影质感', tag: '推荐' },
-              { id: 'vivid', label: '生动鲜明', sub: '高立体张力 · 富有超现实对比' },
+              { id: 'none', label: '不额外调整', sub: '遵循提示词与画风' },
+              { id: 'soft', label: '柔和自然', sub: '柔和光影 · 温润自然' },
+              { id: 'vivid', label: '生动鲜明', sub: '明艳色彩 · 鲜明对比' },
             ]}
           />
         </div>
@@ -480,31 +443,39 @@ export function StitchStudioRail(props: StitchStudioRailProps) {
           </div>
         </div>
 
-        {/* 导出格式 */}
-        <div className="flex items-center justify-between p-2 bg-surface-container-low rounded-xl">
-          <div className="flex items-center gap-1.5">
-            <Download className="text-outline" size={16} aria-hidden />
-            <span className="font-meta-sm text-meta-sm text-on-surface-variant font-medium">导出格式</span>
+        {/* 生成格式: 单一能力显示为固定值, 多格式通道才提供选择 */}
+        <div role="group" aria-label="生成格式" className="flex flex-col gap-1.5 p-2.5 bg-surface-container-low rounded-xl">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-1.5">
+              <Download className="text-outline" size={16} aria-hidden />
+              <span className="font-meta-sm text-meta-sm text-on-surface-variant font-medium">生成格式</span>
+            </div>
+            {outputFormats.length === 1 ? (
+              <span aria-label="当前生成格式" className="px-2.5 py-0.5 rounded-md bg-surface-container font-meta-sm text-[11px] text-primary font-medium">{outputFormats[0].toUpperCase()}</span>
+            ) : outputFormats.length > 1 ? (
+              <div className="flex items-center gap-1 bg-surface-container p-0.5 rounded-lg">
+                {outputFormats.map((fmt) => {
+                  const active = (config.outputFormat === 'auto' ? 'png' : config.outputFormat) === fmt;
+                  return (
+                    <button
+                      key={fmt}
+                      type="button"
+                      aria-pressed={active}
+                      className={
+                        active
+                          ? 'px-2.5 py-0.5 rounded-md bg-surface-container-lowest font-meta-sm text-[11px] text-primary font-medium shadow-sm'
+                          : 'px-2 py-0.5 rounded-md font-meta-sm text-[11px] text-on-surface-variant hover:text-on-surface transition-colors'
+                      }
+                      onClick={() => onConfigChange({ outputFormat: fmt })}
+                    >
+                      {fmt.toUpperCase()}
+                    </button>
+                  );
+                })}
+              </div>
+            ) : <span role="status" className="font-meta-sm text-meta-sm text-outline">正在读取可用格式...</span>}
           </div>
-          <div className="flex items-center gap-1 bg-surface-container p-0.5 rounded-lg">
-            {(props.imageCapabilities?.formats || ['png', 'webp', 'jpeg'] as const).map((fmt) => {
-              const active = (config.outputFormat === 'auto' ? 'png' : config.outputFormat) === fmt;
-              return (
-                <button
-                  key={fmt}
-                  type="button"
-                  className={
-                    active
-                      ? 'px-2.5 py-0.5 rounded-md bg-surface-container-lowest font-meta-sm text-[11px] text-primary font-medium shadow-sm'
-                      : 'px-2 py-0.5 rounded-md font-meta-sm text-[11px] text-on-surface-variant hover:text-on-surface transition-colors'
-                  }
-                  onClick={() => onConfigChange({ outputFormat: fmt })}
-                >
-                  {fmt.toUpperCase()}
-                </button>
-              );
-            })}
-          </div>
+          {outputFormats.length === 1 && <p className="font-meta-sm text-meta-sm text-on-surface-variant">当前通道仅支持 {outputFormats[0].toUpperCase()}</p>}
         </div>
       </div>}
 
@@ -513,7 +484,7 @@ export function StitchStudioRail(props: StitchStudioRailProps) {
         <button
           type="button"
           className="w-full py-3.5 px-space-lg rounded-xl bg-primary hover:bg-primary-container text-on-primary font-headline-sm text-headline-sm flex items-center justify-center gap-space-sm shadow-[0_4px_16px_rgba(65,91,47,0.28)] hover:-translate-y-0.5 transition-all disabled:opacity-60 disabled:hover:translate-y-0"
-          disabled={submitting || prompt.trim().length === 0 || (isEdit && maskStrokes === 0)}
+          disabled={submitting || !props.imageCapabilities || prompt.trim().length === 0 || (isEdit && maskStrokes === 0)}
           onClick={onSubmit}
         >
           <Leaf size={20} aria-hidden />
@@ -555,6 +526,7 @@ export interface QueueJobView {
   error: string;
   createdAt: number;
   canRetry: boolean;
+  retrying: boolean;
 }
 
 function relativeTime(timestamp: number): string {
@@ -673,6 +645,7 @@ export function StitchCanvasStream(props: StitchCanvasStreamProps) {
             return (
               <article
                 key={job.id}
+                aria-label={`未完成画稿: ${job.prompt}`}
                 style={{ order: order.get(`job-${job.id}`) }}
                 className="relative flex flex-col bg-error-container/40 rounded-xl p-space-md shadow-[0_8px_24px_rgba(85,95,75,0.06)]"
               >
@@ -680,7 +653,7 @@ export function StitchCanvasStream(props: StitchCanvasStreamProps) {
                   <div className="w-12 h-12 rounded-full bg-error/10 text-error flex items-center justify-center mb-space-sm">
                     <StitchIcon name="gpp_bad" size={28} />
                   </div>
-                  <h4 className="font-headline-sm text-headline-sm text-on-error-container mb-1">提示词微调建议</h4>
+                  <h4 className="font-headline-sm text-headline-sm text-on-error-container mb-1">生成未完成</h4>
                   <p className="font-body-sm text-body-sm text-on-surface-variant max-w-sm mb-space-md leading-relaxed">
                     {job.error || '上游服务暂时不可用，可换服务商重试'}
                   </p>
@@ -688,6 +661,7 @@ export function StitchCanvasStream(props: StitchCanvasStreamProps) {
                     <button
                       type="button"
                       className="px-space-md py-2 rounded-lg bg-surface-container text-on-surface font-body-sm text-body-sm hover:bg-surface-container-high transition-colors"
+                      disabled={job.retrying}
                       onClick={() => props.onEditPrompt(job.prompt)}
                     >
                       修改提示词
@@ -695,11 +669,11 @@ export function StitchCanvasStream(props: StitchCanvasStreamProps) {
                     <button
                       type="button"
                       className="px-space-md py-2 rounded-lg bg-primary text-on-primary font-body-sm text-body-sm hover:bg-primary-container shadow-sm flex items-center gap-1 transition-colors"
-                      disabled={!job.canRetry}
+                      disabled={!job.canRetry || job.retrying}
                       onClick={() => onRetryJob(job.id)}
                     >
                       <RefreshCw size={16} aria-hidden />
-                      <span>一键重试</span>
+                      <span>{job.retrying ? '正在提交...' : '一键重试'}</span>
                     </button>
                   </div>
                 </div>

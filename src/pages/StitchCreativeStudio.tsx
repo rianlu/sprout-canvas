@@ -10,10 +10,9 @@ import { brushMaskToDataUrl, brushStrokeCount, hasEditableRegion, type BrushMask
 import { MaskEditor } from '../components/editor/MaskEditor';
 import { SplitToolDrawer } from '../components/tools/SplitToolDrawer';
 import { randomId } from '../lib/random/id';
-import { findImageStyle, applyAnyImageStyleToPrompt } from '../lib/styles/image-styles';
 import { readDraft, writeDraft } from '../lib/storage/drafts';
 import { downloadRecord } from '../lib/image/gallery';
-import { readWorkspaceDraft, writeWorkspaceDraft } from '../lib/storage/gallery-db';
+import { readWorkspaceDraft, writeWorkspaceDraft, registerWorkspaceSubmission } from '../lib/storage/gallery-db';
 import { imageEditConfig, sourceImageDraft, type StudioDraft } from '../lib/image/recipe';
 import { StitchStudioRail, StitchCanvasStream, type QueueJobView } from '../components/stitch-studio/StitchStudioRail';
 import { ToastStack } from '../components/shell/QueueDrawer';
@@ -33,14 +32,6 @@ interface CreativeStudioProps {
 const STUDIO_STYLE_DRAFT_KEY = 'studio_style';
 const STUDIO_PROMPT_DRAFT_KEY = 'studio_prompt';
 
-const QUICK_STYLES = [
-  { id: 'default', label: '默认自然' },
-  { id: 'open-15563', label: '水彩绘本' },
-  { id: 'open-13750', label: '日光胶片' },
-  { id: 'open-13957', label: '黏土玩具' },
-  { id: 'open-13486', label: '极简海报' },
-];
-
 /** 渲染调性 (PRD v3.1): prompt 注入实现, 不动上游协议 */
 const TONE_SUFFIX: Record<string, string> = {
   soft: '，柔和自然的光影，温润真实的摄影质感',
@@ -53,13 +44,15 @@ const TONE_SUFFIX: Record<string, string> = {
 export function CreativeStudio({ onOpenStyles, onSubmitBatch, onCancel, onUseRecipe, onRetry, results, jobs, imageCapabilities }: CreativeStudioProps) {
   const [toasts, setToasts] = useState<{ id: string; type: 'info' | 'success' | 'error'; message: string }[]>([]);
   const [submitting, setSubmitting] = useState(false);
+  const [retryingJobs, setRetryingJobs] = useState<Set<string>>(new Set());
   const submitLock = useRef(false);
   const [draftLoaded, setDraftLoaded] = useState(false);
   const [restoredMask, setRestoredMask] = useState('');
   const [sourceRecord, setSourceRecord] = useState<ResultRecord | null>(null);
   const [polishing, setPolishing] = useState(false);
   const [tone, setTone] = useState<'soft' | 'vivid' | 'none'>('soft');
-  const [styleId, setStyleId] = useState(() => findImageStyle(readDraft(STUDIO_STYLE_DRAFT_KEY))?.id || 'default');
+  const [styleId, setStyleId] = useState(() => readDraft(STUDIO_STYLE_DRAFT_KEY) || 'default');
+  const [styleName, setStyleName] = useState('');
   const [mask, setMask] = useState<BrushMaskData | null>(null);
   const [maskEditorOpen, setMaskEditorOpen] = useState(() => readDraft('studio_open_mask') === '1');
   const [refImage, setRefImage] = useState<RefImage | null>(() => {
@@ -122,13 +115,14 @@ export function CreativeStudio({ onOpenStyles, onSubmitBatch, onCancel, onUseRec
       if (!alive) return;
       const draft = { ...stored, ...transfer };
       if (draft.config) setConfig((current) => ({ ...current, ...stored?.config, ...transfer?.config, prompt: transfer?.config?.prompt ?? stored?.config?.prompt ?? current.prompt }));
-      if (draft.styleId !== undefined) setStyleId(findImageStyle(draft.styleId)?.id || 'default');
+      if (draft.styleId !== undefined) setStyleId(draft.styleId || 'default');
+      setStyleName(draft.styleName || '');
       if (draft.refImage !== undefined) setRefImage(draft.refImage);
       setSourceRecord(draft.sourceRecord || null);
       if (draft.mask !== undefined) setMask(draft.mask);
       if (draft.tone) setTone(draft.tone);
       setRestoredMask(draft.maskDataUrl || '');
-      const transferredStyle = transfer?.styleId ? findImageStyle(transfer.styleId) : undefined;
+      const transferredStyle = transfer?.styleId && transfer.styleId !== 'default' ? transfer.styleName || '提示词模板' : '';
       if (transferredStyle) setMaskEditorOpen(false);
       if (transfer) {
         await writeWorkspaceDraft('studio', { ...draft, config: { ...stored?.config, ...transfer.config } });
@@ -136,15 +130,16 @@ export function CreativeStudio({ onOpenStyles, onSubmitBatch, onCancel, onUseRec
       }
       if (alive) {
         setDraftLoaded(true);
-        if (transferredStyle) pushToast('success', `已载入 ${transferredStyle.name} 的中文模板, 可修改后开始绘制`);
+        if (transferredStyle) pushToast('success', `已载入 ${transferredStyle}, 可修改后开始绘制`);
       }
     })().catch((error) => { if (alive) { setDraftLoaded(true); pushToast('error', error instanceof Error ? error.message : '草稿读取失败'); } });
     return () => { alive = false; };
   }, [pushToast]);
+  const currentDraft = useMemo<StudioDraft>(() => ({ config, styleId, styleName, refImage, sourceRecord, mask, tone, maskDataUrl: restoredMask }), [config, styleId, styleName, refImage, sourceRecord, mask, tone, restoredMask]);
   useEffect(() => {
     if (!draftLoaded) return;
-    void writeWorkspaceDraft('studio', { config, styleId, refImage, sourceRecord, mask, tone, maskDataUrl: restoredMask }).catch(() => pushToast('error', '草稿未能保存, 请检查本地空间'));
-  }, [config, styleId, refImage, sourceRecord, mask, tone, restoredMask, draftLoaded, pushToast]);
+    void writeWorkspaceDraft('studio', currentDraft).catch(() => pushToast('error', '草稿未能保存, 请检查本地空间'));
+  }, [currentDraft, draftLoaded, pushToast]);
 
   // 草稿持久化 (v2 兼容键名)
   useEffect(() => {
@@ -216,17 +211,21 @@ export function CreativeStudio({ onOpenStyles, onSubmitBatch, onCancel, onUseRec
 
   // 提交 (buildGenerationPayload 走真实协议: ref_images + maskFactory)
   const handleSubmit = useCallback(async () => {
-    if (!config.prompt.trim() || submitLock.current || !draftLoaded || submitting || polishing || maskEditorOpen || fullscreen || splitOpen) return;
+    if (!config.prompt.trim() || submitLock.current || !draftLoaded || !imageCapabilities || submitting || polishing || maskEditorOpen || fullscreen || splitOpen) return;
     submitLock.current = true;
     setSubmitting(true);
     try {
       const isEdit = config.mode === 'edit';
+      if (!isEdit && !imageCapabilities.formats.includes(config.outputFormat === 'auto' ? 'png' : config.outputFormat)) throw new Error('当前通道不支持所选生成格式, 请重新选择');
+      const count = isEdit ? 1 : config.imageCount;
+      const requestIds = Array.from({ length: count }, () => randomId());
+      const revision = await writeWorkspaceDraft('studio', currentDraft);
+      await registerWorkspaceSubmission('studio', currentDraft, requestIds, { revision });
       if (isEdit && (!refImage || !(mask || restoredMask))) throw new Error('请先涂抹并保存需要修改的区域');
       if (isEdit && refImage && !await hasEditableRegion(mask || { strokes: [], width: 0, height: 0 }, refImage.dataUrl, restoredMask)) throw new Error('蒙版没有需要修改的区域, 请重新涂抹');
-      const style = styleId && styleId !== 'default' ? findImageStyle(styleId) : null;
       const styledPrompt = isEdit
         ? `在输入原图上进行局部编辑, 仅修改蒙版指定区域, 保持原图画幅, 构图和画风, 尽量保留未涂抹区域的内容与细节.\n修改要求: ${config.prompt}`
-        : (style ? applyAnyImageStyleToPrompt(config.prompt, style) : config.prompt) + (TONE_SUFFIX[tone] ?? '');
+        : config.prompt + (TONE_SUFFIX[tone] ?? '');
       const refImages: RefImage[] = refImage
         ? [refImage, ...config.refImages.filter((ref) => ref.id !== refImage.id)]
         : [];
@@ -242,16 +241,15 @@ export function CreativeStudio({ onOpenStyles, onSubmitBatch, onCancel, onUseRec
       );
       const batchId = randomId();
       const editSource = isEdit ? sourceRecord : null;
-      const count = isEdit ? 1 : config.imageCount;
-      const inputs: QueueSubmitInput[] = Array.from({ length: count }, () => ({
-        requestId: randomId(), request: payload,
+      const inputs: QueueSubmitInput[] = requestIds.map((requestId) => ({
+        requestId, request: payload,
         ...(editSource?.recipe?.providerId ? { providerId: editSource.recipe.providerId } : {}),
         clientContext: {
           kind: editSource?.kind || 'single', placeholderId: randomId(), prompt: config.prompt,
           mode: isEdit ? 'edit' : refImage ? 'reference' : 'text',
           batchId, version: editSource ? (editSource.version || 1) + 1 : 1,
-          styleId: isEdit ? editSource?.recipe?.styleId : style?.id,
-          styleName: isEdit ? editSource?.recipe?.styleName : style?.name,
+          styleId: isEdit ? editSource?.recipe?.styleId : styleId === 'default' ? undefined : styleId,
+          styleName: isEdit ? editSource?.recipe?.styleName : styleId === 'default' ? undefined : styleName,
           tone: isEdit ? editSource?.recipe?.tone || 'none' : tone,
           ...(editSource ? { parentId: editSource.id } : {}),
           ...(editSource?.kind === 'series' ? { seriesId: editSource.seriesId, sceneId: editSource.sceneId, sceneIndex: editSource.sceneIndex, template: editSource.template, masterPrompt: editSource.masterPrompt } : {}),
@@ -267,7 +265,10 @@ export function CreativeStudio({ onOpenStyles, onSubmitBatch, onCancel, onUseRec
     }
   }, [
     config,
+    currentDraft,
+    imageCapabilities,
     styleId,
+    styleName,
     tone,
     refImage,
     mask,
@@ -298,6 +299,8 @@ export function CreativeStudio({ onOpenStyles, onSubmitBatch, onCancel, onUseRec
   const jobViews: QueueJobView[] = useMemo(
     () =>
       jobs
+        .filter((j) => !j.supersededBy)
+        .filter((j) => !(j.localOnly && j.retryOf && jobs.some((source) => source.id === j.retryOf)))
         .filter((j) => ['running', 'pending', 'failed', 'interrupted', 'expired', 'unsubmitted'].includes(j.status))
         .filter((j) => (j.clientContext?.kind ?? 'single') === 'single' || (config.mode === 'edit' && sourceRecord?.sceneId && j.clientContext?.sceneId === sourceRecord.sceneId))
         .map((j) => ({
@@ -309,17 +312,12 @@ export function CreativeStudio({ onOpenStyles, onSubmitBatch, onCancel, onUseRec
           error: j.error,
           createdAt: j.queuedAt,
           canRetry: j.canRetry,
+          retrying: retryingJobs.has(j.id),
         })),
-    [jobs, config.mode, sourceRecord?.sceneId],
+    [jobs, retryingJobs, config.mode, sourceRecord?.sceneId],
   );
 
-  const pinnedStyleName = useMemo(() => {
-    if (!styleId || styleId === 'default') return null;
-    const style = findImageStyle(styleId);
-    if (style) return style.name;
-    const quick = QUICK_STYLES.find((s) => s.id === styleId);
-    return quick ? quick.label : null;
-  }, [styleId]);
+  const pinnedStyleName = styleId && styleId !== 'default' ? styleName || '已载入模板' : null;
 
   const maskStrokes = mask ? brushStrokeCount(mask) : restoredMask ? 1 : 0;
 
@@ -333,6 +331,7 @@ export function CreativeStudio({ onOpenStyles, onSubmitBatch, onCancel, onUseRec
     setSourceRecord(draft.sourceRecord || null);
     setConfig((current) => ({ ...current, ...draft.config }));
     setStyleId('default');
+    setStyleName('');
     setTone('none');
     setMask(null);
     setRestoredMask('');
@@ -345,6 +344,7 @@ export function CreativeStudio({ onOpenStyles, onSubmitBatch, onCancel, onUseRec
     if (config.mode !== 'edit') {
       setConfig((current) => ({ ...current, ...imageEditConfig(sourceRecord) }));
       setStyleId('default');
+      setStyleName('');
       setTone('none');
     }
     setMaskEditorOpen(true);
@@ -361,6 +361,12 @@ export function CreativeStudio({ onOpenStyles, onSubmitBatch, onCancel, onUseRec
           <div className="studio-layout relative">
             <div ref={railRef} className="studio-rail">
               <StitchStudioRail
+                onNewCreation={() => {
+                  setConfig((current) => ({ ...current, mode: 'text', prompt: '', refImages: [] }));
+                  setRefImage(null); setSourceRecord(null); setMask(null); setRestoredMask(''); setMaskEditorOpen(false);
+                  setStyleId('default'); setStyleName('');
+                  writeDraft('studio_ref_image', ''); writeDraft('studio_open_mask', '');
+                }}
                 onOpenStyles={onOpenStyles}
                 prompt={config.prompt}
                 onPromptChange={(value) => handleConfigChange({ prompt: value })}
@@ -369,10 +375,7 @@ export function CreativeStudio({ onOpenStyles, onSubmitBatch, onCancel, onUseRec
                 }}
                 polishing={polishing}
                 pinnedStyleName={pinnedStyleName}
-                onUnpinStyle={() => setStyleId('default')}
-                quickStyles={QUICK_STYLES}
-                activeStyleId={styleId}
-                onPickStyle={(id) => setStyleId(id)}
+                onUnpinStyle={() => { setStyleId('default'); setStyleName(''); }}
                 refImage={refImage}
                 onRemoveRef={() => { setRefImage(null); setSourceRecord(null); setMask(null); setRestoredMask(''); setConfig((current) => ({ ...current, mode: 'text', refImages: [] })); }}
                 imageCapabilities={imageCapabilities}
@@ -412,7 +415,10 @@ export function CreativeStudio({ onOpenStyles, onSubmitBatch, onCancel, onUseRec
                 void onCancel(jobId).catch(() => pushToast('error', '取消失败，任务可能已完成'));
               }}
               onRetryJob={(jobId) => {
-                void onRetry(jobId).catch(() => pushToast('error', '重试失败'));
+                setRetryingJobs((current) => new Set(current).add(jobId));
+                void onRetry(jobId)
+                  .catch((error) => pushToast('error', error instanceof Error ? error.message : '重试提交失败, 请重试'))
+                  .finally(() => setRetryingJobs((current) => { const next = new Set(current); next.delete(jobId); return next; }));
               }}
               onEditPrompt={(prompt) => {
                 handleConfigChange({ prompt });

@@ -8,6 +8,7 @@ import { imageFileExtension } from './format';
 export interface StudioDraft {
   config?: Partial<GenerationConfig>;
   styleId?: string;
+  styleName?: string;
   refImage?: RefImage | null;
   sourceRecord?: ResultRecord | null;
   mask?: BrushMaskData | null;
@@ -34,7 +35,7 @@ export function imageEditConfig(source?: ResultRecord | null): Partial<Generatio
 export async function sourceImageDraft(record: ResultRecord, edit = false): Promise<StudioDraft> {
   const dataUrl = await getRecordDataUrl(record);
   return {
-    styleId: 'default',
+    styleId: 'default', styleName: '',
     refImage: { id: record.id, recordId: record.id, name: `作品-${record.id.slice(-4)}.${imageFileExtension(dataUrl)}`, dataUrl, size: record.bytes || 0 },
     sourceRecord: { ...record, dataUrl: '' },
     config: edit ? imageEditConfig(record) : { mode: 'reference', prompt: '', refImages: [], imageCount: 1 },
@@ -59,5 +60,5 @@ export async function recipeDraft(record: ResultRecord) {
   }
   const { aspectRatio, sizeTier } = sizePreset(recipe.size);
   const config: Partial<GenerationConfig> = { prompt: record.mode === 'edit' ? record.prompt : recipe.prompt, quality: recipe.quality, outputFormat: recipe.outputFormat, background: recipe.background, outputCompression: recipe.outputCompression, requestSize: recipe.size, aspectRatio, sizeTier, sizeHint: resolveSize(aspectRatio, sizeTier).hint, refImages, imageCount: 1, mode: record.mode };
-  return { config, styleId: 'default', refImage: refImages[0] || null, sourceRecord: null, mask: null, maskDataUrl, tone: 'none' as const };
+  return { config, styleId: 'default', styleName: '', refImage: refImages[0] || null, sourceRecord: null, mask: null, maskDataUrl, tone: 'none' as const };
 }

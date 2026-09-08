@@ -7,6 +7,7 @@ import { existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { chromium } from 'playwright';
+import { png } from './fixtures.mjs';
 
 const execute = promisify(execFile);
 const docker = async (...args) => (await execute('docker', args, { maxBuffer: 1024 * 1024 })).stdout.trim();
@@ -16,8 +17,9 @@ const output = process.env.SPROUT_TEST_OUTPUT || directory;
 for (const name of ['config', 'data', 'logs']) await mkdir(path.join(directory, name));
 await mkdir(output, { recursive: true });
 const password = 'isolated-container-password';
+const adminPassword = 'isolated-container-admin-password';
 await writeFile(path.join(directory, 'config/local.config.json'), JSON.stringify({
-  defaultImageProvider: 'fixture', accessPassword: password, imageConcurrency: 1,
+  defaultImageProvider: 'fixture', accessPassword: password, adminPassword, dataDir: 'data', imageConcurrency: 1,
   imageProviders: [{ id: 'fixture', name: '容器验证通道', baseUrl: 'http://127.0.0.1:9', apiKey: 'fixture-container-image-key', imageModel: 'gpt-image-2', generationMode: 'images', capabilities: { outputFormats: ['png'], exactSize: false } }],
   textProviders: [{ id: 'fixture-text', name: '容器验证文本通道', baseUrl: 'http://127.0.0.1:9', apiKey: 'fixture-container-text-key', model: 'fixture-text-model' }],
 }), { mode: 0o600 });
@@ -71,8 +73,10 @@ try {
   await page.getByRole('button', { name: '登录', exact: true }).click();
   await page.locator('.studio-rail textarea').waitFor();
   assert.equal(await page.locator('.studio-rail').evaluate((element) => Math.round(element.getBoundingClientRect().width)), 440);
-  assert.equal(await page.getByRole('button', { name: 'PNG', exact: true }).count(), 1);
-  assert.equal(await page.getByRole('button', { name: 'WebP', exact: true }).count(), 0);
+  await page.getByText('当前通道仅支持 PNG', { exact: true }).waitFor();
+  assert.equal(await page.getByLabel('当前生成格式', { exact: true }).innerText(), 'PNG');
+  assert.equal(await page.getByRole('group', { name: '生成格式', exact: true }).getByRole('button').count(), 0);
+  assert.ok(await page.getByRole('button', { name: '新建创作', exact: true }).isVisible());
   await page.evaluate(async () => document.fonts.ready);
   await page.screenshot({ path: path.join(output, 'container-studio.png') });
   await page.getByRole('navigation', { name: '主导航', exact: true }).getByRole('link', { name: '风格库', exact: true }).click();
@@ -82,6 +86,36 @@ try {
   await page.screenshot({ path: path.join(output, 'container-styles.png') });
   assert.deepEqual(errors, []);
   await browser.close(); browser = undefined;
+  const request = async (url, { method = 'GET', body, cookie: authCookie = adminCookie } = {}) => {
+    const response = await fetch(base + url, { method, headers: { Cookie: authCookie, ...(body ? { 'Content-Type': 'application/json' } : {}) }, body: body ? JSON.stringify(body) : undefined });
+    return { status: response.status, data: await response.json(), headers: response.headers };
+  };
+  const adminLogin = await request('/api/admin/auth/login', { method: 'POST', cookie: '', body: { password: adminPassword } });
+  assert.equal(adminLogin.status, 200);
+  const adminCookie = adminLogin.headers.get('set-cookie').split(';')[0];
+  assert.equal((await request('/api/admin/styles', { cookie })).status, 401);
+  assert.equal((await request('/api/jobs/me')).status, 401);
+  const initialStyles = (await request('/api/admin/styles')).data.styles;
+  const editable = (record, patch = {}) => ({ ...Object.fromEntries(['name', 'prompt', 'author', 'category', 'sourceUrl', 'published', 'sortOrder', 'version'].map((key) => [key, record[key]])), ...patch });
+  const editedSeed = await request('/api/admin/styles/' + initialStyles[0].id, { method: 'PUT', body: editable(initialStyles[0], { name: '容器编辑后保留' }) });
+  assert.equal(editedSeed.status, 200);
+  const deletedSeed = initialStyles[1];
+  assert.equal((await request('/api/admin/styles/' + deletedSeed.id, { method: 'DELETE', body: { version: deletedSeed.version } })).status, 200);
+  const example = png(64, 48);
+  const created = await request('/api/admin/styles', { method: 'POST', body: { name: '容器录入示例', prompt: 'Container style.\n保留原文与示例图.', author: '容器测试作者', imageDataUrl: 'data:image/png;base64,' + example.toString('base64') } });
+  assert.equal(created.status, 201);
+  const style = created.data.style;
+  const archive = (await request('/api/admin/styles/export')).data;
+  const expectedCatalog = (await request('/api/admin/styles')).data;
+  const assertStyles = async () => {
+    assert.deepEqual((await request('/api/admin/styles')).data, expectedCatalog);
+    const publicStyles = (await request('/api/styles', { cookie })).data.styles;
+    assert.ok(publicStyles.some((item) => item.name === '容器编辑后保留'));
+    assert.ok(!publicStyles.some((item) => item.id === deletedSeed.id), 'deleted seeds must not be resurrected');
+    const image = await fetch(base + style.image, { headers: { Cookie: adminCookie } });
+    assert.equal(image.status, 200);
+    assert.deepEqual(Buffer.from(await image.arrayBuffer()), example, 'the persisted example must retain its exact bytes');
+  };
   const nodeVersion = await docker('exec', name, 'node', '--version');
   assert.match(nodeVersion, /^v22\./);
   await docker('restart', '--time', '10', name);
@@ -89,11 +123,30 @@ try {
   await waitFor(healthy, 'container ready after restart');
   const status = await (await fetch(`${base}/api/auth/status`, { headers: { Cookie: cookie } })).json();
   assert.equal(status.authenticated, true, 'session must survive container restart');
+  assert.equal((await request('/api/admin/auth/status')).data.authenticated, true);
+  await assertStyles();
+  await docker('stop', '--time', '10', name);
+  started = false;
+  await docker('run', '-d', '--rm', '--name', name, '--health-interval=2s', '--health-start-period=1s', '-p', '127.0.0.1::8787',
+    '-v', path.join(directory, 'config') + ':/app/config:ro', '-v', path.join(directory, 'data') + ':/app/data', '-v', path.join(directory, 'logs') + ':/app/logs', image);
+  started = true;
+  base = await containerUrl();
+  await waitFor(healthy, 'container ready after recreation with the same data volume');
+  await assertStyles();
+  assert.equal((await request('/api/admin/styles/' + style.id, { method: 'DELETE', body: { version: style.version } })).status, 200);
+  const importPreview = await request('/api/admin/styles/import?preview=1', { method: 'POST', body: { archive } });
+  assert.equal(importPreview.data.added, 1);
+  const imported = await request('/api/admin/styles/import', { method: 'POST', body: { archive, revision: importPreview.data.revision } });
+  assert.equal(imported.status, 200);
+  assert.deepEqual(Buffer.from(await (await fetch(base + style.image, { headers: { Cookie: adminCookie } })).arrayBuffer()), example);
   await waitFor(async () => (await docker('inspect', '--format', '{{.State.Health.Status}}', name)) === 'healthy', 'Docker healthcheck');
   const database = await readFile(path.join(directory, 'data/runtime.sqlite'));
   assert.equal(database.includes(Buffer.from(cookie.split('=')[1])), false);
-  await writeFile(path.join(output, 'docker-report.json'), JSON.stringify({ image, nodeVersion, passed: ['生产环境启动与鉴权', '单 worker 与通道格式约束', '容器/本地 JS 与 CSS 哈希一致', '桌面页面与 36 款风格图片', 'SQLite 会话跨重启恢复', 'Docker 健康检查'], assetHashes: hashes, directory }, null, 2));
-  console.log(JSON.stringify({ passed: 6, nodeVersion, artifacts: output }));
+  const styleDatabase = await readFile(path.join(directory, 'data/styles/library.sqlite'));
+  assert.equal(styleDatabase.includes(Buffer.from(adminCookie.split('=')[1])), false);
+  const checks = ['生产环境启动与鉴权', '单 worker 与通道格式约束', '容器/本地 JS 与 CSS 哈希一致', '桌面页面与动态初始风格图片', 'SQLite 会话跨重启恢复', 'Docker 健康检查', '管理权限隔离与增删改', '重建容器保留风格文本/图片且不恢复已删除种子', '备份预览与图片恢复'];
+  await writeFile(path.join(output, 'docker-report.json'), JSON.stringify({ image, nodeVersion, passed: checks, assetHashes: hashes, directory }, null, 2));
+  console.log(JSON.stringify({ passed: checks.length, nodeVersion, artifacts: output }));
 } finally {
   if (browser) await browser.close();
   if (started) await docker('stop', '--time', '10', name);

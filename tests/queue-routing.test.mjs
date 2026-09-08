@@ -291,6 +291,7 @@ async function runForcedJob(provider, rawBody, fetchImpl) {
   };
   const retry = queue.retryFailedJob(job.id, 'user-1');
   assert.equal(retry.ok, true);
+  assert.equal(queue.retryFailedJob(job.id, 'user-1').status, 409);
   assert.equal(retry.job.retryOf, job.id);
   assert.notEqual(retry.job.clientContext.placeholderId, job.clientContext.placeholderId);
   const retryOutcome = await waitForJob(retry.job.id);

@@ -9,9 +9,10 @@
     "preview": "vite preview --host 127.0.0.1",
     "start": "npm run build && node server.mjs",
     "test": "node --test tests/*.test.mjs && npm run build",
-    "test:browser": "node tests/browser-check.mjs",
+    "test:browser": "node tests/browser-check.mjs && node tests/style-admin-browser.mjs",
     "test:docker": "node tests/docker-check.mjs",
     "start:server": "node server.mjs",
+    "start:local": "npm run build && node server/local.mjs",
     "start:prod": "npm run build && NODE_ENV=production node server.mjs",
     "pm2:start": "npm run build && pm2 start ecosystem.config.cjs",
     "pm2:logs": "pm2 logs sprout-canvas"

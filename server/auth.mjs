@@ -3,7 +3,8 @@ import { readLocalConfig } from './config.mjs';
 import { json, logLine, readRequestBody } from './http.mjs';
 import { requestError } from '../shared/generation-contract.mjs';
 let stateStore;
-export function initAuth(store) { stateStore = store; }
+let cookieName = 'img_auth_max';
+export function initAuth(store, namespace = '') { stateStore = store; cookieName = 'img_auth_max' + (namespace ? '_' + namespace : ''); }
 
 function parseCookies(req) {
   const header = req.headers.cookie || '';
@@ -25,7 +26,7 @@ function safeEqualString(left, right) {
 
 function authCookieOptions(config, maxAgeSeconds) {
   return [
-    `img_auth_max=${maxAgeSeconds ? '{{token}}' : ''}`,
+    `${cookieName}=${maxAgeSeconds ? '{{token}}' : ''}`,
     'Path=/',
     'HttpOnly',
     'SameSite=Lax',
@@ -35,7 +36,7 @@ function authCookieOptions(config, maxAgeSeconds) {
 }
 
 function sessionTokenFromRequest(req) {
-  return parseCookies(req).get('img_auth_max') || '';
+  return parseCookies(req).get(cookieName) || '';
 }
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;

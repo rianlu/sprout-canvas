@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { acknowledgeQueueJob, archiveQueueJobs, cancelQueueJob, getQueueResult, listQueueJobs, prioritizeQueueJob, resumeQueueJob, submitQueueJob, updateQueueJob, type QueueSubmitInput } from '../lib/api/queue';
 import { ApiError } from '../lib/api/client';
 import { dataUrlFormat, resultDataUrls } from '../lib/image/format';
-import { attachLocalReference, getOutboxInput, isJobConsumed, listOutbox, removeOutbox, saveOutbox, collectUnusedReferences } from '../lib/storage/gallery-db';
+import { attachLocalReference, getOutboxInput, isJobConsumed, listOutbox, removeOutbox, saveOutbox, collectUnusedReferences, replaceWorkspaceRequest, completeWorkspaceRequest } from '../lib/storage/gallery-db';
 import { randomId } from '../lib/random/id';
 import { validateGenerationSubmission } from '../../shared/generation-contract.mjs';
 import type { ResultRecord } from '../types/generation';
@@ -39,18 +39,26 @@ export function useQueue(onResult: (records: ResultRecord[], jobId: string) => P
       if (!historyExpanded.current) setHistoryCursor(data.historyCursor || '');
       for (const job of latest) if (historyCache.current.has(job.id)) historyCache.current.set(job.id, job);
       const serverJobs = [...new Map([...historyCache.current.values(), ...latest].map((job) => [job.id, job])).values()];
-      const visible = serverJobs.filter((job) => !job.archivedAt).map((job) => ({ ...job, canRetry: ['failed', 'expired', 'interrupted'].includes(job.status) && outbox.some((row) => row.requestId === job.requestId) }));
+      const visible = serverJobs.filter((job) => !job.archivedAt).map((job) => ({ ...job, canRetry: !job.supersededBy && ['failed', 'expired', 'interrupted'].includes(job.status) && outbox.some((row) => row.requestId === job.requestId) }));
       for (const row of outbox) if (!serverJobs.some((job) => job.requestId === row.requestId) && !(row.jobId && await isJobConsumed(row.jobId))) visible.push(localJob(row.input, row.savedAt, row.jobId));
       setJobs(visible);
       jobsRef.current = visible;
       setGlobalActive(data.globalActive || 0);
       setGlobalQueued(data.globalQueued || 0);
       workRef.current = visible.some((job) => ['running', 'pending'].includes(job.status));
+      for (const job of serverJobs) {
+        const source = job.retryOf && serverJobs.find((item) => item.id === job.retryOf);
+        if (source && outbox.some((row) => row.requestId === source.requestId)) await replaceWorkspaceRequest(source.requestId, job.requestId);
+      }
+      const replaced = outbox.filter((row) => serverJobs.some((job) => job.requestId === row.requestId && job.supersededBy));
+      for (const row of replaced) await removeOutbox(row.requestId);
+      if (replaced.length) await collectUnusedReferences();
       let failure = '';
       for (const job of serverJobs.sort((a, b) => a.finishedAt - b.finishedAt)) {
         if (!['succeeded', 'expired'].includes(job.status) || handled.current.has(job.id)) continue;
         try {
           if (job.acknowledgedAt || await isJobConsumed(job.id)) {
+            if (await isJobConsumed(job.id)) await completeWorkspaceRequest(job.requestId);
             if (!job.acknowledgedAt) await acknowledgeQueueJob(job.id);
             handled.current.add(job.id);
             if (job.requestId) await removeOutbox(job.requestId);
@@ -73,6 +81,7 @@ export function useQueue(onResult: (records: ResultRecord[], jobId: string) => P
             width: result.data?.[index]?.width, height: result.data?.[index]?.height, bytes: result.data?.[index]?.bytes,
           }));
           await onResult(records, job.id);
+          await completeWorkspaceRequest(job.requestId);
           await acknowledgeQueueJob(job.id);
           handled.current.add(job.id);
           if (job.requestId) await removeOutbox(job.requestId);
@@ -109,7 +118,11 @@ export function useQueue(onResult: (records: ResultRecord[], jobId: string) => P
     try {
       const job = await submitQueueJob(input);
       await saveOutbox(input, job.id);
-      setJobs((current) => [job, ...current.filter((item) => item.requestId !== job.requestId)]);
+      const source = job.retryOf && jobsRef.current.find((item) => item.id === job.retryOf);
+      if (source) await replaceWorkspaceRequest(source.requestId, job.requestId);
+      const next = [job, ...jobsRef.current.filter((item) => item.requestId !== job.requestId).map((item) => item.id === job.retryOf ? { ...item, supersededBy: job.id, canRetry: false } : item)];
+      jobsRef.current = next;
+      setJobs(next);
       return job;
     } catch (cause) { await tick(); throw cause; }
   }, [tick]);
@@ -137,6 +150,7 @@ export function useQueue(onResult: (records: ResultRecord[], jobId: string) => P
     const operation = (async () => {
     const source = jobsRef.current.find((job) => job.id === jobId);
     if (!source) throw new Error('任务不存在');
+    if (source.supersededBy) throw new Error('此任务已重新提交, 请查看最新任务');
     const input = await getOutboxInput(source.requestId);
     if (!input) throw new Error('本地原始配方不存在, 请回到创作页重新填写');
     if (source.status === 'unsubmitted') return submit(input);
@@ -161,6 +175,7 @@ export function useQueue(onResult: (records: ResultRecord[], jobId: string) => P
       delete next.referenceJobId; delete next.referenceImage;
     }
     const job = await submit(next);
+    await replaceWorkspaceRequest(source.requestId, job.requestId);
     if (source.localOnly) await removeOutbox(source.requestId);
     await tick();
     return job;

@@ -8,6 +8,7 @@ import { PNG_BASE64 } from './fixtures.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 export const TEST_PASSWORD = 'isolated-test-password';
+export const TEST_ADMIN_PASSWORD = 'isolated-admin-password';
 export async function until(check, message = 'condition', timeout = 8000) {
   const deadline = Date.now() + timeout;
   let value;
@@ -25,7 +26,7 @@ async function freePort() {
   await new Promise((resolve) => server.close(resolve));
   return port;
 }
-export async function startHarness({ serveDist = false, imageMode = 'images' } = {}) {
+export async function startHarness({ serveDist = false, imageMode = 'images', cookieNamespace = '' } = {}) {
   const directory = await mkdtemp(path.join(tmpdir(), 'sprout-server-test-'));
   const calls = [];
   const pendingResponses = new Set();
@@ -54,7 +55,7 @@ export async function startHarness({ serveDist = false, imageMode = 'images' } =
   if (serveDist) await symlink(path.join(ROOT, 'dist'), path.join(directory, 'dist'), 'dir');
   const port = await freePort();
   const config = {
-    host: '127.0.0.1', port, accessPassword: TEST_PASSWORD, stateFile: 'data/runtime.sqlite', imageConcurrency: 1,
+    host: '127.0.0.1', port, accessPassword: TEST_PASSWORD, adminPassword: TEST_ADMIN_PASSWORD, cookieNamespace, dataDir: 'data', stateFile: 'data/runtime.sqlite', imageConcurrency: 1,
     defaultImageProvider: 'primary',
     imageProviders: ['primary', 'secondary'].map((id) => ({ id, name: id, baseUrl: `${upstreamUrl}/${id}`, apiKey: `fixture-${id}-key`, imageModel: imageMode === 'images' ? 'gpt-image-2' : 'gpt-5', generationMode: imageMode })),
     textProviders: [{ id: 'text', name: 'text', baseUrl: upstreamUrl, apiKey: 'fixture-text-key', model: 'text-fixture' }],

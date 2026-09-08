@@ -45,10 +45,13 @@
     }
   ],
   "imageConcurrency": 1,
+  "dataDir": "data",
   "stateFile": "data/runtime.sqlite",
   "host": "127.0.0.1",
   "port": 8787,
   "accessPassword": "change-this-password",
+  "adminPassword": "",
+  "cookieNamespace": "",
   "authSessionDays": 7,
   "secureCookies": false,
   "logFile": "logs/server.log"
