@@ -79,8 +79,14 @@ export function ImageViewport({ src, alt, error, fullscreen, onFullscreen, onDow
       const current = viewRef.current.scale ?? geometry.current.fitScale;
       zoomAt(current * Math.exp(-clamp(delta, -500, 500) * 0.002), { x: event.clientX - bounds.left - bounds.width / 2, y: event.clientY - bounds.top - bounds.height / 2 });
     };
+    // Keep native touch panning from consuming the first toolbar tap after a custom drag.
+    const touchMove = (event: TouchEvent) => event.preventDefault();
     element.addEventListener('wheel', wheel, { passive: false });
-    return () => element.removeEventListener('wheel', wheel);
+    element.addEventListener('touchmove', touchMove, { passive: false });
+    return () => {
+      element.removeEventListener('wheel', wheel);
+      element.removeEventListener('touchmove', touchMove);
+    };
   }, [ready, zoomAt]);
 
   const eventPoint = (event: PointerEvent<HTMLDivElement>): Point => {
