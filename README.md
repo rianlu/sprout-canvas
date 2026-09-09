@@ -1,44 +1,184 @@
-# 芽绘台 / SproutCanvas
+<div align="center">
 
-多 Provider 图像生成工作台, 支持文生图, 参考图生成, 蒙版编辑, 系列策划和浏览器本地展馆.
+<img src="public/assets/stitch/gallery-00.png" alt="芽绘台 SproutCanvas logo" width="96" height="96" />
+
+<h1>芽绘台 / SproutCanvas</h1>
+
+<p>自托管的多 Provider 图像创作工作台<br />
+从一句提示词, 到单幅画作与连贯分镜.</p>
+
+<p>
+  <a href="https://nodejs.org/"><img src="https://img.shields.io/badge/Node.js-22.13%2B-5A7A46?style=flat-square&amp;logo=nodedotjs&amp;logoColor=white" alt="Node.js 22.13 或更新版本" /></a>
+  <a href="https://react.dev/"><img src="https://img.shields.io/badge/React-19-149ECA?style=flat-square&amp;logo=react&amp;logoColor=white" alt="React 19" /></a>
+  <a href="https://www.typescriptlang.org/"><img src="https://img.shields.io/badge/TypeScript-6-3178C6?style=flat-square&amp;logo=typescript&amp;logoColor=white" alt="TypeScript 6" /></a>
+  <a href="https://vite.dev/"><img src="https://img.shields.io/badge/Vite-8-646CFF?style=flat-square&amp;logo=vite&amp;logoColor=white" alt="Vite 8" /></a>
+  <a href="https://tailwindcss.com/"><img src="https://img.shields.io/badge/Tailwind_CSS-3-0F8FA8?style=flat-square&amp;logo=tailwindcss&amp;logoColor=white" alt="Tailwind CSS 3" /></a>
+  <a href="https://docs.docker.com/compose/"><img src="https://img.shields.io/badge/Docker-Compose-2496ED?style=flat-square&amp;logo=docker&amp;logoColor=white" alt="支持 Docker Compose 部署" /></a>
+</p>
+
+<p>
+  <a href="#页面预览">页面预览</a> |
+  <a href="#功能一览">功能一览</a> |
+  <a href="#快速开始">快速开始</a><br />
+  <a href="#开发与验证">开发与验证</a> |
+  <a href="#项目文档">项目文档</a>
+</p>
+
+</div>
+
+[![单图创作: 提示词, 画幅参数与创作画卷](docs/images/studio.webp)](docs/images/studio.webp)
+
+<p align="center"><sub>Docker 实际界面截图. 画卷与展馆使用仓库演示素材, 系列策划展示待确认的分镜草稿.</sub></p>
+
+## 页面预览
+
+单图创作见上方主预览. 点击图片可查看完整尺寸.
+
+### 系列策划
+
+[![系列策划: 故事梗概, 场景模板与待确认分镜](docs/images/series.webp)](docs/images/series.webp)
+
+### 风格库
+
+[![风格库: 分类筛选, 示例图与提示词模板](docs/images/styles.webp)](docs/images/styles.webp)
+
+### 本地展馆
+
+[![本地展馆: 作品筛选与画稿浏览](docs/images/gallery.webp)](docs/images/gallery.webp)
+
+### 作品详情
+
+[![作品详情: 大图检视, 缩放工具与生成配方](docs/images/viewer.webp)](docs/images/viewer.webp)
+
+### 风格管理
+
+[![风格管理: 素材列表, 上下架和备份](docs/images/style-admin.webp)](docs/images/style-admin.webp)
+
+### 风格编辑
+
+[![风格编辑: 示例图, 完整提示词与作者](docs/images/style-editor.webp)](docs/images/style-editor.webp)
+
+## 功能一览
+
+- **单图创作**: 文生图, 参考图生成和提示词润色. 一次提交 1 / 2 / 4 张, 顺序生成并逐张保存.
+- **蒙版编辑**: 涂抹需要修改的区域, 继承原图配方和画幅, 将局部重绘与参考图生成明确区分.
+- **系列策划**: 绘本, 电商, 视频分镜和品牌 IP 四类模板, 支持 3-8 幕. 先拆解提示词, 检查后确认生成, 后续分镜参考首镜; 支持单镜编辑, 重绘, 版本查看和部分失败续交.
+- **风格库**: 初始包含 36 款 / 6 类开源案例, 支持搜索, 分类和原文复制, 可直接发送到单图创作.
+- **风格后台**: 上传, 拖拽或粘贴示例图, 管理提示词, 作者, 分类和来源, 支持上下架, 删除及包含图片的备份导入导出.
+- **本地展馆**: 检索单图与系列作品, 放大检视, 复用配方, 下载原图或 ZIP, 使用浏览器支持的系统文件分享.
+- **任务与界面**: 全局任务队列, 等待任务取消和失败任务手动处理, 支持浅色 / 深色主题与移动端布局.
 
 ## 快速开始
 
-1. 安装 Node.js 22.13 或更新版本, 推荐使用 Node.js 22 LTS 的最新补丁版本.
-2. 执行 `npm ci`.
-3. 将 `config/local.config.example.json` 复制为 `config/local.config.json`, 填写图像/文本通道和访问密码.
-4. 执行 `npm start`, 打开 `http://127.0.0.1:8787`.
+推荐使用 Docker Compose 部署, 并准备可用的图像与文本 API 通道.
 
-保持 `imageConcurrency: 1`. API Key 只由服务端持有. 生产配置拒绝占位密钥和不足 10 位的访问密码.
+1. 获取代码并创建本地配置.
 
-## 当前功能
+   ```sh
+   git clone https://github.com/rianlu/sprout-canvas.git
+   cd sprout-canvas
+   cp config/local.config.example.json config/local.config.json
+   ```
 
-- 单图一次提交 1/2/4 个独立任务, 顺序生成并逐张保存.
-- 使用参考图和透明蒙版进行局部编辑, 保存并复用完整生成配方.
-- 使用绘本, 电商, 视频分镜, 品牌 IP 四类模板规划 3-8 幕, 支持单镜编辑, 重绘, 版本查看和部分失败续交.
-- 浏览动态风格库, 初始包含 36 款/6 类开源案例; 按原文复制提示词或发送到单图创作.
-- 使用独立风格后台上传, 拖拽或粘贴图片, 录入提示词与作者, 上下架/删除, 导入导出包含图片的备份.
-- 在本地展馆检索, 下载原图/ZIP, 或调用浏览器系统文件分享. 删除直接生效, 不提供精选收藏或回收站.
+2. 编辑 `config/local.config.json`, 按 [配置要求](docs/DEPLOY.md#1-配置要求) 填写图像通道, 文本通道和工作台访问密码. 需要管理风格时, 同时配置独立的管理员密码.
 
-生成作品只由服务器临时中转, 原图/参考图/蒙版与草稿保存在当前浏览器, 喜欢的作品请下载. 管理员维护的风格文本与示例图持久保存到服务端, 更新部署后保留编辑结果.
+3. 构建并启动服务.
 
-本机手动测试使用 `npm run start:local`, 与 Docker 的网页地址和数据目录隔离. 管理员凭据与运行细节见 [部署与配置](docs/DEPLOY.md#2-本地启动).
+   ```sh
+   docker compose up -d --build
+   ```
+
+启动后访问:
+
+| 入口 | 地址 | 登录方式 |
+| --- | --- | --- |
+| 工作台 | [打开工作台](http://127.0.0.1:8888) | 工作台访问密码 |
+| 风格后台 | [打开风格后台](http://127.0.0.1:8888/#admin) | 独立管理员密码 |
+
+Docker 默认使用主机端口 `8888`. 持久化目录, 密码规则, HTTPS 与更新步骤见 [部署与配置](docs/DEPLOY.md#32-docker).
+
+<details>
+<summary>使用 Node.js 在本机运行</summary>
+
+安装 Node.js 22.13 或更新版本, 推荐 Node.js 22 LTS 最新补丁版本. 按上方步骤获取代码并填写配置后, 在项目目录运行:
+
+```sh
+npm ci
+npm start
+```
+
+默认打开 [http://127.0.0.1:8787](http://127.0.0.1:8787).
+
+已有 Docker 实例时, 本机手动测试改用 `npm run start:local`, 默认地址为 [http://127.0.0.1:8789](http://127.0.0.1:8789), 数据与管理员凭据单独保存. 具体规则见 [本地启动](docs/DEPLOY.md#2-本地启动).
+
+</details>
+
+## 使用说明
+
+- **作品与草稿**: 生成作品, 参考图, 蒙版和草稿保存在当前浏览器. 服务端仅短期中转生成结果, 需要长期保留的作品请下载.
+- **风格数据**: 管理员维护的风格文本与示例图持久保存到服务端, 更新部署后保留编辑结果. 使用后台备份功能导出完整风格库.
+- **模型能力**: 视频分镜生成静态图片. 页面参数随通道能力调整, 下载与查看器使用文件的真实格式和尺寸. 当前已测通道按 PNG 提供生成, 请求尺寸作为目标画幅; 不提供 Seed, CFG, 步数或参考权重占位控件. 详见 [真实通道能力验证](docs/REAL_API_VALIDATION.md).
+
+## 技术栈
+
+- **前端**: React 19, TypeScript 6, Vite 8, Tailwind CSS 3, 本地图标与字体.
+- **服务端**: Node.js 22, 同源 HTTP 服务, Images / Responses 适配, 单 worker 任务队列.
+- **数据**: 服务端使用内置 SQLite 保存任务元信息, 会话和风格目录; 浏览器使用 IndexedDB 保存作品与草稿.
+- **部署**: Docker Compose, Node.js 直接运行或单实例 PM2.
+
+API Key 只由服务端持有. 保持单个 Node 进程, 单个容器副本和 `imageConcurrency: 1`. 模块职责与数据流见 [功能清单与架构评估](docs/FEATURE_ARCHITECTURE_REVIEW.md).
 
 ## 开发与验证
 
-- 在一个终端运行 `npm run dev:api`, 另一个终端运行 `npm run dev`.
-- 执行 `npm test`, 验证配置, 生成契约, 路由, HTTP, 领取和重启恢复, 并构建前端.
-- 执行 `npm run test:browser`, 使用隔离浏览器和虚拟上游验证完整交互. 有系统 Chrome 时直接使用; 否则先运行 `npx playwright install chromium`.
-- 执行 `docker build -t sprout-canvas:verify .`, 再执行 `npm run test:docker`, 验证容器页面, 产物一致性, 会话恢复和健康检查.
-- 执行 `npm audit`, 检查包括构建工具在内的依赖. 上述自动测试均不调用真实生图通道.
+### 本地开发
 
-## 文档
+安装 Node.js 22.13 或更新版本, 按 [快速开始](#快速开始) 完成代码获取和本地配置, 然后安装依赖:
 
-- [功能清单与架构评估](docs/FEATURE_ARCHITECTURE_REVIEW.md)
-- [Stitch UI 对齐记录](docs/UI_STITCH_ALIGNMENT.md)
-- [真实通道能力验证](docs/REAL_API_VALIDATION.md)
-- [产品需求](docs/PRD.md), [设计规范](docs/DESIGN.md), [部署与配置](docs/DEPLOY.md)
+```sh
+npm ci
+```
 
-当前已测通道按 PNG 提供生成, 请求尺寸作为目标画幅, 下载和查看器以真实文件格式/尺寸为准. Seed, CFG, 步数和参考权重不作为用户参数提供.
+在两个终端分别启动 API 和前端:
 
-初始风格素材来源与许可见 [ATTRIBUTION.txt](public/assets/styles/ATTRIBUTION.txt). 保留原作者署名和 CC BY 4.0 许可, 不将示例图当作本模型效果承诺.
+```sh
+# 终端 1: API 服务
+npm run dev:api
+```
+
+```sh
+# 终端 2: Vite 开发服务
+npm run dev
+```
+
+使用 Vite 输出的地址访问页面, API 请求由 Vite 代理到本机服务.
+
+### 验证命令
+
+| 命令 | 验证范围 |
+| --- | --- |
+| `npm test` | 配置, 生成契约, 路由, HTTP, 结果领取和重启恢复, 同时完成前端构建. |
+| `npm run test:browser` | 在隔离浏览器和虚拟上游中验证页面交互. |
+| `npm run test:docker` | 容器页面, 产物一致性, 会话恢复和健康检查. |
+| `npm audit` | 检查包括构建工具在内的依赖. |
+
+- 浏览器验收: 有系统 Chrome 时直接使用, 否则先运行 `npx playwright install chromium`.
+- Docker 验收: 先运行 `docker build -t sprout-canvas:verify .` 构建验收镜像, 再执行测试命令.
+
+上述自动测试使用隔离配置, 不调用真实生图通道. 先在本机完成验证, GitHub [Verify 工作流](.github/workflows/verify.yml) 负责复核.
+
+## 项目文档
+
+| 文档 | 阅读内容 |
+| --- | --- |
+| [部署与配置](docs/DEPLOY.md) | 配置字段, 运行方式, 更新与备份. |
+| [产品需求](docs/PRD.md) | 功能定位, 使用流程与验收要求. |
+| [设计规范](docs/DESIGN.md) / [品牌与定位](docs/BRAND_AND_POSITIONING.md) | 界面布局, 字体配色与产品文案约定. |
+| [功能清单与架构评估](docs/FEATURE_ARCHITECTURE_REVIEW.md) | 功能实现情况, 模块边界与技术架构. |
+| [Stitch UI 对齐记录](docs/UI_STITCH_ALIGNMENT.md) | 设计稿对应关系与页面验收记录. |
+| [真实通道能力验证](docs/REAL_API_VALIDATION.md) | 实际 API 行为, 输出格式与能力边界. |
+
+## 素材来源
+
+初始风格案例整理自 [awesome-gptimage2-prompts](https://github.com/gpt-image2/awesome-gptimage2-prompts). 原作者, 图片来源与 CC BY 4.0 许可见 [素材署名清单](public/assets/styles/ATTRIBUTION.txt). 截图中的水彩阅读示例由蜡笔进化论提供, 同样列于该清单.
+
+管理员自行添加的素材按各条记录的作者与来源维护. 示例图用于展示创作案例, 不作为模型效果承诺.
