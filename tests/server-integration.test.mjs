@@ -7,7 +7,11 @@ import { PNG_BASE64, PNG_URL, MASK_URL, png, submission } from './fixtures.mjs';
 
 const app = await startHarness();
 let cookie;
-const api = (url, options = {}) => app.api(url, { cookie, ...options });
+const api = (url, options = {}) => {
+  const owner = options.cookie || cookie;
+  const body = options.body?.request && owner ? { ...options.body, creditQuote: options.body.creditQuote || app.quote(owner) } : options.body;
+  return app.api(url, { cookie, ...options, ...(body !== undefined ? { body } : {}) });
+};
 async function submit(input, owner = cookie) {
   const result = await api('/api/jobs', { method: 'POST', body: input, cookie: owner });
   assert.equal(result.status, 202, JSON.stringify(result.data));

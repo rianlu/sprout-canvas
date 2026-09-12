@@ -6,10 +6,9 @@ import type { StyleRecord } from '../../shared/style-contract.mjs';
 
 interface StylesLibraryProps {
   onUseInStudio: (style: StyleRecord) => Promise<void>;
-  onManage: () => void;
 }
 
-export function StylesLibrary({ onUseInStudio, onManage }: StylesLibraryProps) {
+export function StylesLibrary({ onUseInStudio }: StylesLibraryProps) {
   const { styles, categories, loading, error, refresh } = useStyleCatalog();
   const [search, setSearch] = useState('');
   const [category, setCategory] = useState('全部');
@@ -59,14 +58,9 @@ export function StylesLibrary({ onUseInStudio, onManage }: StylesLibraryProps) {
   </div>;
   return <div className="stitch-page w-full bg-surface">
     <section className="w-full px-gutter-canvas pt-space-lg pb-space-md">
-      <div className="flex flex-col md:flex-row md:items-end justify-between gap-space-md">
-        <div>
-          <div className="flex items-center gap-2 mb-space-2xs text-secondary"><StitchIcon name="palette" size={18} /><span className="font-meta-sm text-meta-sm tracking-wider">灵感画风 · {styles.length} 个模板</span></div>
-          <h1 className="font-headline-lg text-headline-lg text-on-surface tracking-tight">灵感画风库 · 风格与创作模板</h1>
-          <p className="font-body-md text-body-md text-on-surface-variant mt-1 leading-relaxed">从图片与提示词中寻找灵感, 复制模板或发送到单图创作后编辑使用.</p>
-        </div>
-        <button type="button" className="self-start shrink-0 flex items-center gap-1.5 px-3 py-2 rounded-xl border border-outline-variant/40 hover:bg-surface-container font-body-sm text-body-sm text-primary" onClick={onManage}><StitchIcon name="tune" size={17} />管理风格</button>
-      </div>
+      <div className="flex items-center gap-2 mb-space-2xs text-secondary"><StitchIcon name="palette" size={18} /><span className="font-meta-sm text-meta-sm tracking-wider">灵感画风 · {styles.length} 个模板</span></div>
+      <h1 className="font-headline-lg text-headline-lg text-on-surface tracking-tight">灵感画风库 · 风格与创作模板</h1>
+      <p className="font-body-md text-body-md text-on-surface-variant mt-1 leading-relaxed">从图片与提示词中寻找灵感, 复制模板或发送到单图创作后编辑使用.</p>
     </section>
     <section className="stitch-style-filters px-gutter-canvas py-3 sticky top-16 z-30 bg-surface/95 backdrop-blur-xl border-b border-outline-variant/25">
       <div className="flex flex-col lg:flex-row lg:items-center gap-3">

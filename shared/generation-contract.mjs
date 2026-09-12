@@ -1,3 +1,5 @@
+import { validateCreditQuote } from './credits-contract.mjs';
+
 export const GENERATION_DEFAULTS = Object.freeze({
   size: '1024x1024', quality: 'medium', outputFormat: 'png', background: 'auto', outputCompression: 90,
 });
@@ -65,7 +67,7 @@ function onlyKeys(value, keys, name) {
 /** Keep one validated domain contract for browser requests and provider adapters. */
 export function validateGenerationSubmission(value) {
   const input = object(value, '请求');
-  onlyKeys(input, ['requestId', 'request', 'clientContext', 'providerId', 'referenceJobId', 'referenceImage', 'retryOf'], '请求');
+  onlyKeys(input, ['requestId', 'request', 'clientContext', 'providerId', 'referenceJobId', 'referenceImage', 'retryOf', 'creditQuote'], '请求');
   const request = object(input.request, '生成参数');
   onlyKeys(request, ['prompt', 'size', 'quality', 'outputFormat', 'background', 'outputCompression', 'references', 'mask'], '生成参数');
   const references = request.references ?? [];
@@ -109,6 +111,7 @@ export function validateGenerationSubmission(value) {
   if (input.referenceJobId && normalized.references.length > 3) throw requestError('首镜参考和上传参考图合计最多 4 张');
   return {
     requestId: id(input.requestId, '请求 ID', true), request: normalized, clientContext,
+    ...(input.creditQuote ? { creditQuote: validateCreditQuote(input.creditQuote) } : {}),
     ...(input.providerId ? { providerId: id(input.providerId, '通道 ID') } : {}),
     ...(input.referenceJobId ? { referenceJobId: id(input.referenceJobId, '参考任务 ID') } : {}),
     ...(input.referenceImage ? { referenceImage: reference(input.referenceImage, '首镜参考图片') } : {}),

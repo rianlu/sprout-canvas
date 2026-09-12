@@ -6,20 +6,26 @@ import { prepareImageFile } from '../lib/image/compress';
 import { buildGenerationPayload, resolveSize } from '../lib/api/generation';
 import type { QueueSubmitInput } from '../lib/api/queue';
 import { requestTextGeneration } from '../lib/api/text';
+import { getCreditQuote } from '../lib/credits';
 import { brushMaskToDataUrl, brushStrokeCount, hasEditableRegion, type BrushMaskData } from '../lib/editor/brush-mask';
 import { MaskEditor } from '../components/editor/MaskEditor';
 import { SplitToolDrawer } from '../components/tools/SplitToolDrawer';
 import { randomId } from '../lib/random/id';
 import { readDraft, writeDraft } from '../lib/storage/drafts';
 import { downloadRecord } from '../lib/image/gallery';
-import { readWorkspaceDraft, writeWorkspaceDraft, registerWorkspaceSubmission } from '../lib/storage/gallery-db';
+import { readWorkspaceDraft, writeWorkspaceDraft, registerWorkspaceSubmission, unconfirmedWorkspaceBatch } from '../lib/storage/gallery-db';
+import { recoverSubmissionBatch } from '../lib/queue-recovery';
 import { imageEditConfig, sourceImageDraft, type StudioDraft } from '../lib/image/recipe';
-import { StitchStudioRail, StitchCanvasStream, type QueueJobView } from '../components/stitch-studio/StitchStudioRail';
+import { StitchStudioRail, StitchCanvasStream, type CanvasEntry } from '../components/stitch-studio/StitchStudioRail';
+import { selectStudioFeed } from '../lib/studio-feed';
+import { readPromptHistory, togglePromptHistory, type PromptHistory } from '../lib/prompt-history';
+import { PROMPT_POLISH_INSTRUCTIONS, validatePolishedPrompt } from '../../shared/prompt-polish.mjs';
 import { ToastStack } from '../components/shell/QueueDrawer';
 import { StitchGalleryViewer } from '../components/gallery/StitchGalleryViewer';
 
 interface CreativeStudioProps {
   onOpenStyles: () => void;
+  onOpenGallery: () => void;
   onSubmitBatch: (inputs: QueueSubmitInput[]) => Promise<QueueJob[]>;
   onCancel: (jobId: string) => Promise<void>;
   onUseRecipe: (record: ResultRecord) => void;
@@ -41,7 +47,7 @@ const TONE_SUFFIX: Record<string, string> = {
 /**
  * 单图创作页 (照搬 Stitch 单图稿). DOM 类名原样, 逻辑层复用 v3.0.
  */
-export function CreativeStudio({ onOpenStyles, onSubmitBatch, onCancel, onUseRecipe, onRetry, results, jobs, imageCapabilities }: CreativeStudioProps) {
+export function CreativeStudio({ onOpenStyles, onOpenGallery, onSubmitBatch, onCancel, onUseRecipe, onRetry, results, jobs, imageCapabilities }: CreativeStudioProps) {
   const [toasts, setToasts] = useState<{ id: string; type: 'info' | 'success' | 'error'; message: string }[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [retryingJobs, setRetryingJobs] = useState<Set<string>>(new Set());
@@ -50,6 +56,13 @@ export function CreativeStudio({ onOpenStyles, onSubmitBatch, onCancel, onUseRec
   const [restoredMask, setRestoredMask] = useState('');
   const [sourceRecord, setSourceRecord] = useState<ResultRecord | null>(null);
   const [polishing, setPolishing] = useState(false);
+  const polishLock = useRef(false);
+  const [promptHistory, setPromptHistory] = useState<PromptHistory | null>(null);
+  const [imageBusy, setImageBusy] = useState(false);
+  const imageLock = useRef(false);
+  const imageSequence = useRef(0);
+  const alive = useRef(true);
+  useEffect(() => { alive.current = true; return () => { alive.current = false; imageSequence.current++; }; }, []);
   const [tone, setTone] = useState<'soft' | 'vivid' | 'none'>('soft');
   const [styleId, setStyleId] = useState(() => readDraft(STUDIO_STYLE_DRAFT_KEY) || 'default');
   const [styleName, setStyleName] = useState('');
@@ -78,7 +91,6 @@ export function CreativeStudio({ onOpenStyles, onSubmitBatch, onCancel, onUseRec
       return next.outputFormat === current.outputFormat && next.aspectRatio === current.aspectRatio ? current : next;
     });
   }, [imageCapabilities, draftLoaded]);
-  const [filter, setFilter] = useState<'all' | 'today'>('all');
   const [fullscreen, setFullscreen] = useState<ResultRecord | null>(null);
   const [splitOpen, setSplitOpen] = useState(false);
   const [config, setConfig] = useState<GenerationConfig>(() => {
@@ -113,7 +125,7 @@ export function CreativeStudio({ onOpenStyles, onSubmitBatch, onCancel, onUseRec
       const stored = await readWorkspaceDraft<StudioDraft>('studio');
       const transfer = await readWorkspaceDraft<StudioDraft>('studio-transfer');
       if (!alive) return;
-      const draft = { ...stored, ...transfer };
+      const draft = { ...stored, ...transfer, promptHistory: transfer ? null : readPromptHistory(stored?.promptHistory) };
       if (draft.config) setConfig((current) => ({ ...current, ...stored?.config, ...transfer?.config, prompt: transfer?.config?.prompt ?? stored?.config?.prompt ?? current.prompt }));
       if (draft.styleId !== undefined) setStyleId(draft.styleId || 'default');
       setStyleName(draft.styleName || '');
@@ -122,6 +134,7 @@ export function CreativeStudio({ onOpenStyles, onSubmitBatch, onCancel, onUseRec
       if (draft.mask !== undefined) setMask(draft.mask);
       if (draft.tone) setTone(draft.tone);
       setRestoredMask(draft.maskDataUrl || '');
+      setPromptHistory(draft.promptHistory);
       const transferredStyle = transfer?.styleId && transfer.styleId !== 'default' ? transfer.styleName || '提示词模板' : '';
       if (transferredStyle) setMaskEditorOpen(false);
       if (transfer) {
@@ -135,7 +148,9 @@ export function CreativeStudio({ onOpenStyles, onSubmitBatch, onCancel, onUseRec
     })().catch((error) => { if (alive) { setDraftLoaded(true); pushToast('error', error instanceof Error ? error.message : '草稿读取失败'); } });
     return () => { alive = false; };
   }, [pushToast]);
-  const currentDraft = useMemo<StudioDraft>(() => ({ config, styleId, styleName, refImage, sourceRecord, mask, tone, maskDataUrl: restoredMask }), [config, styleId, styleName, refImage, sourceRecord, mask, tone, restoredMask]);
+  const currentDraft = useMemo<StudioDraft>(() => ({ config, styleId, styleName, refImage, sourceRecord, mask, tone, maskDataUrl: restoredMask, promptHistory }), [config, styleId, styleName, refImage, sourceRecord, mask, tone, restoredMask, promptHistory]);
+  const currentDraftRef = useRef(currentDraft);
+  currentDraftRef.current = currentDraft;
   useEffect(() => {
     if (!draftLoaded) return;
     void writeWorkspaceDraft('studio', currentDraft).catch(() => pushToast('error', '草稿未能保存, 请检查本地空间'));
@@ -168,59 +183,99 @@ export function CreativeStudio({ onOpenStyles, onSubmitBatch, onCancel, onUseRec
 
   // 润色扩写 (真实 /api/text)
   const handlePolish = useCallback(async () => {
+    if (polishLock.current || submitLock.current || !draftLoaded || config.mode === 'edit') return;
     if (!config.prompt.trim()) {
       pushToast('info', '先写下一点灵感再润色');
       return;
     }
-    setPolishing(true);
+    polishLock.current = true; setPolishing(true);
+    const original = config.prompt;
     try {
-      const result = await requestTextGeneration(
-        '你是中文提示词润色助手。把用户的画面描述润色为更具体、更有画面感的一句话(60字内)，保持原意与原语言，只输出润色结果。',
-        config.prompt,
+      await writeWorkspaceDraft('studio', currentDraftRef.current);
+      await requestTextGeneration(
+        PROMPT_POLISH_INSTRUCTIONS, original, 'prompt', undefined,
+        async (result) => {
+          const polished = validatePolishedPrompt(result.text);
+          const latest = currentDraftRef.current;
+          if (!alive.current || latest.config?.mode === 'edit' || latest.config?.prompt !== original) {
+            throw new Error('原草稿已切换, 润色结果已保留. 回到原文后可再次点击润色领取');
+          }
+          const history = polished === original ? latest.promptHistory || null : { before: original, after: polished, restored: false };
+          const next: StudioDraft = { ...latest, config: { ...latest.config, prompt: polished }, promptHistory: history };
+          const saved = await writeWorkspaceDraft('studio', next, { expected: latest });
+          if (!saved) throw new Error('草稿已在其他页面变更, 未覆盖内容. 润色结果已保留');
+          if (!alive.current || currentDraftRef.current.config?.prompt !== original || currentDraftRef.current.config?.mode === 'edit') return;
+          currentDraftRef.current = { ...currentDraftRef.current, config: { ...currentDraftRef.current.config, prompt: polished }, promptHistory: history };
+          setConfig((current) => ({ ...current, prompt: polished }));
+          setPromptHistory(history);
+          pushToast('success', polished === original ? '原文已清晰, 已保留原文' : '已润色, 可继续修改或撤销');
+        },
       );
-      const polished = result?.text?.trim();
-      if (polished) {
-        setConfig((current) => ({ ...current, prompt: polished }));
-        pushToast('success', '已润色，可继续调整');
-      } else {
-        pushToast('error', '润色服务暂不可用，请稍后再试');
-      }
-    } catch {
-      pushToast('error', '润色失败，请检查网络后重试');
+    } catch (error) {
+      if (alive.current) pushToast('error', error instanceof Error ? error.message : '润色失败, 请检查网络后重试');
     } finally {
-      setPolishing(false);
+      polishLock.current = false;
+      if (alive.current) setPolishing(false);
     }
-  }, [config.prompt, pushToast]);
+  }, [config.prompt, config.mode, draftLoaded, pushToast]);
+
+  const handleTogglePolish = useCallback(() => {
+    const draft = currentDraftRef.current;
+    if (polishLock.current || submitLock.current || !draft.promptHistory || draft.config?.mode === 'edit') return;
+    const next = togglePromptHistory(draft.promptHistory, draft.config?.prompt || '');
+    currentDraftRef.current = { ...draft, config: { ...draft.config, prompt: next.prompt }, promptHistory: next.history };
+    setConfig((current) => ({ ...current, prompt: next.prompt }));
+    setPromptHistory(next.history);
+  }, []);
+
+  const referenceIsEmpty = useCallback(() => {
+    const draft = currentDraftRef.current;
+    return !draft.refImage && !draft.sourceRecord && !draft.mask && !draft.maskDataUrl && draft.config?.mode !== 'edit' && !draft.config?.refImages?.length;
+  }, []);
 
   // 参考图
   const handleReplaceRef = useCallback(
-    async (file: File) => {
+    async (file: File, onlyEmpty = false) => {
+      if (imageLock.current || (onlyEmpty && (!referenceIsEmpty() || maskEditorOpen))) return;
+      const sequence = ++imageSequence.current;
+      imageLock.current = true; setImageBusy(true);
       try {
         const prepared = await prepareImageFile(file, { preserveOriginal: true });
-        setRefImage({ id: randomId(), ...prepared });
+        if (!alive.current || imageSequence.current !== sequence || (onlyEmpty && !referenceIsEmpty())) return;
+        const reference = { id: randomId(), ...prepared };
+        currentDraftRef.current = { ...currentDraftRef.current, refImage: reference, sourceRecord: null, mask: null, maskDataUrl: '', config: { ...currentDraftRef.current.config, mode: 'reference', refImages: [] } };
+        setRefImage(reference);
         setSourceRecord(null);
         setConfig((current) => ({ ...current, mode: 'reference', refImages: [] }));
         setMask(null);
         setRestoredMask('');
       } catch (error) {
-        pushToast('error', error instanceof Error ? error.message : '图片读取失败, 请换一张试试');
+        if (alive.current && imageSequence.current === sequence) pushToast('error', error instanceof Error ? error.message : '图片读取失败, 请换一张试试');
+      } finally {
+        if (imageSequence.current === sequence) { imageLock.current = false; if (alive.current) setImageBusy(false); }
       }
     },
-    [pushToast],
+    [pushToast, referenceIsEmpty, maskEditorOpen],
   );
 
   // 提交 (buildGenerationPayload 走真实协议: ref_images + maskFactory)
   const handleSubmit = useCallback(async () => {
-    if (!config.prompt.trim() || submitLock.current || !draftLoaded || !imageCapabilities || submitting || polishing || maskEditorOpen || fullscreen || splitOpen) return;
+    if (!config.prompt.trim() || submitLock.current || imageLock.current || !draftLoaded || !imageCapabilities || submitting || polishing || maskEditorOpen || fullscreen || splitOpen) return;
     submitLock.current = true;
     setSubmitting(true);
     try {
+      const creditQuote = getCreditQuote();
+      const unconfirmed = await unconfirmedWorkspaceBatch('studio', currentDraft);
+      if (unconfirmed.length) {
+        const recovered = await recoverSubmissionBatch(unconfirmed, creditQuote);
+        await onSubmitBatch(recovered.inputs);
+        pushToast('success', recovered.recreated ? `已使用当前访问码重新提交 ${recovered.inputs.length} 张图片` : `已确认原批次的 ${unconfirmed.length} 张任务, 不会重复提交`);
+        return;
+      }
       const isEdit = config.mode === 'edit';
       if (!isEdit && !imageCapabilities.formats.includes(config.outputFormat === 'auto' ? 'png' : config.outputFormat)) throw new Error('当前通道不支持所选生成格式, 请重新选择');
       const count = isEdit ? 1 : config.imageCount;
       const requestIds = Array.from({ length: count }, () => randomId());
-      const revision = await writeWorkspaceDraft('studio', currentDraft);
-      await registerWorkspaceSubmission('studio', currentDraft, requestIds, { revision });
       if (isEdit && (!refImage || !(mask || restoredMask))) throw new Error('请先涂抹并保存需要修改的区域');
       if (isEdit && refImage && !await hasEditableRegion(mask || { strokes: [], width: 0, height: 0 }, refImage.dataUrl, restoredMask)) throw new Error('蒙版没有需要修改的区域, 请重新涂抹');
       const styledPrompt = isEdit
@@ -242,7 +297,7 @@ export function CreativeStudio({ onOpenStyles, onSubmitBatch, onCancel, onUseRec
       const batchId = randomId();
       const editSource = isEdit ? sourceRecord : null;
       const inputs: QueueSubmitInput[] = requestIds.map((requestId) => ({
-        requestId, request: payload,
+        requestId, request: payload, creditQuote,
         ...(editSource?.recipe?.providerId ? { providerId: editSource.recipe.providerId } : {}),
         clientContext: {
           kind: editSource?.kind || 'single', placeholderId: randomId(), prompt: config.prompt,
@@ -255,6 +310,8 @@ export function CreativeStudio({ onOpenStyles, onSubmitBatch, onCancel, onUseRec
           ...(editSource?.kind === 'series' ? { seriesId: editSource.seriesId, sceneId: editSource.sceneId, sceneIndex: editSource.sceneIndex, template: editSource.template, masterPrompt: editSource.masterPrompt } : {}),
         },
       }));
+      const revision = await writeWorkspaceDraft('studio', currentDraft);
+      await registerWorkspaceSubmission('studio', currentDraft, requestIds, { revision });
       await onSubmitBatch(inputs);
       pushToast('success', `已提交 ${count} 张, 完成后自动保存到本地展馆`);
     } catch (error) {
@@ -296,26 +353,28 @@ export function CreativeStudio({ onOpenStyles, onSubmitBatch, onCancel, onUseRec
     return () => window.removeEventListener('keydown', onKey);
   }, [handleSubmit]);
 
-  const jobViews: QueueJobView[] = useMemo(
-    () =>
-      jobs
-        .filter((j) => !j.supersededBy)
-        .filter((j) => !(j.localOnly && j.retryOf && jobs.some((source) => source.id === j.retryOf)))
-        .filter((j) => ['running', 'pending', 'failed', 'interrupted', 'expired', 'unsubmitted'].includes(j.status))
-        .filter((j) => (j.clientContext?.kind ?? 'single') === 'single' || (config.mode === 'edit' && sourceRecord?.sceneId && j.clientContext?.sceneId === sourceRecord.sceneId))
-        .map((j) => ({
-          id: j.id,
-          status: j.status === 'running' ? 'running' : j.status === 'pending' ? 'queued' : 'failed',
-          prompt: j.clientContext?.prompt ?? '',
-          elapsedMs: j.elapsedMs,
-          position: j.yourPosition,
-          error: j.error,
-          createdAt: j.queuedAt,
-          canRetry: j.canRetry,
-          retrying: retryingJobs.has(j.id),
-        })),
-    [jobs, retryingJobs, config.mode, sourceRecord?.sceneId],
-  );
+  const canvasEntries = useMemo<CanvasEntry[]>(() => selectStudioFeed(jobs, results, config.mode === 'edit' ? sourceRecord?.sceneId : undefined).map((entry) => {
+    if (entry.kind === 'result') return entry;
+    const job = entry.job;
+    return {
+      kind: 'job', key: entry.key,
+      job: {
+        id: job.id,
+        credit: job.credit,
+        recoveryPoints: job.interruptionReason === 'pending-restart' && !job.outcomeUnknown ? job.credit?.points : undefined,
+        recoveryUnlimited: job.interruptionReason === 'pending-restart' && !job.outcomeUnknown ? job.credit?.unlimited : undefined,
+        settlementPending: job.settlementPending,
+        status: job.status === 'succeeded' ? 'saving' : job.status === 'running' ? 'running' : job.status === 'pending' ? 'queued' : 'failed',
+        prompt: job.clientContext?.prompt ?? '',
+        elapsedMs: job.elapsedMs,
+        position: job.yourPosition,
+        error: job.error,
+        createdAt: job.queuedAt,
+        canRetry: job.canRetry,
+        retrying: retryingJobs.has(job.id),
+      },
+    };
+  }), [jobs, results, retryingJobs, config.mode, sourceRecord?.sceneId]);
 
   const pinnedStyleName = styleId && styleId !== 'default' ? styleName || '已载入模板' : null;
 
@@ -326,26 +385,37 @@ export function CreativeStudio({ onOpenStyles, onSubmitBatch, onCancel, onUseRec
   }, [pushToast]);
 
   const handleUseAsRef = useCallback(async (record: ResultRecord, edit = false) => {
-    const draft = await sourceImageDraft(record, edit);
-    setRefImage(draft.refImage || null);
-    setSourceRecord(draft.sourceRecord || null);
-    setConfig((current) => ({ ...current, ...draft.config }));
-    setStyleId('default');
-    setStyleName('');
-    setTone('none');
-    setMask(null);
-    setRestoredMask('');
-    setFullscreen(null);
-    if (edit) setMaskEditorOpen(true);
+    const sequence = ++imageSequence.current;
+    imageLock.current = true; setImageBusy(true);
+    try {
+      const draft = await sourceImageDraft(record, edit);
+      if (!alive.current || imageSequence.current !== sequence) return;
+      currentDraftRef.current = { ...currentDraftRef.current, ...draft, promptHistory: null };
+      setPromptHistory(null);
+      setRefImage(draft.refImage || null);
+      setSourceRecord(draft.sourceRecord || null);
+      setConfig((current) => ({ ...current, ...draft.config }));
+      setStyleId('default');
+      setStyleName('');
+      setTone('none');
+      setMask(null);
+      setRestoredMask('');
+      setFullscreen(null);
+      if (edit) setMaskEditorOpen(true);
+    } finally {
+      if (imageSequence.current === sequence) { imageLock.current = false; if (alive.current) setImageBusy(false); }
+    }
   }, []);
 
   const openMaskEditor = useCallback(() => {
+    if (imageLock.current || polishLock.current) return;
     if (!refImage) { pushToast('info', '先上传图片才能涂抹蒙版'); return; }
     if (config.mode !== 'edit') {
       setConfig((current) => ({ ...current, ...imageEditConfig(sourceRecord) }));
       setStyleId('default');
       setStyleName('');
       setTone('none');
+      setPromptHistory(null);
     }
     setMaskEditorOpen(true);
   }, [refImage, config.mode, sourceRecord, pushToast]);
@@ -362,18 +432,25 @@ export function CreativeStudio({ onOpenStyles, onSubmitBatch, onCancel, onUseRec
             <div ref={railRef} className="studio-rail">
               <StitchStudioRail
                 onNewCreation={() => {
+                  imageSequence.current++; imageLock.current = false; setImageBusy(false);
                   setConfig((current) => ({ ...current, mode: 'text', prompt: '', refImages: [] }));
                   setRefImage(null); setSourceRecord(null); setMask(null); setRestoredMask(''); setMaskEditorOpen(false);
                   setStyleId('default'); setStyleName('');
+                  setPromptHistory(null);
                   writeDraft('studio_ref_image', ''); writeDraft('studio_open_mask', '');
                 }}
                 onOpenStyles={onOpenStyles}
                 prompt={config.prompt}
-                onPromptChange={(value) => handleConfigChange({ prompt: value })}
+                onPromptChange={(value) => { if (!polishLock.current) handleConfigChange({ prompt: value }); }}
                 onPolish={() => {
                   void handlePolish();
                 }}
                 polishing={polishing}
+                promptHistory={promptHistory}
+                onTogglePolish={handleTogglePolish}
+                imageBusy={imageBusy}
+                canAddReference={referenceIsEmpty() && !maskEditorOpen && !imageBusy && !submitting}
+                onAddRef={(file) => { void handleReplaceRef(file, true); }}
                 pinnedStyleName={pinnedStyleName}
                 onUnpinStyle={() => { setStyleId('default'); setStyleName(''); }}
                 refImage={refImage}
@@ -398,11 +475,8 @@ export function CreativeStudio({ onOpenStyles, onSubmitBatch, onCancel, onUseRec
             </div>
 
             <StitchCanvasStream
-              jobs={jobViews}
-              results={results}
-              editingSceneId={config.mode === 'edit' ? sourceRecord?.sceneId : undefined}
-              filter={filter}
-              onFilterChange={setFilter}
+              entries={canvasEntries}
+              onOpenGallery={onOpenGallery}
               onDownload={handleDownload}
               onUseAsRef={(record) => {
                 void handleUseAsRef(record).catch(() => pushToast('error', '无法读取本地原图'));
@@ -421,6 +495,8 @@ export function CreativeStudio({ onOpenStyles, onSubmitBatch, onCancel, onUseRec
                   .finally(() => setRetryingJobs((current) => { const next = new Set(current); next.delete(jobId); return next; }));
               }}
               onEditPrompt={(prompt) => {
+                if (polishLock.current) return;
+                setPromptHistory(null);
                 handleConfigChange({ prompt });
                 railRef.current?.scrollIntoView({ behavior: 'smooth' });
                 railRef.current?.querySelector('textarea')?.focus();
@@ -469,6 +545,8 @@ export function CreativeStudio({ onOpenStyles, onSubmitBatch, onCancel, onUseRec
         onClose={() => setSplitOpen(false)}
         galleryRecords={results}
         onUseAsReference={(record) => {
+          imageSequence.current++; imageLock.current = false; setImageBusy(false);
+          currentDraftRef.current = { ...currentDraftRef.current, refImage: record, sourceRecord: null, mask: null, maskDataUrl: '', config: { ...currentDraftRef.current.config, mode: 'reference', refImages: [] } };
           setRefImage(record); setSourceRecord(null); setMask(null); setRestoredMask('');
           setConfig((current) => ({ ...current, mode: 'reference', refImages: [] }));
           setSplitOpen(false); pushToast('success', '已设为参考图');

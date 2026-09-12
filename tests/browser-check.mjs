@@ -5,7 +5,7 @@ import path from 'node:path';
 import { tmpdir } from 'node:os';
 import { crc32 } from 'node:zlib';
 import { chromium } from 'playwright';
-import { startHarness, TEST_PASSWORD, until } from './server-harness.mjs';
+import { startHarness, until } from './server-harness.mjs';
 import { png } from './fixtures.mjs';
 
 const target = process.env.SPROUT_TEST_OUTPUT || path.join(tmpdir(), 'sprout-browser-check');
@@ -57,8 +57,8 @@ async function contextPage(init, initValue, options = {}) {
   page.on('pageerror', (error) => errors.push(error.message));
   page.setDefaultTimeout(8000);
   await page.goto(app.base);
-  await page.getByLabel('访问密码').fill(TEST_PASSWORD);
-  await page.getByRole('button', { name: '登录', exact: true }).click();
+  await page.getByLabel('访问码').fill(app.accessCode);
+  await page.getByRole('button', { name: '进入工作台', exact: true }).click();
   await page.locator('.studio-rail textarea').waitFor();
   await page.waitForFunction(() => !document.querySelector('main')?.textContent?.includes('正在加载...'));
   return { context, page };
@@ -112,7 +112,7 @@ async function screenshot(page, name, fullPage = false) {
   await page.screenshot({ path: path.join(target, `${name}.png`), fullPage });
   const overflow = await page.evaluate(() => ({ scroll: document.documentElement.scrollWidth, width: innerWidth }));
   assert.ok(overflow.scroll <= overflow.width + 1, `${name} horizontal overflow: ${JSON.stringify(overflow)}`);
-  for (const label of ['任务队列', '切换主题', '退出工作台']) {
+  for (const label of ['任务队列', '用户菜单']) {
     const bounds = await page.getByRole('button', { name: new RegExp(label) }).first().boundingBox();
     assert.ok(bounds && bounds.x >= 0 && bounds.x + bounds.width <= overflow.width + 1, `${name}: ${label} must stay inside viewport`);
   }
@@ -348,20 +348,20 @@ try {
   await page.getByLabel('移除系列参考图').click();
   await page.getByRole('img', { name: '系列主体参考', exact: true }).waitFor({ state: 'hidden' });
   let submissions = 0;
-  await page.route('**/api/jobs', async (route) => {
-    if (route.request().method() === 'POST' && ++submissions === 3) return route.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ error: '测试: 提交暂时不可用' }) });
+  await page.route('**/api/jobs/batch', async (route) => {
+    if (route.request().method() === 'POST' && ++submissions === 1) return route.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ error: '测试: 提交暂时不可用' }) });
     await route.continue();
   });
   const seriesStart = imageCount;
   const jobsBeforePlanning = (await jobs(page)).length;
   const outboxBeforePlanning = (await rows(page, 'outbox')).length;
-  const confirmSeries = page.getByRole('button', { name: '确认并生成 4 张图片', exact: true });
+  const confirmSeries = page.getByRole('button', { name: /^确认并生成 4 张图片/ });
   assert.ok(await confirmSeries.isDisabled());
   let splitRequests = 0;
   const planGate = new Promise((resolve) => { releasePlan = resolve; });
   await page.route('**/api/text', async (route) => { splitRequests++; await planGate; await route.continue(); });
-  await page.getByRole('button', { name: '智能拆解分镜', exact: true }).dblclick();
-  await page.getByRole('button', { name: '正在拆解分镜...', exact: true }).waitFor();
+  await page.getByRole('button', { name: /^智能拆解分镜/ }).dblclick();
+  await page.getByRole('button', { name: /^正在拆解分镜/ }).waitFor();
   assert.ok(await confirmSeries.isDisabled());
   await page.keyboard.press('Control+Enter');
   releasePlan(); releasePlan = undefined;
@@ -394,7 +394,7 @@ try {
   assert.equal(await page.locator('#scene-prompt-0').inputValue(), reviewedPrompt);
   await page.route('**/api/text', (route) => route.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ error: '测试: 分镜拆解暂时不可用' }) }));
   page.once('dialog', (dialog) => dialog.accept());
-  await page.getByRole('button', { name: '重新拆解分镜', exact: true }).click();
+  await page.getByRole('button', { name: /^重新拆解分镜/ }).click();
   await page.getByRole('alert').filter({ hasText: '测试: 分镜拆解暂时不可用' }).waitFor();
   await page.unroute('**/api/text');
   assert.equal(await page.locator('#scene-prompt-0').inputValue(), reviewedPrompt, 'failed replanning must keep the reviewed draft');
@@ -416,10 +416,12 @@ try {
   assert.equal(imageCount, seriesStart);
   checks.push('分镜拆解只生成文字, 双击与快捷键不自动生图, 空提示词阻止提交, 逐镜编辑与刷新待确认稿, 取消或失败重拆保留原稿');
   await confirmSeries.click();
-  await waitRecords(page, 4);
+  await page.getByRole('alert').filter({ hasText: '测试: 提交暂时不可用' }).waitFor();
+  assert.equal(imageCount, seriesStart, 'a rejected batch must not partially generate images');
+  await waitRecords(page, 2);
   await closeQueue(page);
   await page.getByRole('button', { name: /继续提交剩余分镜/ }).waitFor();
-  assert.equal((await workspaceDraft(page, 'series')).brief, seriesBrief, 'partially accepted work must retain the series draft');
+  assert.equal((await workspaceDraft(page, 'series')).brief, seriesBrief, 'a rejected batch must retain the complete series draft');
   await page.reload();
   await page.getByRole('button', { name: /继续提交剩余分镜/ }).waitFor();
   assert.equal((await workspaceDraft(page, 'series')).stagedIds.length, 4, 'restoring remaining inputs must keep the complete batch identity');
@@ -428,7 +430,7 @@ try {
   await waitEmptyWorkspace(page, 'series');
   assert.equal(await page.locator('#series-story-prompt').inputValue(), seriesBrief, 'leave the current completed storyboard open for review');
   assert.equal(imageCount - seriesStart, 4);
-  await page.unroute('**/api/jobs');
+  await page.unroute('**/api/jobs/batch');
   const scenes = (await rows(page)).filter((record) => record.kind === 'series');
   assert.equal(new Set(scenes.map((record) => record.sceneId)).size, 4);
   assert.equal(new Set(scenes.map((record) => record.seriesId)).size, 1);
@@ -443,15 +445,15 @@ try {
   assert.ok((await rows(page, 'drafts')).every((draft) => !Object.hasOwn(draft.data, 'characterBrief')));
   await closeQueue(page);
   await screenshot(page, 'series-complete-desktop');
-  await page.getByTitle('重新绘制本镜', { exact: true }).first().click();
+  await page.getByTitle(/^重新绘制本镜/).first().click();
   await waitRecords(page, 7); await closeQueue(page);
   await waitEmptyWorkspace(page, 'series');
   assert.ok((await rows(page)).some((record) => record.version === 2 && record.parentId));
-  await page.getByRole('button', { name: '调整并重绘', exact: true }).first().click();
+  await page.getByRole('button', { name: /^调整并重绘/ }).first().click();
   const editor = page.getByRole('dialog', { name: '调整第 1 镜', exact: true });
   await editor.getByLabel('本镜画面提示词').fill('小棕熊在晴朗的河边散步');
   await editor.getByLabel('本镜质量').selectOption('high');
-  await editor.getByRole('button', { name: '保存并重绘本镜', exact: true }).click();
+  await editor.getByRole('button', { name: /^保存并重绘本镜/ }).click();
   await waitRecords(page, 8); await closeQueue(page);
   await waitEmptyWorkspace(page, 'series');
   assert.ok((await rows(page)).some((record) => record.version === 3 && record.recipe.quality === 'high'));
@@ -484,7 +486,7 @@ try {
   await page.reload();
   await page.locator('#series-story-prompt').waitFor();
   assert.equal(await page.locator('#series-story-prompt').inputValue(), '', 'a completed series opens as a new plan after refresh');
-  assert.equal(await page.getByTitle('重新绘制本镜', { exact: true }).count(), 0);
+  assert.equal(await page.getByTitle(/^重新绘制本镜/).count(), 0);
   assert.equal((await rows(page)).length, 8, 'ending the series draft keeps every saved scene version');
   checks.push('待确认和部分完成的系列草稿继续恢复, 全镜及单镜重绘完成后结束草稿, 刷新开启新策划且保留所有作品版本');
   await nav(page, '展馆');
@@ -638,13 +640,13 @@ try {
     }
   }
   checks.push('桌面, 平板, 手机深浅主题下展馆与风格库的标题字体, 字号, 字重, 行高及背景颜色一致');
-  await page.getByLabel('退出工作台').click();
-  await page.getByLabel('访问密码').waitFor();
-  await page.getByLabel('访问密码').fill(TEST_PASSWORD);
-  await page.getByRole('button', { name: '登录', exact: true }).click();
+  await page.getByRole('button', { name: '用户菜单', exact: true }).click(); await page.getByRole('button', { name: '退出登录', exact: true }).click();
+  await page.getByLabel('访问码').waitFor();
+  await page.getByLabel('访问码').fill(app.accessCode);
+  await page.getByRole('button', { name: '进入工作台', exact: true }).click();
   await page.locator('header').waitFor();
   await page.evaluate(() => fetch('/api/auth/logout', { method: 'POST' }));
-  await page.waitForFunction(() => document.querySelector('input[aria-label="访问密码"]'), undefined, { timeout: 10000 });
+  await page.waitForFunction(() => document.querySelector('input[aria-label="访问码"]'), undefined, { timeout: 10000 });
   checks.push('桌面, 平板, 手机, 深浅主题四页布局, 手机退出和会话过期');
 
   // Simulate a quota failure inside the image-saving transaction, then retry successfully.
@@ -699,18 +701,18 @@ try {
   assert.equal(await op.locator('#series-story-prompt').inputValue(), commerceBrief, 'removing the library style selector keeps the story');
   await op.getByLabel('系列生成质量').selectOption('high');
   holdImage = new Promise((resolve) => { releaseImage = resolve; });
-  await op.getByRole('button', { name: '智能拆解分镜', exact: true }).click();
-  await until(() => op.getByRole('button', { name: '确认并生成 4 张图片', exact: true }).isEnabled(), 'commerce plan ready for review');
+  await op.getByRole('button', { name: /^智能拆解分镜/ }).click();
+  await until(() => op.getByRole('button', { name: /^确认并生成 4 张图片/ }).isEnabled(), 'commerce plan ready for review');
   const commerceScene = await op.locator('#scene-prompt-0').inputValue();
   const imagesBeforeSeriesStyle = imageCount;
   await nav(op, '风格库');
   assert.equal(await op.getByRole('button', { name: '发送到系列', exact: true }).count(), 0);
   await nav(op, '系列策划');
-  await until(() => op.getByRole('button', { name: '确认并生成 4 张图片', exact: true }).isEnabled(), 'reviewed scenes restored after visiting the library');
+  await until(() => op.getByRole('button', { name: /^确认并生成 4 张图片/ }).isEnabled(), 'reviewed scenes restored after visiting the library');
   assert.equal(await op.locator('#series-story-prompt').inputValue(), commerceBrief);
   assert.equal(await op.locator('#scene-prompt-0').inputValue(), commerceScene);
   assert.equal(imageCount, imagesBeforeSeriesStyle);
-  await op.getByRole('button', { name: '确认并生成 4 张图片', exact: true }).click();
+  await op.getByRole('button', { name: /^确认并生成 4 张图片/ }).click();
   await op.getByRole('dialog', { name: '任务队列', exact: true }).waitFor();
   await until(async () => (await jobs(op)).filter((job) => job.status === 'pending').length === 3, 'series pending scenes');
   await closeQueue(op);
@@ -747,14 +749,14 @@ try {
   assert.notEqual(derived.id, originalSeriesId);
   assert.ok(derived.scenes.every((id) => !originalSceneIds.includes(id)));
   assert.equal(derived.template, 'ecommerce');
-  assert.equal(await op.getByTitle('重新绘制本镜', { exact: true }).count(), 0);
+  assert.equal(await op.getByTitle(/^重新绘制本镜/).count(), 0);
   checks.push('系列待执行编辑与置顶实际生效, 衍生系列复用模板/参数/原图并生成独立身份');
 
   await op.reload();
   await op.getByRole('button', { name: '使用帮助与创作守则', exact: true }).click();
   const help = op.getByRole('dialog', { name: '工作台帮助', exact: true });
-  await help.getByRole('heading', { name: '通道状态', exact: true }).waitFor();
-  assert.match(await help.innerText(), /可用/);
+  await help.getByRole('heading', { name: '灵感点与访问码', exact: true }).waitFor();
+  assert.doesNotMatch(await help.innerText(), /通道状态/);
   await op.getByLabel('关闭帮助').click();
   await op.evaluate(() => {
     Object.defineProperty(navigator, 'canShare', { configurable: true, value: ({ files }) => files.every((file) => file instanceof File) });
@@ -766,7 +768,7 @@ try {
   await op.getByRole('button', { name: '分享文件', exact: true }).click();
   await op.waitForFunction(() => window.__sharedFiles?.length === 4);
   assert.ok((await op.evaluate(() => window.__sharedFiles)).every((file) => file.size > 1000 && file.type === 'image/jpeg' && file.name.endsWith('.jpg')));
-  checks.push('帮助与实际通道状态, 系列文件分享传入四张原图 (模拟系统分享接口)');
+  checks.push('帮助展示灵感点规则并移除通道状态, 系列文件分享传入四张原图 (模拟系统分享接口)');
 
   // Editing a series output must retain the original scene and all generation settings.
   await op.getByRole('button', { name: '局部重绘当前分镜', exact: true }).click();
@@ -928,6 +930,7 @@ try {
   const tp = touchFlow.page;
   await tp.getByLabel('画面提示词', { exact: true }).fill('检查触屏缩放的森林插画');
   await tp.getByRole('button', { name: /开始绘制/ }).click();
+  await tp.getByLabel('关闭队列抽屉').waitFor();
   await waitRecords(tp, 1);
   await nav(tp, '展馆');
   await tp.getByRole('button', { name: /检视作品:/ }).click();
@@ -978,7 +981,7 @@ try {
   assert.equal(imageCount, controlsStart);
   assert.equal((await rows(cp, 'outbox')).length, 0, 'a shortcut cannot submit while capabilities are loading');
   releaseCapabilities(); releaseCapabilities = undefined;
-  await cp.getByText('当前通道仅支持 PNG', { exact: true }).waitFor();
+  await cp.getByText('当前支持 PNG 格式', { exact: true }).waitFor();
   assert.equal(await cp.getByLabel('当前生成格式', { exact: true }).innerText(), 'PNG');
   assert.equal(await formatControls.getByRole('button').count(), 0, 'a single supported format is a read-only value');
   await until(async () => (await workspaceDraft(cp))?.config.outputFormat === 'png', 'unsupported saved format replaced by the supported format');
@@ -1068,7 +1071,7 @@ try {
     await rp.getByRole('article', { name: `未完成画稿: ${prompt}`, exact: true }).waitFor();
     await closeQueue(rp);
   }
-  assert.equal(await failureCards.count(), 2);
+  assert.equal(await failureCards.count(), 1);
   const originalFailure = (await jobs(rp)).find((job) => job.clientContext.prompt === retryPrompt);
   const untouchedFailure = (await jobs(rp)).find((job) => job.clientContext.prompt === untouchedPrompt);
   await rp.getByLabel('画面提示词', { exact: true }).fill('另一段尚未提交的提示词');
@@ -1085,40 +1088,40 @@ try {
     await retryGate;
     await route.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ error: '模拟重试提交暂不可用' }) });
   });
-  await retryCard.getByRole('button', { name: '一键重试', exact: true }).dblclick();
-  await retryCard.getByRole('button', { name: '正在提交...', exact: true }).waitFor();
-  assert.ok(await retryCard.getByRole('button', { name: '正在提交...', exact: true }).isDisabled());
+  await retryCard.getByRole('button', { name: /^一键重试/ }).dblclick();
+  await retryCard.getByRole('button', { name: /^正在提交/ }).waitFor();
+  assert.ok(await retryCard.getByRole('button', { name: /^正在提交/ }).isDisabled());
   assert.ok(await retryCard.getByRole('button', { name: '修改提示词', exact: true }).isDisabled());
   await until(() => retrySubmissions.length === 1, 'only one retry submission for a double click');
   releaseRetrySubmission(); releaseRetrySubmission = undefined;
-  await until(async () => await retryCard.getByRole('button', { name: '一键重试', exact: true }).isEnabled(), 'retry stays available after rejected submission');
+  await until(async () => await retryCard.getByRole('button', { name: /^一键重试/ }).isEnabled(), 'retry stays available after rejected submission');
   await rp.unroute('**/api/jobs');
   assert.equal(retrySubmissions.length, 1);
   assert.equal((await jobs(rp)).length, 2, 'a rejected retry did not create a server task');
   assert.equal((await jobs(rp)).find((job) => job.id === originalFailure.id).supersededBy, '');
-  assert.equal(await failureCards.count(), 2, 'an unsubmitted retry must not add a second failure card');
+  assert.equal(await failureCards.count(), 1, 'an unsubmitted retry must not add a second failure card');
   await rp.reload();
   await retryCard.waitFor();
-  assert.equal(await failureCards.count(), 2);
+  assert.equal(await failureCards.count(), 1);
   checks.push('重试提交失败保留原失败卡, 刷新后仍可继续; 未确认的重试不重复占位, 双击只提交一次, 修改提示词不自动生图');
 
   holdImage = new Promise((resolve) => { releaseImage = resolve; });
-  await retryCard.getByRole('button', { name: '一键重试', exact: true }).click();
+  await retryCard.getByRole('button', { name: /^一键重试/ }).click();
   const retryAttempt = await until(async () => (await jobs(rp)).find((job) => job.retryOf === originalFailure.id), 'retry accepted');
   assert.equal(retryAttempt.requestId, retrySubmissions[0].requestId, 'reuse the outbox request ID after an unconfirmed submission');
-  await until(async () => await failureCards.count() === 1 && await rp.getByRole('heading', { name: '正在渲染', exact: true }).isVisible(), 'the accepted retry replaces the original failure card');
-  assert.ok(await rp.getByRole('button', { name: '全部画稿 (2)', exact: true }).isVisible());
+  await until(async () => await failureCards.count() === 0 && await rp.getByRole('heading', { name: '正在渲染', exact: true }).isVisible(), 'the accepted retry replaces the original failure card');
+  assert.equal(await rp.locator('.studio-feed > article').count(), 1);
   await screenshot(rp, 'studio-retry-running-desktop', true);
   releaseImage(); releaseImage = undefined; holdImage = undefined;
   await until(async () => (await jobs(rp)).find((job) => job.id === retryAttempt.id)?.status === 'failed', 'retry fails once more');
   await retryCard.waitFor();
-  assert.equal(await failureCards.count(), 2, 'a retry failure replaces its ancestor instead of accumulating another card');
+  assert.equal(await failureCards.count(), 1, 'a retry failure replaces its ancestor instead of accumulating another card');
   assert.equal((await jobs(rp)).find((job) => job.id === originalFailure.id).supersededBy, retryAttempt.id);
 
   rejectImage = false;
-  await retryCard.getByRole('button', { name: '一键重试', exact: true }).click();
+  await retryCard.getByRole('button', { name: /^一键重试/ }).click();
   await waitRecords(rp, 1);
-  await until(async () => await failureCards.count() === 1 && (await rows(rp, 'outbox')).length === 1, 'only the untouched failure remains');
+  await until(async () => await failureCards.count() === 0 && (await rows(rp, 'outbox')).length === 1, 'older failure remains in the queue without occupying the recent batch');
   assert.equal((await rows(rp, 'outbox'))[0].requestId, untouchedFailure.requestId);
   const recoveredJobs = await jobs(rp);
   const recovered = recoveredJobs.find((job) => job.retryOf === retryAttempt.id);
@@ -1127,18 +1130,18 @@ try {
   assert.equal(recoveredJobs.find((job) => job.id === originalFailure.id).status, 'failed');
   assert.equal(imageCount, retryStart + 4, 'each user-confirmed attempt produces exactly one image request');
   await rp.reload();
-  await rp.getByRole('button', { name: '全部画稿 (2)', exact: true }).waitFor();
-  assert.equal(await failureCards.count(), 1);
+  await until(async () => await rp.locator('.studio-feed > article').count() === 1, 'one recent creation');
+  assert.equal(await failureCards.count(), 0);
   await rp.getByRole('button', { name: /任务队列/ }).click();
   const retryQueue = rp.getByRole('dialog', { name: '任务队列', exact: true });
   assert.equal(await retryQueue.getByText('已重新提交', { exact: true }).count(), 2, 'preserve earlier failures in history');
-  assert.equal(await retryQueue.getByRole('button', { name: '重新生成', exact: true }).count(), 1, 'superseded failures cannot be retried again');
+  assert.equal(await retryQueue.getByRole('button', { name: /^重新生成/ }).count(), 1, 'superseded failures cannot be retried again');
   await retryQueue.getByRole('button', { name: '清空已完成', exact: true }).click();
   await until(async () => !(await jobs(rp)).some((job) => job.id === recovered.id), 'successful retry archived');
   await closeQueue(rp);
   await rp.reload();
-  await rp.getByRole('button', { name: '全部画稿 (2)', exact: true }).waitFor();
-  assert.equal(await failureCards.count(), 1, 'archiving the successor must not bring back the old failure');
+  await until(async () => await rp.locator('.studio-feed > article').count() === 1, 'one recent creation');
+  assert.equal(await failureCards.count(), 0, 'archiving the successor must not bring back the old failure');
   await rp.setViewportSize({ width: 390, height: 844 });
   await screenshot(rp, 'studio-retry-completed-mobile', true);
   await nav(rp, '展馆');
@@ -1148,11 +1151,11 @@ try {
   await waitRecords(rp, 0);
   await nav(rp, '单图创作');
   await rp.reload();
-  await rp.getByRole('button', { name: '全部画稿 (1)', exact: true }).waitFor();
+  await until(async () => await rp.locator('.studio-feed > article').count() === 1, 'remaining unresolved creation');
   assert.equal(await failureCards.count(), 1, 'deleting the recovered image must not revive handled failures');
   assert.ok(await rp.getByRole('article', { name: `未完成画稿: ${untouchedPrompt}`, exact: true }).isVisible());
   await retryFlow.context.close();
-  checks.push('重试入队接替旧失败占位, 再次失败只显示最新尝试; 成功后仅保留作品, 历史保留重试关系, 归档或删除作品后刷新不复现旧失败, 未处理失败不受影响');
+  checks.push('重试入队接替旧失败占位, 再次失败只显示最新尝试; 成功后画卷仅保留近期作品, 旧失败仍在队列, 历史保留重试关系, 归档或删除作品后刷新不复现旧失败, 未处理失败不受影响');
 
   const draftFlow = await contextPage();
   const dp = draftFlow.page;
@@ -1196,11 +1199,11 @@ try {
   await dp.getByLabel('画面提示词', { exact: true }).waitFor();
   assert.equal(await dp.getByLabel('画面提示词', { exact: true }).inputValue(), '');
   assert.equal(await dp.getByLabel('移除参考图', { exact: true }).count(), 0);
-  assert.ok(await dp.getByRole('button', { name: '全部画稿 (4)', exact: true }).isVisible());
+  assert.equal(await dp.locator('.studio-feed > article').count(), 4);
   await screenshot(dp, 'studio-completed-draft-desktop', true);
   await dp.setViewportSize({ width: 390, height: 844 });
   await screenshot(dp, 'studio-completed-draft-mobile', true);
-  await dp.getByRole('button', { name: '切换主题', exact: true }).click();
+  await dp.getByRole('button', { name: '用户菜单', exact: true }).click(); await dp.getByRole('button', { name: '深色', exact: true }).click(); await dp.keyboard.press('Escape');
   await screenshot(dp, 'studio-completed-draft-mobile-dark', true);
   await dp.setViewportSize({ width: 1600, height: 1000 });
   checks.push('多图按请求全部保存后结束草稿, 单请求多结果不提前清空; 切换页面和刷新后不恢复旧内容, 常用参数与作品保留');
@@ -1220,7 +1223,7 @@ try {
   assert.equal(await dp.getByLabel('画面提示词', { exact: true }).inputValue(), failedDraftPrompt);
   assert.equal((await workspaceDraft(dp)).refImage.name, referenceFile.name);
   rejectImage = false;
-  await failedDraftCard.getByRole('button', { name: '一键重试', exact: true }).click();
+  await failedDraftCard.getByRole('button', { name: /^一键重试/ }).click();
   await waitRecords(dp, 5);
   await waitEmptyWorkspace(dp);
   assert.equal(await dp.getByLabel('画面提示词', { exact: true }).inputValue(), failedDraftPrompt, 'completion does not interrupt the currently open editor');
@@ -1273,10 +1276,10 @@ try {
 
   await nav(dp, '系列策划');
   await dp.locator('#series-story-prompt').fill('旧系列正在生成时开始新的策划');
-  await dp.getByRole('button', { name: '智能拆解分镜', exact: true }).click();
-  await until(() => dp.getByRole('button', { name: '确认并生成 4 张图片', exact: true }).isEnabled(), 'series draft ready');
+  await dp.getByRole('button', { name: /^智能拆解分镜/ }).click();
+  await until(() => dp.getByRole('button', { name: /^确认并生成 4 张图片/ }).isEnabled(), 'series draft ready');
   holdImage = new Promise((resolve) => { releaseImage = resolve; });
-  await dp.getByRole('button', { name: '确认并生成 4 张图片', exact: true }).click();
+  await dp.getByRole('button', { name: /^确认并生成 4 张图片/ }).click();
   await until(async () => (await jobs(dp)).filter((job) => ['running', 'pending'].includes(job.status)).length === 4, 'old series generating');
   await closeQueue(dp);
   await dp.getByRole('button', { name: '新建系列', exact: true }).click();
@@ -1324,10 +1327,12 @@ try {
   const blockedPage = await blockedStorage.newPage();
   blockedPage.on('pageerror', (error) => errors.push(error.message));
   await blockedPage.goto(app.base);
-  await blockedPage.getByRole('alert').filter({ hasText: '浏览器存储不可用' }).waitFor();
-  assert.ok(await blockedPage.getByRole('button', { name: '重新连接', exact: true }).isVisible());
+  await blockedPage.getByLabel('访问码').fill(app.accessCode);
+  await blockedPage.getByRole('button', { name: '进入工作台', exact: true }).click();
+  await blockedPage.locator('.studio-rail textarea').waitFor();
+  assert.equal(await blockedPage.evaluate(async () => (await (await fetch('/api/auth/status')).json()).authenticated), true);
   await blockedStorage.close();
-  checks.push('浏览器身份存储被禁用时显示可恢复错误');
+  checks.push('匿名身份使用服务端 Cookie, 不依赖可伪造的旧 localStorage 用户编号');
   assert.deepEqual(errors, []);
   await writeFile(path.join(target, 'report.json'), JSON.stringify({ passed: checks, pageErrors: errors, imageRequests: imageCount, screenshots: target }, null, 2));
   console.log(JSON.stringify({ passed: checks.length, imageRequests: imageCount, artifacts: target }));

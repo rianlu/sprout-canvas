@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawn } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
 import { PNG_BASE64 } from './fixtures.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -43,6 +44,7 @@ export async function startHarness({ serveDist = false, imageMode = 'images', co
       if (controls.respond && await controls.respond(call, res)) return;
       res.writeHead(200, { 'Content-Type': 'application/json' });
       if (req.url.endsWith('/responses')) res.end(JSON.stringify({ output: [{ type: 'image_generation_call', id: `image-${calls.length}`, result: PNG_BASE64 }] }));
+      else if (req.url.endsWith('/chat/completions')) res.end(JSON.stringify({ choices: [{ message: { content: '一片绿色的叶子' } }] }));
       else res.end(JSON.stringify({ created: 1700000000, data: [{ b64_json: PNG_BASE64, revised_prompt: '一片绿色的叶子' }] }));
     })().catch((error) => { res.writeHead(500); res.end(JSON.stringify({ error: error.message })); });
   });
@@ -55,7 +57,7 @@ export async function startHarness({ serveDist = false, imageMode = 'images', co
   if (serveDist) await symlink(path.join(ROOT, 'dist'), path.join(directory, 'dist'), 'dir');
   const port = await freePort();
   const config = {
-    host: '127.0.0.1', port, accessPassword: TEST_PASSWORD, adminPassword: TEST_ADMIN_PASSWORD, cookieNamespace, dataDir: 'data', stateFile: 'data/runtime.sqlite', imageConcurrency: 1,
+    host: '127.0.0.1', port, adminPassword: TEST_ADMIN_PASSWORD, cookieNamespace, dataDir: 'data', stateFile: 'data/runtime.sqlite', imageConcurrency: 1,
     defaultImageProvider: 'primary',
     imageProviders: ['primary', 'secondary'].map((id) => ({ id, name: id, baseUrl: `${upstreamUrl}/${id}`, apiKey: `fixture-${id}-key`, imageModel: imageMode === 'images' ? 'gpt-image-2' : 'gpt-5', generationMode: imageMode })),
     textProviders: [{ id: 'text', name: 'text', baseUrl: upstreamUrl, apiKey: 'fixture-text-key', model: 'text-fixture' }],
@@ -73,11 +75,11 @@ export async function startHarness({ serveDist = false, imageMode = 'images', co
       try { return (await fetch(`${base}/health`)).ok; } catch { return false; }
     }, 'test server boot');
   }
-  async function stop(signal = 'SIGTERM') {
+  async function stop(signal = 'SIGTERM', timeout = 5000) {
     if (!child || child.exitCode !== null || child.signalCode) return;
     const exited = new Promise((resolve) => child.once('exit', resolve));
     child.kill(signal);
-    await Promise.race([exited, new Promise((_, reject) => setTimeout(() => reject(new Error('Test server did not stop')), 5000).unref())]);
+    await Promise.race([exited, new Promise((_, reject) => setTimeout(() => reject(new Error('Test server did not stop')), timeout).unref())]);
   }
   async function api(url, { cookie, body, rawBody, headers = {}, method = 'GET' } = {}) {
     const response = await fetch(`${base}${url}`, { method, headers: { ...(cookie ? { Cookie: cookie } : {}), ...((body !== undefined || rawBody !== undefined) ? { 'Content-Type': 'application/json' } : {}), ...headers }, body: rawBody ?? (body === undefined ? undefined : JSON.stringify(body)) });
@@ -85,14 +87,34 @@ export async function startHarness({ serveDist = false, imageMode = 'images', co
     let data; try { data = JSON.parse(text); } catch { data = text; }
     return { status: response.status, data, headers: response.headers };
   }
-  async function login(userId = '00000000-0000-4000-8000-000000000001') {
-    const result = await api('/api/auth/login', { method: 'POST', body: { password: TEST_PASSWORD, userId } });
-    if (result.status !== 200) throw new Error('Test login failed');
-    return result.headers.get('set-cookie').split(';')[0];
+  const browserKeys = new Map(); const sessions = new Map();
+  const responseCookie = (response) => response.headers.getSetCookie().map((value) => value.split(';')[0]).join('; ');
+  let accessCode;
+  async function login(browser = 'browser-one', code = accessCode) {
+    const result = await api('/api/auth/login', { method: 'POST', cookie: browserKeys.get(browser), body: { code } });
+    if (result.status !== 200) throw new Error(`Test login failed: ${result.status}`);
+    const cookie = responseCookie(result);
+    browserKeys.set(browser, result.headers.getSetCookie().find((value) => value.startsWith('sprout_browser')).split(';')[0]);
+    sessions.set(cookie, result.data);
+    return cookie;
+  }
+  function quote(cookie, version) {
+    const session = sessions.get(cookie);
+    if (!session) throw new Error('Test fixture needs a logged-in browser');
+    return { accessCodeId: session.accessCodeId, userId: session.userId, version: version || session.prices.version, unlimited: session.credits.unlimited };
+  }
+  function textInput(cookie, requestId = randomUUID()) {
+    return { requestId, kind: 'prompt', creditQuote: quote(cookie), input: [{ role: 'user', content: [{ type: 'input_text', text: 'isolated' }] }] };
   }
   await start();
+  const adminLogin = await api('/api/admin/auth/login', { method: 'POST', body: { password: TEST_ADMIN_PASSWORD } });
+  if (adminLogin.status !== 200) throw new Error(`Test admin login failed: ${adminLogin.status}`);
+  const adminCookie = responseCookie(adminLogin);
+  const created = await api('/api/admin/access-codes', { method: 'POST', cookie: adminCookie, body: { requestId: randomUUID(), initialPoints: 1000000, note: '隔离验收', count: 1 } });
+  if (created.status !== 201) throw new Error(`Test access code creation failed: ${created.status}`);
+  const accessCodeRecord = created.data.codes[0]; accessCode = accessCodeRecord.code;
   return {
-    directory, base, calls, controls, api, login, start, stop, config,
+    directory, base, calls, controls, api, login, start, stop, config, accessCode, accessCodeRecord, adminCookie, quote, textInput, responseCookie,
     logs: () => output,
     close: async () => {
       for (const response of pendingResponses) response.destroy();

@@ -4,6 +4,7 @@ import type { BrushMaskData } from '../editor/brush-mask';
 import { blobDataUrl, getArtifact, getRecordDataUrl } from '../storage/gallery-db';
 import { resolveSize, sizePreset } from '../api/generation';
 import { imageFileExtension } from './format';
+import type { PromptHistory } from '../prompt-history';
 
 export interface StudioDraft {
   config?: Partial<GenerationConfig>;
@@ -14,6 +15,7 @@ export interface StudioDraft {
   mask?: BrushMaskData | null;
   maskDataUrl?: string;
   tone?: 'soft' | 'vivid' | 'none';
+  promptHistory?: PromptHistory | null;
 }
 
 /** Edit the selected output, retaining its recipe without reusing earlier references or masks. */

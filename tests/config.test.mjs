@@ -54,7 +54,7 @@ try {
   process.env.STATE_FILE = path.join(directory, 'explicit.sqlite');
   assert.equal((await readLocalConfig()).stateFile, process.env.STATE_FILE);
   process.env.ACCESS_PASSWORD = process.env.ADMIN_PASSWORD;
-  await assert.rejects(readLocalConfig(), /工作台访问密码不同/);
+  assert.equal((await readLocalConfig()).accessPassword, undefined, 'the legacy shared password does not grant generation access');
   delete process.env.ACCESS_PASSWORD;
   process.env.ADMIN_PASSWORD = 'short';
   await assert.rejects(readLocalConfig(), /12 到 256/);

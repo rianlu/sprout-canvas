@@ -1,63 +1,38 @@
-import { useCallback, useEffect, useState } from 'react';
-import { authStatus, login, logout } from '../lib/api/auth';
-import { randomId } from '../lib/random/id';
-
-const USER_KEY = 'sprout_canvas_user_id';
-
-function getUserId() {
-  try {
-    let id = localStorage.getItem(USER_KEY);
-    if (!id) {
-      id = randomId('user');
-      localStorage.setItem(USER_KEY, id);
-    }
-    return id;
-  } catch {
-    throw new Error('浏览器存储不可用, 请允许此站点使用本地存储后重新连接');
-  }
-}
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { authStatus, login, logout, type AuthStatus } from '../lib/api/auth';
+import { setCreditSession } from '../lib/credits';
 
 export function useAuth() {
   const [loading, setLoading] = useState(true);
-  const [required, setRequired] = useState(false);
-  const [authenticated, setAuthenticated] = useState(false);
+  const [session, setSession] = useState<AuthStatus | null>(null);
   const [error, setError] = useState('');
-  const refresh = useCallback(async () => {
-    setLoading(true);
+  const revision = useRef(0);
+  const apply = useCallback((value: AuthStatus | null) => { setSession(value); setCreditSession(value?.authenticated ? value : null); }, []);
+  const refresh = useCallback(async (visible = false) => {
+    const version = ++revision.current;
+    if (visible) { setLoading(true); setError(''); }
     try {
-      setError('');
-      const userId = getUserId();
-      const status = await authStatus();
-      setRequired(status.required);
-      if (!status.required && !status.authenticated) {
-        await login('', userId);
-        setAuthenticated(true);
-        return;
-      }
-      setAuthenticated(status.authenticated);
+      const value = await authStatus();
+      if (version === revision.current) { apply(value); setError(''); }
     } catch (cause) {
-      setAuthenticated(false);
-      setError(cause instanceof Error ? cause.message : '无法连接工作台');
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  const signIn = useCallback(async (password: string) => {
-    await login(password, getUserId());
-    await refresh();
-  }, [refresh]);
-
+      if (visible && version === revision.current) setError(cause instanceof Error ? cause.message : '无法连接工作台');
+    } finally { if (version === revision.current) setLoading(false); }
+  }, [apply]);
+  const signIn = useCallback(async (code: string) => {
+    const value = await login(code.trim());
+    revision.current++; apply(value); setLoading(false); setError('');
+  }, [apply]);
   const signOut = useCallback(async () => {
-    await logout();
-    setAuthenticated(false);
-  }, []);
-
-  useEffect(() => { void refresh(); }, [refresh]);
+    await logout(); revision.current++; apply(null); setLoading(false);
+  }, [apply]);
+  useEffect(() => { void refresh(true); }, [refresh]);
   useEffect(() => {
-    const expired = () => { setAuthenticated(false); void refresh(); };
+    const expired = () => { revision.current++; apply(null); void refresh(); };
+    const changed = () => { void refresh(); };
     window.addEventListener('sprout:auth-expired', expired);
-    return () => window.removeEventListener('sprout:auth-expired', expired);
-  }, [refresh]);
-  return { loading, required, authenticated, signIn, signOut, refresh, error };
+    window.addEventListener('sprout:credits-refresh', changed);
+    const timer = window.setInterval(() => { if (session?.authenticated && !document.hidden) void refresh(); }, 5000);
+    return () => { window.removeEventListener('sprout:auth-expired', expired); window.removeEventListener('sprout:credits-refresh', changed); window.clearInterval(timer); };
+  }, [apply, refresh, session?.authenticated]);
+  return { loading, required: true, authenticated: Boolean(session?.authenticated), userId: session?.userId || '', canGenerate: Boolean(session?.canGenerate), signIn, signOut, refresh, error };
 }

@@ -36,7 +36,7 @@ function emptyWorkspaceContent(key: string, data: unknown) {
   const value = (data || {}) as Record<string, unknown>;
   if (key === 'studio') return {
     ...value, config: { ...(value.config as object), mode: 'text', prompt: '', refImages: [] },
-    refImage: null, sourceRecord: null, mask: null, maskDataUrl: '', styleId: 'default', styleName: '',
+    refImage: null, sourceRecord: null, mask: null, maskDataUrl: '', styleId: 'default', styleName: '', promptHistory: null,
   };
   return { ...value, brief: '', taskText: '', reference: null, seriesId: '', sceneIds: [], shotIds: [], stagedIds: [], overrides: {} };
 }
@@ -303,20 +303,48 @@ export function deleteGalleryRecord(id: string) { return deleteGalleryRecords([i
 export function saveGalleryRecord(record: ResultRecord) { return saveGalleryRecords([record], record.jobId); }
 
 export async function saveOutbox(input: GenerationSubmission, jobId?: string) {
+  return saveOutboxBatch([{ input, jobId }]);
+}
+
+export async function saveOutboxBatch(entries: { input: GenerationSubmission; jobId?: string }[], replacements = new Map<string, string>()) {
+  if (replacements.size) await Promise.all([...draftWrites.values()]);
   const db = await openGalleryDb();
-  const snapshot = structuredClone(input);
-  const images = snapshot.request.references.map((ref) => ({ id: `ref-${ref.id}`, blob: dataUrlToBlob(ref.dataUrl) }));
-  if (snapshot.referenceImage) {
-    images.push({ id: `ref-${snapshot.referenceImage.id}`, blob: dataUrlToBlob(snapshot.referenceImage.dataUrl) });
-    snapshot.referenceImage.dataUrl = '';
-  }
-  if (snapshot.request.mask) images.push({ id: `mask-${input.requestId}`, blob: dataUrlToBlob(snapshot.request.mask) });
-  snapshot.request.references.forEach((ref) => { ref.dataUrl = ''; });
-  if (snapshot.request.mask) snapshot.request.mask = '@local';
-  await transact(db, ['outbox', 'artifacts'], async (tx) => {
-    images.forEach(({ id, blob }) => tx.objectStore('artifacts').put(blob, id));
-    const previous: Outbox | undefined = await request(tx.objectStore('outbox').get(input.requestId));
-    tx.objectStore('outbox').put({ ...previous, requestId: input.requestId, input: snapshot, jobId: jobId || previous?.jobId, savedAt: previous?.savedAt || Date.now() }, input.requestId);
+  const prepared = entries.map(({ input, jobId }) => {
+    const snapshot = structuredClone(input);
+    const images = snapshot.request.references.map((ref) => ({ id: `ref-${ref.id}`, blob: dataUrlToBlob(ref.dataUrl) }));
+    if (snapshot.referenceImage) {
+      images.push({ id: `ref-${snapshot.referenceImage.id}`, blob: dataUrlToBlob(snapshot.referenceImage.dataUrl) });
+      snapshot.referenceImage.dataUrl = '';
+    }
+    if (snapshot.request.mask) images.push({ id: `mask-${input.requestId}`, blob: dataUrlToBlob(snapshot.request.mask) });
+    snapshot.request.references.forEach((ref) => { ref.dataUrl = ''; });
+    if (snapshot.request.mask) snapshot.request.mask = '@local';
+    return { snapshot, images, jobId };
+  });
+  await transact(db, ['outbox', 'artifacts', ...(replacements.size ? ['drafts'] : [])], async (tx) => {
+    for (const { snapshot, images, jobId } of prepared) {
+      images.forEach(({ id, blob }) => tx.objectStore('artifacts').put(blob, id));
+      const previous: Outbox | undefined = await request(tx.objectStore('outbox').get(snapshot.requestId));
+      tx.objectStore('outbox').put({ ...previous, requestId: snapshot.requestId, input: snapshot, jobId: jobId || previous?.jobId, savedAt: previous?.savedAt || Date.now() }, snapshot.requestId);
+    }
+    if (replacements.size) {
+      const placeholders = new Map<string, string>();
+      for (const [previousId, nextId] of replacements) {
+        const previous: Outbox | undefined = await request(tx.objectStore('outbox').get(previousId));
+        const next = entries.find((entry) => entry.input.requestId === nextId)?.input;
+        if (previous && next) placeholders.set(previous.input.clientContext.placeholderId, next.clientContext.placeholderId);
+        tx.objectStore('outbox').delete(previousId);
+      }
+      for (const key of ['studio', 'series']) {
+        const drafts = tx.objectStore('drafts');
+        const entry: WorkspaceEntry | undefined = await request(drafts.get(key));
+        if (!entry) continue;
+        const data = entry.data as { stagedIds?: string[]; shotIds?: string[] };
+        const nextData = key === 'series' ? { ...data, stagedIds: data.stagedIds?.map((id) => replacements.get(id) || id), shotIds: data.shotIds?.map((id) => placeholders.get(id) || id) } : data;
+        const submission = entry.submission && { ...entry.submission, requestIds: entry.submission.requestIds.map((id) => replacements.get(id) || id), completedIds: entry.submission.completedIds.filter((id) => !replacements.has(id)) };
+        drafts.put({ ...entry, data: nextData, submission }, key);
+      }
+    }
   });
 }
 
@@ -378,13 +406,27 @@ export async function readWorkspaceDraft<T>(key: string): Promise<T | undefined>
   return value?.version === 1 ? value.data as T : undefined;
 }
 
-export function writeWorkspaceDraft(key: string, data: unknown): Promise<string | undefined> {
+/** Reuse the same batch after a lost response, including after a page refresh. */
+export async function unconfirmedWorkspaceBatch(key: 'studio' | 'series', data: unknown): Promise<GenerationSubmission[]> {
+  await draftWrites.get(key);
+  const db = await openGalleryDb();
+  const entry: WorkspaceEntry | undefined = await request(db.transaction('drafts').objectStore('drafts').get(key));
+  if (!entry?.submission || entry.revision !== entry.submission.revision || !sameDraftData(entry.data, data)) return [];
+  const outbox = await listOutbox();
+  const rows = entry.submission.requestIds.map((id) => outbox.find((row) => row.requestId === id)).filter((row): row is Outbox => Boolean(row));
+  if (!rows.some((row) => !row.jobId)) return [];
+  const inputs = await Promise.all(rows.map((row) => getOutboxInput(row.requestId)));
+  return inputs.filter((input): input is GenerationSubmission => Boolean(input));
+}
+
+export function writeWorkspaceDraft(key: string, data: unknown, options: { expected?: unknown } = {}): Promise<string | undefined> {
   return queueDraftWrite(key, async () => {
     const db = await openGalleryDb();
     return transact(db, ['drafts'], async (tx) => {
       const drafts = tx.objectStore('drafts');
       if (data === undefined) { drafts.delete(key); return; }
       const previous: WorkspaceEntry | undefined = await request(drafts.get(key));
+      if (Object.hasOwn(options, 'expected') && !sameDraftData(previous?.data, options.expected)) return;
       const revision = previous?.revision && sameDraftData(previous.data, data) ? previous.revision : randomId();
       drafts.put({ ...previous, version: 1, data, revision }, key);
       return revision;

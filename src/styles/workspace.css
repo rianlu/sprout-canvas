@@ -14,9 +14,15 @@ button, a, input, select, textarea { -webkit-tap-highlight-color: transparent; }
 button:disabled { cursor: not-allowed; }
 :focus-visible { outline: 2px solid rgb(var(--sc-primary)); outline-offset: 3px; }
 textarea:focus-visible, input:focus-visible { outline-offset: 1px; }
+.studio-prompt-field { position: relative; border-radius: 12px; transition: outline-color 150ms; }
+.studio-prompt-field:focus-within { outline: 2px solid rgb(var(--sc-primary) / 0.85); outline-offset: 0; }
+.studio-prompt-input:focus-visible { outline: none; box-shadow: none; }
+.studio-prompt-field[data-polishing="true"] { outline: none; }
+.prompt-activity-border { position: absolute; inset: -2px; padding: 2px; border-radius: inherit; pointer-events: none; overflow: hidden; -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0); -webkit-mask-composite: xor; mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0); mask-composite: exclude; }
+.prompt-activity-glow { position: absolute; top: 50%; left: 50%; width: 200%; aspect-ratio: 1; background: conic-gradient(rgb(var(--sc-primary) / 0.2), rgb(var(--sc-primary) / 0.95), rgb(var(--sc-secondary-container) / 0.8), rgb(var(--sc-primary) / 0.2) 45%, rgb(var(--sc-primary) / 0.2)); animation: prompt-border-orbit 3s linear infinite; will-change: transform; }
+@keyframes prompt-border-orbit { from { transform: translate(-50%, -50%) rotate(0deg); } to { transform: translate(-50%, -50%) rotate(360deg); } }
 .studio-layout { display: grid; grid-template-columns: 440px minmax(0, 1fr); align-items: start; gap: 24px; }
-.studio-rail { min-width: 0; position: sticky; top: 80px; }
-.studio-rail > section { position: static; }
+.studio-rail { min-width: 0; scroll-margin-top: 80px; }
 .stitch-page { padding-top: 64px; min-height: calc(100dvh - 4rem); }
 .stitch-viewer { overscroll-behavior: contain; }
 .stitch-viewer-dialog:fullscreen { width: 100%; height: 100dvh; border-radius: 0; }
@@ -31,11 +37,11 @@ textarea:focus-visible, input:focus-visible { outline-offset: 1px; }
 .stitch-mobile-nav { display: none; }
 @media (max-width: 1023px) {
   .studio-layout { grid-template-columns: minmax(0, 1fr); }
-  .studio-rail { position: static; }
   .studio-rail > section { width: 100%; }
 }
 @media (max-width: 767px) {
   .stitch-page, main.pt-16 { padding-top: 116px; }
+  .studio-rail { scroll-margin-top: 132px; }
   .stitch-header-brand { font-size: 15px; }
   .stitch-header-tagline { display: none; }
   .stitch-desktop-nav { display: none; }
@@ -45,5 +51,6 @@ textarea:focus-visible, input:focus-visible { outline-offset: 1px; }
   .stitch-style-card-list { grid-template-columns: 1fr; gap: 16px; }
 }
 @media (prefers-reduced-motion: reduce) {
+  .prompt-activity-glow { animation: none !important; transform: translate(-50%, -50%); background: rgb(var(--sc-primary) / 0.8); will-change: auto; }
   *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0s !important; scroll-behavior: auto !important; }
 }

@@ -1,11 +1,13 @@
+import { downloadImage } from './image-download.mjs';
+
 const MAX_RESULT_BYTES = 64 * 1024 * 1024;
 
-export async function readLimitedBody(response, limit = MAX_RESULT_BYTES) {
+export async function readLimitedBody(response, limit = MAX_RESULT_BYTES, sizeError = '上游返回的图片超过 64MB') {
   const size = Number(response.headers.get('content-length'));
-  if (size > limit) throw new Error('上游返回的图片超过 64MB');
+  if (size > limit) { await response.body?.cancel(); throw new Error(sizeError); }
   if (!response.body) {
     const bytes = Buffer.from(await response.arrayBuffer());
-    if (bytes.length > limit) throw new Error('上游返回的图片超过 64MB');
+    if (bytes.length > limit) throw new Error(sizeError);
     return bytes;
   }
   let sizeSoFar = 0;
@@ -13,7 +15,7 @@ export async function readLimitedBody(response, limit = MAX_RESULT_BYTES) {
   for await (const chunk of response.body) {
     const bytes = Buffer.from(chunk);
     sizeSoFar += bytes.length;
-    if (sizeSoFar > limit) throw new Error('上游返回的图片超过 64MB');
+    if (sizeSoFar > limit) throw new Error(sizeError);
     chunks.push(bytes);
   }
   return Buffer.concat(chunks);
@@ -24,14 +26,18 @@ export function imageInfo(bytes) {
     const width = bytes.readUInt32BE(16), height = bytes.readUInt32BE(20);
     if (width && height) return { mime_type: 'image/png', width, height };
   }
-  if (bytes.length >= 12 && bytes[0] === 255 && bytes[1] === 216 && bytes[2] === 255) {
+  if (bytes.length >= 12 && bytes[0] === 255 && bytes[1] === 216 && bytes[2] === 255 && bytes.at(-2) === 255 && bytes.at(-1) === 217) {
     let offset = 2;
     while (offset + 9 < bytes.length) {
       if (bytes[offset] !== 255) break;
       const marker = bytes[offset + 1];
       if (marker === 0xda || marker === 0xd9) break;
       const length = bytes.readUInt16BE(offset + 2);
-      if ([0xc0, 0xc1, 0xc2, 0xc3, 0xc5, 0xc6, 0xc7, 0xc9, 0xca, 0xcb, 0xcd, 0xce, 0xcf].includes(marker)) return { mime_type: 'image/jpeg', width: bytes.readUInt16BE(offset + 7), height: bytes.readUInt16BE(offset + 5) };
+      if ([0xc0, 0xc1, 0xc2, 0xc3, 0xc5, 0xc6, 0xc7, 0xc9, 0xca, 0xcb, 0xcd, 0xce, 0xcf].includes(marker)) {
+        const width = bytes.readUInt16BE(offset + 7), height = bytes.readUInt16BE(offset + 5);
+        if (width && height) return { mime_type: 'image/jpeg', width, height };
+        break;
+      }
       if (length < 2) break;
       offset += 2 + length;
     }
@@ -62,12 +68,7 @@ export async function normalizeImageResult(result) {
         if (!/^[A-Za-z0-9+/\s]+={0,2}$/.test(item.b64_json)) throw new Error('上游图片编码无效');
         bytes = Buffer.from(item.b64_json, 'base64');
       } else if (typeof item.url === 'string') {
-        const url = new URL(item.url);
-        if (url.protocol !== 'https:' && url.protocol !== 'http:') throw new Error('上游图片链接协议无效');
-        if (/^(localhost|127\.|0\.|\[?::1\]?|169\.254\.)/i.test(url.hostname)) throw new Error('上游图片链接不是公开资源');
-        const response = await fetch(url, { signal: AbortSignal.timeout(60000) });
-        if (!response.ok) throw new Error(`图片下载失败: HTTP ${response.status}`);
-        bytes = await readLimitedBody(response);
+        bytes = await downloadImage(item.url, { maxBytes: MAX_RESULT_BYTES });
       } else throw new Error('上游没有返回图片文件');
       totalBytes += bytes.length;
       if (totalBytes > MAX_RESULT_BYTES * 0.74) throw new Error('上游图片文件总量过大');

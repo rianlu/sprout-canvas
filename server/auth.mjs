@@ -1,139 +1,76 @@
-import { randomBytes, timingSafeEqual } from 'node:crypto';
 import { readLocalConfig } from './config.mjs';
-import { json, logLine, readRequestBody } from './http.mjs';
+import { json, readJson } from './http.mjs';
 import { requestError } from '../shared/generation-contract.mjs';
+import { createLoginLimiter } from './request-guards.mjs';
+
 let stateStore;
 let cookieName = 'img_auth_max';
-export function initAuth(store, namespace = '') { stateStore = store; cookieName = 'img_auth_max' + (namespace ? '_' + namespace : ''); }
+let browserCookieName = 'sprout_browser';
+const loginFailures = createLoginLimiter();
+const authorizedRequests = new WeakMap();
 
-function parseCookies(req) {
-  const header = req.headers.cookie || '';
-  const cookies = new Map();
-  header.split(';').forEach((part) => {
+export function initAuth(store, namespace = '') {
+  stateStore = store;
+  cookieName = 'img_auth_max' + (namespace ? '_' + namespace : '');
+  browserCookieName = 'sprout_browser' + (namespace ? '_' + namespace : '');
+  loginFailures.clear();
+}
+function cookies(req) {
+  const values = new Map();
+  for (const part of (req.headers.cookie || '').split(';')) {
     const index = part.indexOf('=');
-    if (index <= 0) return;
-    try { cookies.set(part.slice(0, index).trim(), decodeURIComponent(part.slice(index + 1).trim())); } catch { throw requestError('Cookie 编码无效'); }
-  });
-  return cookies;
-}
-
-function safeEqualString(left, right) {
-  const leftBuffer = Buffer.from(String(left));
-  const rightBuffer = Buffer.from(String(right));
-  if (leftBuffer.length !== rightBuffer.length) return false;
-  return timingSafeEqual(leftBuffer, rightBuffer);
-}
-
-function authCookieOptions(config, maxAgeSeconds) {
-  return [
-    `${cookieName}=${maxAgeSeconds ? '{{token}}' : ''}`,
-    'Path=/',
-    'HttpOnly',
-    'SameSite=Lax',
-    `Max-Age=${maxAgeSeconds}`,
-    config.secureCookies ? 'Secure' : '',
-  ].filter(Boolean).join('; ');
-}
-
-function sessionTokenFromRequest(req) {
-  return parseCookies(req).get(cookieName) || '';
-}
-
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-function isValidUserId(value) {
-  return typeof value === 'string' && UUID_RE.test(value);
-}
-
-export function sessionFromRequest(req) {
-  const token = sessionTokenFromRequest(req);
-  if (!token) return null;
-  const session = stateStore.getSession(token);
-  if (!session) return null;
-  if (session.expiresAt <= Date.now()) {
-    stateStore.deleteSession(token);
-    return null;
+    if (index <= 0) continue;
+    try { values.set(part.slice(0, index).trim(), decodeURIComponent(part.slice(index + 1).trim())); }
+    catch { throw requestError('Cookie 编码无效'); }
   }
-  return session;
+  return values;
 }
-
-function isAuthenticated(req) {
-  return sessionFromRequest(req) !== null;
+function cookie(name, value, maxAge, config) {
+  return `${name}=${value}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${maxAge}${config.secureCookies ? '; Secure' : ''}`;
 }
-
-function createAuthSession(config, userId) {
-  const token = randomBytes(32).toString('base64url');
-  const maxAgeSeconds = Math.round(config.authSessionDays * 24 * 60 * 60);
-  stateStore.createSession(token, {
-    userId: String(userId || ''),
-    createdAt: Date.now(),
-    expiresAt: Date.now() + maxAgeSeconds * 1000,
-  });
+export function sessionFromRequest(req) {
+  return authorizedRequests.get(req) || stateStore.identities.session(cookies(req).get(cookieName));
+}
+function status(session) {
   return {
-    token,
-    cookie: authCookieOptions(config, maxAgeSeconds).replace('{{token}}', encodeURIComponent(token)),
+    required: true, authenticated: Boolean(session), userId: session?.userId || '',
+    accessCodeId: session?.accessCodeId || '', accessName: session?.accessName || '', canGenerate: Boolean(session?.canGenerate),
+    credits: session ? stateStore.credits.balance(session.accessCodeId) : null,
+    prices: session ? stateStore.credits.prices() : null,
   };
 }
-
-function clearAuthSession(req, config) {
-  const token = sessionTokenFromRequest(req);
-  if (token) stateStore.deleteSession(token);
-  return authCookieOptions(config, 0).replace('{{token}}', '');
-}
-
-export async function handleAuthStatus(req, res) {
-  const config = await readLocalConfig();
-  const session = sessionFromRequest(req);
-  json(res, 200, {
-    required: Boolean(config.accessPassword),
-    authenticated: session !== null,
-    userId: session?.userId || '',
-  });
-}
-
+export async function handleAuthStatus(req, res) { json(res, 200, status(sessionFromRequest(req))); }
 export async function handleAuthLogin(req, res) {
-  const config = await readLocalConfig();
-  let payload = {};
+  const address = req.socket.remoteAddress || 'local';
+  const message = '尝试次数过多, 请 10 分钟后重试';
+  loginFailures.check(address, message);
+  let input;
   try {
-    payload = JSON.parse((await readRequestBody(req, 16 * 1024)).toString('utf8') || '{}');
-  } catch (error) {
-    const statusCode = Number(error?.statusCode) || 400;
-    json(res, statusCode, { error: statusCode === 400 ? '请求体不是有效 JSON' : error.message || String(error) });
-    return;
-  }
-  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return json(res, 400, { error: '登录请求必须是 JSON 对象' });
-  const userId = String(payload.userId || '').trim();
-  if (!isValidUserId(userId)) {
-    json(res, 400, { error: '缺少或无效的 userId (应为 UUID 形式)' });
-    return;
-  }
-  if (!config.accessPassword) {
-    const session = createAuthSession(config, userId);
-    json(res, 200, { ok: true, required: false, userId }, { 'Set-Cookie': session.cookie });
-    return;
-  }
-  if (!safeEqualString(payload.password || '', config.accessPassword)) {
-    logLine('WARN', `auth login failed from ${req.socket.remoteAddress || 'unknown'}`);
-    json(res, 401, { error: '访问密码错误' });
-    return;
-  }
-  const session = createAuthSession(config, userId);
-  logLine('INFO', `auth login success user=${userId} from ${req.socket.remoteAddress || 'unknown'}`);
-  json(res, 200, { ok: true, required: true, userId }, { 'Set-Cookie': session.cookie });
+    input = await readJson(req, 16 * 1024);
+    if (!input || typeof input !== 'object' || Array.isArray(input) || Object.keys(input).some((key) => key !== 'code')) throw requestError('请使用访问码登录');
+  } catch (error) { loginFailures.take(address, message); throw error; }
+  const config = await readLocalConfig();
+  const values = cookies(req);
+  let created;
+  try {
+    created = stateStore.identities.login(typeof input.code === 'string' ? input.code.trim() : input.code, {
+      browserToken: values.get(browserCookieName), previousToken: values.get(cookieName), sessionDays: config.authSessionDays,
+    });
+  } catch (error) { if (error.statusCode === 401) loginFailures.take(address, message); throw error; }
+  loginFailures.reset(address);
+  json(res, 200, { ok: true, ...status(created.session) }, { 'Set-Cookie': [cookie(cookieName, created.token, created.maxAge, config), cookie(browserCookieName, created.browserToken, created.browserMaxAge, config)] });
 }
-
 export async function handleAuthLogout(req, res) {
-  const config = await readLocalConfig();
-  json(res, 200, { ok: true }, { 'Set-Cookie': clearAuthSession(req, config) });
+  stateStore.identities.logout(cookies(req).get(cookieName));
+  json(res, 200, { ok: true }, { 'Set-Cookie': cookie(cookieName, '', 0, await readLocalConfig()) });
 }
-
 export async function requireApiAuth(req, res) {
-  if (sessionFromRequest(req)) return true;
-  const config = await readLocalConfig();
-  json(res, 401, {
-    error: '请先登录',
-    authRequired: true,
-    passwordRequired: Boolean(config.accessPassword),
-  });
-  return false;
+  const session = sessionFromRequest(req);
+  if (!session) { json(res, 401, { error: '请先使用访问码登录', authRequired: true }); return false; }
+  // Revocation stops new work but retains the original browser's result retrieval capability.
+  if (!session.canGenerate && !['GET', 'HEAD'].includes(req.method) && !/^\/api\/jobs\/[A-Za-z0-9_-]+\/ack$/.test((req.url || '').split('?')[0])) {
+    json(res, 403, { error: '访问码已停用或重置, 请更换访问码后继续', code: 'ACCESS_CODE_UNAVAILABLE' }); return false;
+  }
+  authorizedRequests.set(req, session);
+  return true;
 }

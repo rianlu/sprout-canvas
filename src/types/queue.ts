@@ -1,4 +1,5 @@
 import type { GenerationContext, GenerationRecipe } from '../../shared/generation-contract.mjs';
+import type { CreditCharge, CreditBalance, CreditPrices } from '../../shared/credits-contract.mjs';
 
 export type QueueStatus = 'pending' | 'running' | 'succeeded' | 'failed' | 'canceled' | 'interrupted' | 'expired' | 'unsubmitted';
 export type QueueClientContext = GenerationContext;
@@ -6,6 +7,8 @@ export type QueueClientContext = GenerationContext;
 export interface QueueJob {
   id: string;
   requestId: string;
+  credit?: CreditCharge | null;
+  settlementPending?: boolean;
   status: QueueStatus;
   error: string;
   providerId: string;
@@ -33,5 +36,5 @@ export interface QueueJob {
   elapsedMs: number;
 }
 
-export interface QueueListResponse { jobs: QueueJob[]; globalActive: number; globalQueued: number; averageMs: number; historyCursor?: string; historyTotal?: number }
+export interface QueueListResponse { jobs: QueueJob[]; userId: string; credits: CreditBalance; prices: CreditPrices; globalActive: number; globalQueued: number; averageMs: number; historyCursor?: string; historyTotal?: number }
 export interface QueueResult { created?: number; data?: Array<{ b64_json?: string; url?: string; mime_type?: string; width?: number; height?: number; bytes?: number; revised_prompt?: string }> }

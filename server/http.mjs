@@ -1,7 +1,10 @@
-import { appendFile, mkdir } from 'node:fs/promises';
-import path from 'node:path';
 import { requestError } from '../shared/generation-contract.mjs';
+import { createFileLogger } from './logging.mjs';
 const DEFAULT_MAX_REQUEST_BYTES = 64 * 1024 * 1024;
+let fileLogger;
+
+export function initLogging(filename) { fileLogger = filename ? createFileLogger(filename) : undefined; }
+export async function flushLogs() { await fileLogger?.flush(); }
 
 export function timeoutSignal(ms) {
   const ac = new AbortController();
@@ -29,14 +32,10 @@ export function setBaseHeaders(req, res) {
 }
 
 export function logLine(level, message) {
-  const line = `[${new Date().toISOString()}] [${level}] ${message}`;
+  const line = `[${new Date().toISOString()}] [${level}] ${String(message).replace(/[\r\n]+/g, ' ')}`;
   const writer = level === 'ERROR' ? console.error : level === 'WARN' ? console.warn : console.log;
   writer(line);
-  const target = globalThis.__LOG_FILE__;
-  if (!target) return;
-  mkdir(path.dirname(target), { recursive: true })
-    .then(() => appendFile(target, `${line}\n`))
-    .catch(() => {});
+  fileLogger?.write(`${line}\n`);
 }
 
 export async function readRequestBody(req, maxBytes = DEFAULT_MAX_REQUEST_BYTES) {
@@ -99,7 +98,7 @@ export async function readUpstreamError(upstream, config) {
 
 
 export async function readJson(req, maxBytes) {
-  if (!(req.headers['content-type'] || '').includes('application/json')) throw requestError('请使用 application/json', 415);
+  if ((req.headers['content-type'] || '').split(';')[0].trim().toLowerCase() !== 'application/json') throw requestError('请使用 application/json', 415);
   const raw = await readRequestBody(req, maxBytes);
   try { return JSON.parse(raw.toString('utf8')); } catch { throw requestError('请求体不是有效 JSON'); }
 }

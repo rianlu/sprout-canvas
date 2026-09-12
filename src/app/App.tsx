@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { AppShell } from '../components/shell/AppShell';
 import { GalleryGrid } from '../pages/StitchGalleryGrid';
 import { HelpDialog } from '../components/shell/HelpDialog';
@@ -6,7 +6,7 @@ import { QueueDrawer } from '../components/shell/QueueDrawer';
 import { CreativeStudio } from '../pages/StitchCreativeStudio';
 import { SeriesStudio } from '../pages/StitchSeriesStudio';
 import { StylesLibrary } from '../pages/StitchStylesLibrary';
-import { StyleAdmin } from '../pages/StyleAdmin';
+import { AdminPage } from '../pages/AdminPage';
 import { useAuth } from '../hooks/useAuth';
 import { useGallery } from '../hooks/useGallery';
 import { useQueue } from '../hooks/useQueue';
@@ -23,10 +23,16 @@ import { randomId } from '../lib/random/id';
 import type { SeriesCard } from '../lib/image/gallery';
 
 export type PageKey = 'studio' | 'series' | 'styles' | 'gallery' | 'admin';
+const pageFromHash = (): PageKey => {
+  const value = location.hash.slice(1).split('/')[0];
+  return ['studio', 'series', 'styles', 'gallery', 'admin'].includes(value) ? value as PageKey : 'studio';
+};
 
-function LoginScreen({ onLogin, loading, passwordRequired = true }: { onLogin: (password: string) => Promise<void>; loading: boolean; passwordRequired?: boolean }) {
+function LoginScreen({ onLogin, loading }: { onLogin: (code: string) => Promise<void>; loading: boolean }) {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [working, setWorking] = useState(false);
+  const loginLock = useRef(false);
   return (
     <main className="min-h-screen bg-surface flex items-center justify-center px-gutter-canvas">
       <section className="w-full max-w-sm bg-surface-container-lowest/90 backdrop-blur-xl rounded-2xl p-space-xl shadow-[0_12px_36px_rgba(85,95,75,0.10)] border border-outline-variant/30 flex flex-col gap-space-lg">
@@ -45,15 +51,20 @@ function LoginScreen({ onLogin, loading, passwordRequired = true }: { onLogin: (
           className="flex flex-col gap-space-sm"
           onSubmit={(event) => {
             event.preventDefault();
-            void onLogin(password).catch(() => setError('密码不正确或服务异常'));
+            if (loginLock.current || loading || !password.trim()) return;
+            loginLock.current = true;
+            setWorking(true); setError('');
+            void onLogin(password).catch((cause) => setError(cause instanceof Error ? cause.message : '登录失败, 请重试')).finally(() => { loginLock.current = false; setWorking(false); });
           }}
         >
-          {passwordRequired && <div className="relative bg-surface-container-low rounded-xl px-space-md py-2 flex items-center gap-2 border border-outline-variant/30 focus-within:border-primary transition-colors">
+          <div className="relative bg-surface-container-low rounded-xl px-space-md py-2 flex items-center gap-2 border border-outline-variant/30 focus-within:border-primary transition-colors">
             <input
               type="password"
               className="w-full bg-transparent border-0 outline-none font-body-md text-body-md text-on-surface placeholder:text-outline"
-              placeholder="访问密码"
-              aria-label="访问密码"
+              placeholder="粘贴访问码"
+              aria-label="访问码"
+              autoComplete="current-password"
+              maxLength={128}
               autoFocus
               value={password}
               onChange={(event) => {
@@ -61,7 +72,7 @@ function LoginScreen({ onLogin, loading, passwordRequired = true }: { onLogin: (
                 setError('');
               }}
             />
-          </div>}
+          </div>
           {error && (
             <p className="font-body-sm text-body-sm text-error text-center" role="alert">
               {error}
@@ -70,44 +81,45 @@ function LoginScreen({ onLogin, loading, passwordRequired = true }: { onLogin: (
           <button
             type="submit"
             className="w-full py-3 rounded-xl bg-primary hover:bg-primary-container text-on-primary font-headline-sm text-headline-sm shadow-[0_4px_16px_rgba(65,91,47,0.28)] hover:-translate-y-0.5 transition-all disabled:opacity-60 disabled:hover:translate-y-0"
-            disabled={loading || (passwordRequired && !password)}
+            disabled={loading || working || !password.trim()}
           >
-            {loading ? '登录中...' : '登录'}
+            {loading || working ? '登录中...' : '进入工作台'}
           </button>
         </form>
-        <p className="font-meta-sm text-meta-sm text-outline text-center">自托管的图像生成工作台 · 密码由服务端配置</p>
+        <p className="font-meta-sm text-meta-sm text-outline text-center">使用管理员提供的访问码, 以灵感点开启创作</p>
       </section>
     </main>
   );
 }
 
 export function App() {
-  const [page, setCurrentPage] = useState<PageKey>(() => ['studio', 'series', 'styles', 'gallery', 'admin'].includes(location.hash.slice(1)) ? location.hash.slice(1) as PageKey : 'studio');
+  const [page, setCurrentPage] = useState<PageKey>(pageFromHash);
   const setPage = useCallback((next: PageKey) => { setCurrentPage(next); if (location.hash !== `#${next}`) history.pushState(null, '', `#${next}`); }, []);
-  useEffect(() => { const changed = () => { const value = location.hash.slice(1); if (['studio', 'series', 'styles', 'gallery', 'admin'].includes(value)) setCurrentPage(value as PageKey); }; window.addEventListener('popstate', changed); return () => window.removeEventListener('popstate', changed); }, []);
+  useEffect(() => { const changed = () => setCurrentPage(pageFromHash()); window.addEventListener('popstate', changed); window.addEventListener('hashchange', changed); return () => { window.removeEventListener('popstate', changed); window.removeEventListener('hashchange', changed); }; }, []);
   const [studioRevision, setStudioRevision] = useState(0);
   const [queueOpen, setQueueOpen] = useState(false);
-  const [ready, setReady] = useState(false);
   const [serverConfig, setServerConfig] = useState<ServerConfig | null>(null);
+  const [configError, setConfigError] = useState('');
+  const [configRetry, setConfigRetry] = useState(0);
   const [helpOpen, setHelpOpen] = useState(false);
   const [message, setMessage] = useState('');
   const auth = useAuth();
   const gallery = useGallery();
 
   const handleResult = useCallback(gallery.add, [gallery.add]);
-  const queue = useQueue(handleResult, auth.authenticated);
+  const queue = useQueue(handleResult, auth.authenticated, auth.userId);
   useEffect(() => { const failed = (event: Event) => setMessage((event as CustomEvent<string>).detail); window.addEventListener('sprout:storage-error', failed); return () => window.removeEventListener('sprout:storage-error', failed); }, []);
 
-  // 后端就绪状态 (顶栏状态点)
+  // 同步创作能力, 读取失败时保留可重试的操作反馈.
   useEffect(() => {
     if (!auth.authenticated) return;
     let cancelled = false;
     async function check() {
       try {
         const config = await getServerConfig();
-        if (!cancelled) { setReady(true); setServerConfig(config); }
+        if (!cancelled) { setConfigError(''); setServerConfig(config); }
       } catch {
-        if (!cancelled) setReady(false);
+        if (!cancelled) setConfigError('暂时无法读取创作设置, 请重试');
       }
     }
     void check();
@@ -116,21 +128,14 @@ export function App() {
       cancelled = true;
       window.clearInterval(timer);
     };
-  }, [auth.authenticated]);
+  }, [auth.authenticated, configRetry]);
 
   const submit = useCallback(
-    async (input: QueueSubmitInput) => {
-      const job = await queue.submit(input);
-      setQueueOpen(true);
-      return job;
-    },
+    (input: QueueSubmitInput) => queue.submit(input, () => setQueueOpen(true)),
     [queue.submit],
   );
 
-  const submitBatch = useCallback(async (inputs: QueueSubmitInput[]) => {
-    setQueueOpen(true);
-    return queue.submitBatch(inputs);
-  }, [queue.submitBatch]);
+  const submitBatch = useCallback((inputs: QueueSubmitInput[]) => queue.submitBatch(inputs, () => setQueueOpen(true)), [queue.submitBatch]);
   const useAsReference = useCallback(async (record: ResultRecord, edit = false) => {
     try {
       const draft = await sourceImageDraft(record, edit);
@@ -192,7 +197,7 @@ export function App() {
     } catch (error) { setMessage(error instanceof Error ? error.message : '无法复用此系列'); }
   }, [setPage]);
 
-  if (page === 'admin') return <StyleAdmin onBack={() => setPage('styles')} />;
+  if (page === 'admin') return <AdminPage onBack={() => setPage('styles')} />;
   if (auth.loading) {
     return (
       <main className="min-h-screen bg-surface flex items-center justify-center">
@@ -201,25 +206,25 @@ export function App() {
     );
   }
   if (auth.error) return <main className="min-h-screen flex flex-col items-center justify-center gap-4 bg-surface"><p role="alert">{auth.error}</p><button type="button" onClick={() => void auth.refresh()} className="px-4 py-2 rounded-xl bg-primary text-on-primary">重新连接</button></main>;
-  if (!auth.authenticated) return <LoginScreen loading={auth.loading} onLogin={auth.signIn} passwordRequired={auth.required} />;
+  if (!auth.authenticated) return <LoginScreen loading={auth.loading} onLogin={auth.signIn} />;
 
   return (
     <AppShell
       page={page}
       onPageChange={setPage}
-      ready={ready}
-      statusText={!ready ? '连接服务中' : serverConfig?.imageChannels?.some((channel) => channel.status === 'available') ? '生图通道可用' : serverConfig?.imageChannels?.some((channel) => channel.status === 'degraded' || channel.status === 'cooldown') ? '通道需检查' : '已连接 · 通道待验证'}
       onOpenHelp={() => setHelpOpen(true)}
       onSignOut={() => void auth.signOut().catch(() => setMessage('退出失败, 请重试'))}
       queueCount={queue.jobs.filter((job) => ['running', 'pending', 'unsubmitted'].includes(job.status)).length}
       onOpenQueue={() => setQueueOpen(true)}
     >
-      {(message || gallery.error || queue.error) && <div role="alert" className="fixed top-20 left-1/2 -translate-x-1/2 z-[70] max-w-[90vw] rounded-xl bg-error-container text-on-error-container p-3 shadow-lg text-body-sm flex gap-3"><span>{message || gallery.error || queue.error}</span><button type="button" onClick={() => { setMessage(''); void gallery.refresh(); void queue.refresh(); }}>重试</button></div>}
+      {!auth.canGenerate && <div role="status" className="fixed bottom-5 left-1/2 -translate-x-1/2 z-[65] max-w-[90vw] rounded-xl bg-secondary-container text-on-secondary-container p-3 shadow-lg text-body-sm">访问码已停用或重置, 可领取已完成结果. <button type="button" className="underline" onClick={() => void auth.signOut()}>更换访问码</button></div>}
+      {(message || configError || gallery.error || queue.error) && <div role="alert" className="fixed top-20 left-1/2 -translate-x-1/2 z-[70] max-w-[90vw] rounded-xl bg-error-container text-on-error-container p-3 shadow-lg text-body-sm flex gap-3"><span>{message || configError || gallery.error || queue.error}</span><button type="button" onClick={() => { setMessage(''); setConfigRetry((value) => value + 1); void gallery.refresh(); void queue.refresh(); }}>重试</button></div>}
       {page === 'studio' && (
         <CreativeStudio
           key={studioRevision}
           imageCapabilities={serverConfig?.imageCapabilities}
           onOpenStyles={() => setPage('styles')}
+          onOpenGallery={() => { setPage('gallery'); window.scrollTo({ top: 0 }); }}
           onSubmitBatch={submitBatch}
           onCancel={queue.cancel}
           onUseRecipe={(record) => void useRecipe(record)}
@@ -244,12 +249,7 @@ export function App() {
           jobs={queue.jobs}
         />
       )}
-      {page === 'styles' && (
-        <StylesLibrary
-          onManage={() => setPage('admin')}
-          onUseInStudio={useStyle}
-        />
-      )}
+      {page === 'styles' && <StylesLibrary onUseInStudio={useStyle} />}
       {page === 'gallery' && (
         <GalleryGrid
           records={gallery.records}
@@ -275,7 +275,7 @@ export function App() {
         hasMore={queue.hasMore}
         loadingHistory={queue.loadingHistory}
       />
-      <HelpDialog open={helpOpen} onClose={() => setHelpOpen(false)} config={serverConfig} />
+      <HelpDialog open={helpOpen} onClose={() => setHelpOpen(false)} />
     </AppShell>
   );
 }

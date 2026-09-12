@@ -39,10 +39,14 @@ async function list(page, admin = true) { return (await api(page, admin ? '/api/
 async function adminLogin(page) {
   await page.getByLabel('管理员密码', { exact: true }).fill(TEST_ADMIN_PASSWORD);
   await page.getByRole('button', { name: '登录管理后台', exact: true }).click();
+  const navigation = page.getByRole('navigation', { name: '后台导航' });
+  await navigation.waitFor();
+  const stylesTab = navigation.getByRole('button', { name: '风格管理', exact: true });
+  if (await stylesTab.getAttribute('aria-pressed') !== 'true') await stylesTab.click();
   await page.getByRole('button', { name: '添加风格', exact: true }).waitFor();
 }
 async function openEditor(page, name) {
-  if (name) await card(page, name).getByRole('button', { name: '编辑', exact: true }).click();
+  if (name) await card(page, name).getByRole('button', { name: `编辑 ${name}`, exact: true }).click();
   else await page.getByRole('button', { name: '添加风格', exact: true }).click();
   const dialog = page.getByRole('dialog', { name: name ? '编辑风格' : '添加风格', exact: true });
   await dialog.waitFor();
@@ -54,11 +58,11 @@ async function save(dialog) {
   await dialog.waitFor({ state: 'hidden' });
 }
 async function options(dialog, values) {
-  await dialog.locator('summary').click();
   for (const [name, value] of Object.entries(values)) await dialog.getByLabel(name, { exact: true }).fill(String(value));
 }
 async function screenshot(page, name) {
   await page.evaluate(async () => document.fonts.ready);
+  await page.waitForFunction(() => [...document.images].filter((image) => { const box = image.getBoundingClientRect(); return box.width > 0 && box.top < innerHeight && box.bottom > 0; }).every((image) => image.complete && image.naturalWidth > 0));
   await page.screenshot({ path: path.join(output, name + '.png') });
   const geometry = await page.evaluate(() => ({
     viewport: innerWidth, scroll: document.documentElement.scrollWidth,
@@ -88,14 +92,14 @@ try {
   assert.equal((await api(page, '/api/jobs/me')).status, 401);
   const user = await newPage();
   await user.goto(app.base);
-  await user.getByLabel('访问密码').fill(TEST_PASSWORD);
-  await user.getByRole('button', { name: '登录', exact: true }).click();
+  await user.getByLabel('访问码').fill(app.accessCode);
+  await user.getByRole('button', { name: '进入工作台', exact: true }).click();
   await user.locator('.studio-rail textarea').waitFor();
   assert.equal((await api(user, '/api/admin/styles')).status, 401);
   checks.push('管理员与工作台登录独立, 错误密码有明确反馈');
 
   let dialog = await openEditor(page);
-  assert.equal(await dialog.getByLabel('名称', { exact: true }).isVisible(), false);
+  for (const label of ['名称', '分类', '作者', '来源链接', '排序 (越小越靠前)']) assert.equal(await dialog.getByLabel(label, { exact: true }).isVisible(), true);
   await page.evaluate(async (base64) => {
     const image = new Image(); image.src = 'data:image/jpeg;base64,' + base64; await image.decode();
     const canvas = document.createElement('canvas'); canvas.width = 2400; canvas.height = 1600;
@@ -123,6 +127,19 @@ try {
   await page.reload();
   await page.getByRole('button', { name: '添加风格', exact: true }).waitFor();
   assert.deepEqual((await list(page)).styles.find((style) => style.id === pasted.id), pasted);
+  const pastedCard = card(page, pasted.name);
+  await pastedCard.waitFor();
+  const content = await pastedCard.getByRole('heading', { name: pasted.name }).boundingBox();
+  const bounds = await pastedCard.boundingBox();
+  await pastedCard.click({ position: { x: content.x - bounds.x + 10, y: content.y - bounds.y + 8 } });
+  dialog = page.getByRole('dialog', { name: '编辑风格', exact: true });
+  assert.equal(await dialog.getByLabel('风格提示词').inputValue(), originalPrompt, '点击卡片文字区域打开对应编辑表单');
+  await dialog.getByLabel('关闭管理弹窗').click();
+  await pastedCard.getByRole('button', { name: `编辑 ${pasted.name}`, exact: true }).focus();
+  await page.keyboard.press('Enter');
+  await dialog.waitFor();
+  await page.keyboard.press('Escape');
+  await dialog.waitFor({ state: 'hidden' });
   checks.push('真实剪贴板图片与文本粘贴, 自动名称, 示例图缩放和刷新持久化');
 
   dialog = await openEditor(page);
@@ -139,6 +156,7 @@ try {
   assert.equal(await page.locator('.admin-style-card').count(), 1);
   await card(page, uploaded.name).getByRole('button', { name: '上架', exact: true }).click();
   await until(async () => (await list(user, false)).styles.some((style) => style.id === uploaded.id), 'published uploaded template');
+  assert.equal(await page.getByRole('dialog').count(), 0, '上下架按钮不打开编辑弹窗');
   await page.getByLabel('上架状态').selectOption('all');
   checks.push('图片上传, 可选分类与来源, 上下架及状态筛选');
 
@@ -277,13 +295,13 @@ try {
   checks.push('真实备份下载, 删除后导入恢复, 取消预览与重复导入不修改数据');
 
   // Cookies are shared across ports. Exercise both environments in one browser context.
-  assert.equal((await api(page, '/api/auth/login', 'POST', { password: TEST_PASSWORD, userId: '00000000-0000-4000-8000-000000000099' })).status, 200);
+  assert.equal((await api(page, '/api/auth/login', 'POST', { code: app.accessCode })).status, 200);
   isolated = await startHarness({ serveDist: true, cookieNamespace: 'local_browser_test' });
   const other = await page.context().newPage();
   other.on('pageerror', (error) => errors.push(error.message));
   await other.goto(isolated.base);
-  await other.getByLabel('访问密码').fill(TEST_PASSWORD);
-  await other.getByRole('button', { name: '登录', exact: true }).click();
+  await other.getByLabel('访问码').fill(isolated.accessCode);
+  await other.getByRole('button', { name: '进入工作台', exact: true }).click();
   await other.locator('.studio-rail textarea').waitFor();
   await other.goto(isolated.base + '/#admin');
   await adminLogin(other);
@@ -299,7 +317,10 @@ try {
   await other.close();
   checks.push('同一浏览器不同端口的独立环境, 工作台/管理登录与数据互不覆盖');
 
-  await page.getByLabel('搜索管理风格').fill('手工');
+  await page.getByLabel('搜索管理风格').fill('');
+  await page.locator('.admin-style-card').first().waitFor();
+  const columns = await page.locator('.admin-style-card').first().evaluate((element) => getComputedStyle(element.parentElement).gridTemplateColumns.split(' ').length);
+  assert.equal(columns, 4, '电脑端显示四列, 不再占用两列大卡片');
   await screenshot(page, 'admin-desktop-light');
   await page.getByLabel('切换主题').click();
   await screenshot(page, 'admin-desktop-dark');
@@ -311,6 +332,8 @@ try {
   await screenshot(page, 'admin-mobile-light');
   dialog = await openEditor(page, pasted.name);
   await screenshot(page, 'admin-editor-mobile-light');
+  await dialog.getByLabel('来源链接', { exact: true }).fill('https://example.org/mobile-form-check');
+  assert.equal(await dialog.getByLabel('来源链接', { exact: true }).inputValue(), 'https://example.org/mobile-form-check');
   await dialog.getByRole('button', { name: '保存风格', exact: true }).scrollIntoViewIfNeeded();
   await screenshot(page, 'admin-editor-mobile-form-light');
   await dialog.getByLabel('关闭管理弹窗').click();

@@ -1,12 +1,12 @@
 import { useTheme } from '../../hooks/useTheme';
 import { StitchIcon } from '../ui/StitchIcon';
 import type { PageKey } from '../../app/App';
+import { compactPoints, useCredits } from '../../lib/credits';
+import { UserPopover } from './UserPopover';
 
 export interface AppShellProps {
   page: PageKey;
   onPageChange: (page: PageKey) => void;
-  ready: boolean;
-  statusText: string;
   onOpenHelp: () => void;
   onSignOut: () => void;
   queueCount: number;
@@ -21,8 +21,9 @@ const NAV_ITEMS: { key: PageKey; label: string }[] = [
   { key: 'gallery', label: '展馆' },
 ];
 
-export function AppShell({ page, onPageChange, ready, statusText, onOpenHelp, onSignOut, queueCount, onOpenQueue, children }: AppShellProps) {
+export function AppShell({ page, onPageChange, onOpenHelp, onSignOut, queueCount, onOpenQueue, children }: AppShellProps) {
   const { theme, toggle } = useTheme();
+  const { credits, canGenerate, accessName } = useCredits();
   const navigation = (mobile = false) => (
     <nav
       className={
@@ -54,9 +55,9 @@ export function AppShell({ page, onPageChange, ready, statusText, onOpenHelp, on
 
   return (
     <div className="min-h-screen bg-surface font-body-md text-body-md text-on-surface flex flex-col">
-      <header className="fixed top-0 left-0 right-0 w-full z-40 bg-surface/90 backdrop-blur-xl shadow-[0_1px_8px_rgba(85,95,75,0.06)]">
-        <div className="h-16 w-full px-gutter-canvas flex items-center justify-between gap-space-md">
-          <div className="flex items-center gap-space-sm select-none min-w-0">
+      <header className="fixed top-0 left-0 right-0 w-full z-40 bg-surface/80 backdrop-blur-xl shadow-[0_1px_8px_rgba(85,95,75,0.06)]">
+        <div className="h-16 w-full px-4 sm:px-gutter-canvas flex items-center justify-between gap-2 sm:gap-space-md">
+          <div className="flex items-center gap-2 sm:gap-space-sm select-none shrink-0">
             <img
               alt="芽绘台 SproutCanvas Logo"
               className="h-8 w-8 shrink-0 object-contain"
@@ -64,21 +65,21 @@ export function AppShell({ page, onPageChange, ready, statusText, onOpenHelp, on
             />
             <div className="flex flex-col min-w-0">
               <span className="stitch-header-brand font-headline-sm text-headline-sm text-on-surface tracking-tight leading-none truncate">
-                芽绘台<span className="hidden sm:inline"> SproutCanvas</span>
+                芽绘台<span className="hidden xl:inline"> SproutCanvas</span>
               </span>
-              <span className="stitch-header-tagline font-meta-sm text-meta-sm text-on-surface-variant tracking-wider mt-0.5">
+              <span className="stitch-header-tagline hidden xl:block whitespace-nowrap font-meta-sm text-meta-sm text-on-surface-variant tracking-wider mt-0.5">
                 自然心流·灵感绘台
               </span>
             </div>
           </div>
           {navigation()}
-          <div className="flex items-center gap-space-sm shrink-0">
-            <button type="button" onClick={onOpenHelp} title="查看通道状态" className="hidden lg:flex items-center gap-1.5 px-space-sm py-1 rounded-full bg-surface-container-low">
-              <span className={`w-2 h-2 rounded-full ${ready ? 'bg-primary' : 'bg-outline-variant'}`} />
-              <span className="font-meta-sm text-meta-sm text-on-surface-variant">
-                {statusText}
-              </span>
-            </button>
+          <div className="flex items-center gap-2 sm:gap-space-sm shrink-0">
+            {credits && (
+              <div aria-label={credits.unlimited ? `无限灵感点, 原额度占用 ${credits.reserved} 点` : `可用 ${credits.available} 灵感点, 占用 ${credits.reserved} 点`} title={`${credits.unlimited ? '无限额度, 新任务不扣减余额' : `可用 ${credits.available.toLocaleString()} 点`}, 占用 ${credits.reserved.toLocaleString()} 点. ${canGenerate ? '已受理任务按提交时的额度模式结算.' : '访问码已失效, 可继续领取已有结果. 请退出后用可用访问码登录再创作.'}`} className="px-2.5 py-1.5 rounded-xl bg-secondary-container text-on-secondary-container flex flex-col items-center font-meta-sm text-meta-sm whitespace-nowrap">
+                <span className="flex items-center gap-1 font-semibold tabular-nums"><StitchIcon name="spa" size={15} />{credits.unlimited ? '无限' : compactPoints(credits.available)}<span className="hidden lg:inline">灵感点</span></span>
+                {!canGenerate ? <span className="text-[10px] text-error">访问码已失效</span> : credits.reserved > 0 && <span className="text-[10px] opacity-80">{credits.unlimited && <span className="hidden sm:inline">原额度</span>}占用 {compactPoints(credits.reserved)}</span>}
+              </div>
+            )}
             <button
               type="button"
               className="flex items-center gap-1.5 px-space-sm py-1.5 rounded-lg bg-surface-container hover:bg-surface-container-high transition-colors text-on-surface"
@@ -86,29 +87,12 @@ export function AppShell({ page, onPageChange, ready, statusText, onOpenHelp, on
               aria-label={`任务队列, ${queueCount} 个待处理任务`}
             >
               <StitchIcon name="auto_awesome_motion" size={18} className="text-primary" />
-              <span className="hidden sm:inline font-body-sm text-body-sm font-medium">任务队列</span>
+              <span className="hidden lg:inline font-body-sm text-body-sm font-medium">任务队列</span>
               <span className="px-1.5 py-0.5 rounded-full bg-secondary-container text-on-secondary-container font-meta-sm text-meta-sm">
                 {queueCount}
               </span>
             </button>
-            <button
-              type="button"
-              className="w-8 h-8 rounded-lg bg-surface-container-low hover:bg-surface-container-high flex items-center justify-center text-on-surface-variant hover:text-on-surface transition-colors"
-              title="切换主题"
-              aria-label="切换主题"
-              onClick={toggle}
-            >
-              <StitchIcon name={theme === 'dark' ? 'dark_mode' : 'light_mode'} size={18} />
-            </button>
-            <button
-              type="button"
-              className="flex shrink-0 w-8 h-8 rounded-full bg-primary items-center justify-center shadow-[0_2px_6px_rgba(65,91,47,0.25)]"
-              onClick={onSignOut}
-              title="退出工作台"
-              aria-label="退出工作台"
-            >
-              <StitchIcon name="logout" size={18} className="text-on-primary" />
-            </button>
+            <UserPopover key={page} accessName={accessName} tail={credits?.tail} theme={theme} onToggleTheme={toggle} onOpenHelp={onOpenHelp} onSignOut={onSignOut} />
           </div>
         </div>
         {navigation(true)}

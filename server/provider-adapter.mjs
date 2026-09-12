@@ -1,11 +1,11 @@
 import { toImagesPayload } from '../shared/generation-contract.mjs';
 import { readLimitedBody } from './image-result.mjs';
-import { redactProviderSecrets } from './http.mjs';
-let upstreamHeaders, timeoutSignal, stripHtml;
+import { fetchGeneration, upstreamFailure, formatUpstreamFailure } from './upstream-outcome.mjs';
+let upstreamHeaders, timeoutSignal;
 let IMAGE_UPSTREAM_TIMEOUT_MS = 180000;
 let RESPONSES_IMAGE_UPSTREAM_TIMEOUT_MS = 420000;
 export function initProviderAdapter(deps) {
-  ({ upstreamHeaders, timeoutSignal, stripHtml } = deps);
+  ({ upstreamHeaders, timeoutSignal } = deps);
   IMAGE_UPSTREAM_TIMEOUT_MS = deps.IMAGE_UPSTREAM_TIMEOUT_MS || IMAGE_UPSTREAM_TIMEOUT_MS;
   RESPONSES_IMAGE_UPSTREAM_TIMEOUT_MS = deps.RESPONSES_IMAGE_UPSTREAM_TIMEOUT_MS || RESPONSES_IMAGE_UPSTREAM_TIMEOUT_MS;
 }
@@ -96,45 +96,28 @@ export async function executeImageJobWithProvider(job, config) {
     return callResponsesAndExtractImage(job.body, config);
   }
   const timeoutMs = job.upstreamPath.startsWith('/v1/responses') ? RESPONSES_IMAGE_UPSTREAM_TIMEOUT_MS : IMAGE_UPSTREAM_TIMEOUT_MS;
-  const upstream = await fetch(`${config.baseUrl}${job.upstreamPath}`, {
+  const upstream = await fetchGeneration(`${config.baseUrl}${job.upstreamPath}`, {
     method: job.method,
     headers: upstreamHeaders(config, job.contentType),
     body: job.submission ? JSON.stringify({ ...jobJsonPayload(job), model: config.imageModel }) : job.body,
     signal: timeoutSignal(timeoutMs),
   });
   const body = await readLimitedBody(upstream);
-  return {
-    status: upstream.status,
-    statusText: upstream.statusText,
-    contentType: upstream.headers.get('content-type') || 'application/json; charset=utf-8',
-    cacheControl: upstream.headers.get('cache-control') || '',
-    body,
-    ok: upstream.ok,
-    error: upstream.ok ? '' : await formatUpstreamErrorFromBody(upstream, body, config),
-  };
+  return imageResponse(upstream, body, config);
 }
 
 async function callResponsesAndExtractImage(payloadBuffer, config) {
-  const upstream = await fetch(`${config.baseUrl}/v1/responses`, {
+  const upstream = await fetchGeneration(`${config.baseUrl}/v1/responses`, {
     method: 'POST',
     headers: upstreamHeaders(config, 'application/json'),
     body: payloadBuffer,
     signal: timeoutSignal(RESPONSES_IMAGE_UPSTREAM_TIMEOUT_MS),
   });
   const upstreamBody = await readLimitedBody(upstream);
-  if (!upstream.ok) {
-    return {
-      status: upstream.status,
-      statusText: upstream.statusText,
-      contentType: upstream.headers.get('content-type') || 'application/json; charset=utf-8',
-      cacheControl: upstream.headers.get('cache-control') || '',
-      body: upstreamBody,
-      ok: false,
-      error: await formatUpstreamErrorFromBody(upstream, upstreamBody, config),
-    };
-  }
-  const images = extractImagesFromResponsesBody(upstreamBody);
+  if (!upstream.ok) return imageResponse(upstream, upstreamBody, config);
+  const { images, failure } = extractImagesFromResponsesBody(upstreamBody);
   if (!images.length) {
+    if (failure) return failedUpstreamResult(failure, config);
     const error = 'Responses API 已返回, 但未找到图片数据';
     return {
       status: 502,
@@ -161,21 +144,28 @@ async function callResponsesAndExtractImage(payloadBuffer, config) {
 async function processImagesEditBackedGenerationJob(job, config) {
   const imagesPayload = jobJsonPayload(job);
   const { body, contentType } = buildImagesEditMultipartFromPayload(config, imagesPayload);
-  const upstream = await fetch(`${config.baseUrl}/v1/images/edits`, {
+  const upstream = await fetchGeneration(`${config.baseUrl}/v1/images/edits`, {
     method: 'POST',
     headers: upstreamHeaders(config, contentType),
     body,
     signal: timeoutSignal(IMAGE_UPSTREAM_TIMEOUT_MS),
   });
   const upstreamBody = await readLimitedBody(upstream);
+  return imageResponse(upstream, upstreamBody, config);
+}
+
+function failedUpstreamResult(failure, config) {
+  return { ...failedImageJobResult(failure.status, formatUpstreamFailure(failure, config)), outcomeUnknown: failure.outcomeUnknown };
+}
+
+function imageResponse(upstream, body, config) {
+  const failure = upstreamFailure(upstream.status, body);
+  if (failure) return failedUpstreamResult(failure, config);
   return {
-    status: upstream.status,
-    statusText: upstream.statusText,
+    status: upstream.status, statusText: upstream.statusText,
     contentType: upstream.headers.get('content-type') || 'application/json; charset=utf-8',
     cacheControl: upstream.headers.get('cache-control') || '',
-    body: upstreamBody,
-    ok: upstream.ok,
-    error: upstream.ok ? '' : await formatUpstreamErrorFromBody(upstream, upstreamBody, config),
+    body, ok: upstream.ok, error: '',
   };
 }
 
@@ -270,9 +260,14 @@ export function buildResponsesPayloadFromImagesPayload(provider, imagesPayload) 
 function extractImagesFromResponsesBody(body) {
   const raw = body.toString('utf8');
   const images = new Map();
+  let failure = null;
+  function observeFailure(value) {
+    const next = upstreamFailure(200, value);
+    if (next && (!failure || next.outcomeUnknown)) failure = next;
+  }
   function collect(value) {
     if (!value || typeof value !== 'object') return;
-    if (value.type === 'image_generation_call' && typeof value.result === 'string' && value.result.length > 32) images.set(value.id || value.result, { b64_json: value.result, revised_prompt: value.revised_prompt || '' });
+    if (value.type === 'image_generation_call' && (!value.status || value.status === 'completed') && typeof value.result === 'string' && value.result.length > 32) images.set(value.id || value.result, { b64_json: value.result, revised_prompt: value.revised_prompt || '' });
     if (Array.isArray(value.output)) value.output.forEach(collect);
     if (value.item) collect(value.item);
     if (value.response) collect(value.response);
@@ -284,19 +279,22 @@ function extractImagesFromResponsesBody(body) {
     if (!dataText || dataText === '[DONE]') continue;
     try {
       const event = JSON.parse(dataText);
-      if (['response.output_item.done', 'response.completed'].includes(event.type)) collect(event);
+      observeFailure(event);
+      if (['response.output_item.done', 'response.completed', 'response.failed', 'response.incomplete'].includes(event.type)) collect(event);
     } catch {}
   }
   try {
-    collect(JSON.parse(raw));
+    const value = JSON.parse(raw);
+    observeFailure(value);
+    collect(value);
   } catch {}
-  return [...images.values()];
+  return { images: [...images.values()], failure };
 }
 
 // ----- Error helpers -----
 
 function isRetryableUpstreamStatus(status) {
-  return [408, 409, 425, 429, 500, 502, 503, 504, 524].includes(status);
+  return [409, 425, 429, 500, 502, 503].includes(status);
 }
 
 // 某些 router/网关把限流类错误误标成 400. 通过错误消息关键词识别, 让队列切到下一个 provider.
@@ -383,18 +381,4 @@ export function failedImageJobResult(status, message) {
     ok: false,
     error: message,
   };
-}
-
-async function formatUpstreamErrorFromBody(upstream, body, config) {
-  const contentType = upstream.headers.get('content-type') || '';
-  const raw = body.toString('utf8');
-  let cleaned = contentType.includes('html') || /^\s*</.test(raw) ? stripHtml(raw) : raw.trim();
-  if (contentType.includes('json') || /^\s*\{/.test(cleaned)) {
-    try {
-      const parsed = JSON.parse(cleaned);
-      const inner = parsed?.error?.message || parsed?.error || parsed?.message;
-      if (inner) cleaned = typeof inner === 'string' ? inner : JSON.stringify(inner);
-    } catch {}
-  }
-  return `上游 API 返回 HTTP ${upstream.status}: ${redactProviderSecrets(cleaned || upstream.statusText || '无错误正文', config).slice(0, 360)}`;
 }

@@ -166,6 +166,14 @@ export function createStyleStore(directory, { seedDirectory = new URL('./style-s
   } catch (error) { db.close(); throw error; }
 
   return {
+    overview() {
+      const { total, published } = db.prepare('SELECT count(*) AS total, coalesce(sum(published),0) AS published FROM styles').get();
+      const recent = db.prepare('SELECT data FROM styles ORDER BY updated_at DESC,id LIMIT 4').all().map(({ data }) => {
+        const { id, name, author, image, published, updatedAt } = serialize(JSON.parse(data), true);
+        return { id, name, author, image, published, updatedAt };
+      });
+      return { total, published, hidden: total - published, recent };
+    },
     catalog(admin = false) {
       const records = all().filter((record) => admin || record.published);
       return { styles: records.map((record) => serialize(record, admin)), categories: [...new Set(records.map((record) => record.category).filter(Boolean))], revision: revision() };

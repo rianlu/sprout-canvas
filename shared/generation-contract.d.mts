@@ -1,3 +1,4 @@
+import type { CreditQuote } from './credits-contract.mjs';
 export interface GenerationReference { id: string; name: string; dataUrl: string; recordId?: string }
 export interface GenerationRequest {
   prompt: string;
@@ -15,7 +16,7 @@ export interface GenerationContext {
   seriesId?: string; masterPrompt?: string; sceneId?: string; sceneIndex?: number; version?: number;
   parentId?: string; template?: SeriesTemplate; styleId?: string; styleName?: string; tone?: string; batchId?: string;
 }
-export interface GenerationSubmission { requestId: string; request: GenerationRequest; clientContext: GenerationContext; providerId?: string; referenceJobId?: string; referenceImage?: GenerationReference; retryOf?: string }
+export interface GenerationSubmission { requestId: string; request: GenerationRequest; clientContext: GenerationContext; providerId?: string; referenceJobId?: string; referenceImage?: GenerationReference; retryOf?: string; creditQuote?: CreditQuote }
 export interface GenerationRecipe extends Omit<GenerationRequest, 'references' | 'mask'> {
   version: 1; model: string; providerId: string; providerName: string; generationMode: string;
   styleId: string; styleName: string; tone: string;

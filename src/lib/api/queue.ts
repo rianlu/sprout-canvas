@@ -5,6 +5,7 @@ import { apiFetch } from './client';
 export type QueueSubmitInput = GenerationSubmission;
 const jsonBody = (input: unknown) => ({ headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input) });
 export function submitQueueJob(input: QueueSubmitInput) { return apiFetch<QueueJob>('/api/jobs', { method: 'POST', ...jsonBody(input) }); }
+export function submitQueueBatch(jobs: QueueSubmitInput[]) { return apiFetch<{ jobs: QueueJob[] }>('/api/jobs/batch', { method: 'POST', ...jsonBody({ jobs }) }); }
 export function listQueueJobs({ cursor = '', requestIds = [], limit = 30 }: { cursor?: string; requestIds?: string[]; limit?: number } = {}) {
   const query = new URLSearchParams({ limit: String(limit) });
   if (cursor) query.set('cursor', cursor);

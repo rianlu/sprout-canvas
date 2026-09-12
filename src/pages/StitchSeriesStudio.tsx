@@ -9,6 +9,9 @@ import { ToastStack } from '../components/shell/QueueDrawer';
 import { SceneEditor } from '../components/series/SceneEditor';
 import { RecordImage } from '../components/gallery/RecordImage';
 import { useSeriesStudio, TEMPLATES, seriesAspects, MIN_BATCH_COUNT, MAX_BATCH_COUNT, type SeriesActions } from '../hooks/useSeriesStudio';
+import { useCredits } from '../lib/credits';
+import { CreditStatus } from '../components/ui/CreditStatus';
+import { CreditCost } from '../components/ui/CreditCost';
 
 export interface SeriesStudioProps extends SeriesActions {
   onEditRecord: (record: ResultRecord) => void;
@@ -20,8 +23,9 @@ export interface SeriesStudioProps extends SeriesActions {
 }
 
 export function SeriesStudio(props: SeriesStudioProps) {
+  const { prices } = useCredits();
   const { onEditRecord, onUseRecipe, onRetry, onCancel, onPrioritize } = props;
-  const { ready, template, setTemplate, brief, setBrief, count, setCount, config, setConfig, busy, submitting, toasts, pushToast, seriesId, seriesResults, allSeriesResults, activeJobs, canContinue, metadata, view, setView, preview, setPreview, shots, shotIds, splitStory, submitBatch, exportSeries, updateTask, removeShot, resetSeries, redrawShot, reference, setReference, uploadReference, editing, setEditing, beginEdit, saveEdit } = useSeriesStudio(props);
+  const { ready, template, setTemplate, brief, setBrief, count, setCount, config, setConfig, busy, submitting, toasts, pushToast, seriesId, seriesResults, allSeriesResults, activeJobs, canContinue, submissionCount, metadata, view, setView, preview, setPreview, shots, shotIds, splitStory, submitBatch, exportSeries, updateTask, removeShot, resetSeries, redrawShot, reference, setReference, uploadReference, editing, setEditing, beginEdit, saveEdit } = useSeriesStudio(props);
   const storyboardRef = useRef<HTMLElement>(null);
   const shotLabel = '分镜矩阵看板 (Storyboard Sequence)';
   const plannedTotal = shots.length;
@@ -297,6 +301,7 @@ export function SeriesStudio(props: SeriesStudioProps) {
                 >
                   <StitchIcon name="replay" size={18} />
                   <span>批量重新绘制</span>
+                  <CreditCost count={plannedTotal} />
                 </button>
                 <button
                   type="button"
@@ -315,7 +320,7 @@ export function SeriesStudio(props: SeriesStudioProps) {
                 >
                   <StitchIcon name={busy ? 'progress_activity' : 'edit_note'} size={20} className={busy ? 'animate-spin' : ''} />
                   <span>{busy ? '正在拆解分镜...' : filledPrompts ? '重新拆解分镜' : '智能拆解分镜'}</span>
-                  <span aria-hidden className="px-1.5 py-0.2 bg-white/20 rounded font-meta-sm text-[10px] whitespace-nowrap">⌘ / Ctrl + Enter</span>
+                  <CreditCost kind="text" />
                 </button>
               </div>
             </div>
@@ -445,11 +450,12 @@ export function SeriesStudio(props: SeriesStudioProps) {
                             <button
                               type="button"
                               disabled={submitting}
-                              className="w-9 h-9 rounded-full bg-surface text-on-surface flex items-center justify-center hover:scale-110 disabled:opacity-50 shadow-sm"
+                              className="h-9 px-2 rounded-full bg-surface text-on-surface flex items-center justify-center gap-1.5 hover:scale-105 disabled:opacity-50 shadow-sm"
                               title="重新绘制本镜"
                               onClick={() => void redrawShot(index)}
                             >
                               <StitchIcon name="replay" size={18} />
+                              <CreditCost />
                             </button>
                             <button
                               type="button"
@@ -512,19 +518,20 @@ export function SeriesStudio(props: SeriesStudioProps) {
                             <button
                               type="button"
                               disabled={!shot.job?.canRetry}
-                              className="mt-2 px-3 py-1 rounded-lg bg-error-container text-on-error-container font-meta-sm text-meta-sm"
+                              className="mt-2 px-3 py-1 rounded-lg bg-error-container text-on-error-container font-meta-sm text-meta-sm inline-flex items-center gap-1.5"
                               onClick={() => {
                                 if (shot.job)
                                   void onRetry(shot.job.id).catch((error) => pushToast('error', error instanceof Error ? error.message : '重试失败'));
                               }}
                             >
-                              重新尝试
+                              重新尝试<CreditCost points={shot.job?.interruptionReason === 'pending-restart' ? shot.job.credit?.points : undefined} unlimited={shot.job?.interruptionReason === 'pending-restart' ? shot.job.credit?.unlimited : undefined} />
                             </button>
                           )}
                         </>
                       )}
                     </div>
                     <div className="p-space-md flex-1 flex flex-col justify-between gap-space-sm">
+                      <CreditStatus credit={shot.job?.credit} pending={shot.job?.settlementPending} />
                       <div>
                         <label
                           className="block font-meta-sm text-meta-sm text-outline mb-1"
@@ -551,11 +558,11 @@ export function SeriesStudio(props: SeriesStudioProps) {
                             </span>
                             <button
                               type="button"
-                              className="text-primary hover:underline font-medium shrink-0"
+                              className="text-primary hover:underline font-medium shrink-0 inline-flex items-center gap-1.5"
                               disabled={busy || submitting}
                               onClick={() => beginEdit(index)}
                             >
-                              调整并重绘
+                              调整并重绘<CreditCost />
                             </button>
                           </>
                         ) : running ? (
@@ -622,12 +629,13 @@ export function SeriesStudio(props: SeriesStudioProps) {
               >
                 <StitchIcon name="spa" size={20} />
                 <span>{submitting ? '提交中...' : canContinue ? '继续提交剩余分镜' : activeJobs ? '图片生成中...' : remainingCount === 0 ? '全部分镜已生成' : `确认并生成 ${remainingCount} 张图片`}</span>
+                {(canContinue || !activeJobs) && submissionCount > 0 && <CreditCost count={submissionCount} />}
               </button>
             </div>
           </section>
         </div>
       </div>
-      {editing && <SceneEditor value={editing} onChange={setEditing} onClose={() => setEditing(null)} onSave={saveEdit} imageCapabilities={props.imageCapabilities} actionLabel={shots[editing.index]?.job?.status === 'pending' ? '更新排队任务' : shots[editing.index]?.record ? '保存并重绘本镜' : '保存本镜设置'} />}
+      {editing && <SceneEditor estimatedPoints={shots[editing.index]?.record && shots[editing.index]?.job?.status !== 'pending' ? prices?.image : 0} value={editing} onChange={setEditing} onClose={() => setEditing(null)} onSave={saveEdit} imageCapabilities={props.imageCapabilities} actionLabel={shots[editing.index]?.job?.status === 'pending' ? '更新排队任务' : shots[editing.index]?.record ? '保存并重绘本镜' : '保存本镜设置'} />}
       {preview && (
         <StitchGalleryViewer
           cards={[{ kind: 'series', seriesId, masterPrompt: brief, records: seriesResults, versions: allSeriesResults, latestAt: Math.max(...seriesResults.map((record) => record.createdAt)) }]}

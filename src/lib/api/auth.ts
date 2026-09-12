@@ -1,6 +1,7 @@
 import { apiFetch } from './client';
+import type { CreditSession } from '../credits';
 
-export interface AuthStatus {
+export interface AuthStatus extends CreditSession {
   required: boolean;
   authenticated: boolean;
   userId: string;
@@ -10,11 +11,11 @@ export function authStatus() {
   return apiFetch<AuthStatus>('/api/auth/status');
 }
 
-export function login(password: string, userId: string) {
-  return apiFetch<{ ok: boolean; required: boolean; userId: string }>('/api/auth/login', {
+export function login(code: string) {
+  return apiFetch<AuthStatus>('/api/auth/login', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ password, userId }),
+    body: JSON.stringify({ code }),
   });
 }
 

@@ -3,9 +3,9 @@ import { readFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { ROOT, readLocalConfig, publicConfig } from './server/config.mjs';
-import { json, setBaseHeaders, logLine, timeoutSignal, upstreamHeaders, stripHtml, readJson } from './server/http.mjs';
+import { json, setBaseHeaders, logLine, initLogging, flushLogs, timeoutSignal, upstreamHeaders, stripHtml, readJson } from './server/http.mjs';
 import { initAuth, sessionFromRequest, handleAuthStatus, handleAuthLogin, handleAuthLogout, requireApiAuth } from './server/auth.mjs';
-import { handleTextGeneration } from './server/text.mjs';
+import { initText, stopText, handleTextGeneration, handleTextResult } from './server/text.mjs';
 import { getTextProviderCircuitState, isTextProviderCircuitOpen } from './server/text-routing.mjs';
 import { createStateStore } from './server/state-store.mjs';
 import { validateGenerationSubmission, toImagesPayload, requestError } from './shared/generation-contract.mjs';
@@ -13,6 +13,9 @@ import * as queue from './server/queue.mjs';
 import { createStyleStore } from './server/style-store.mjs';
 import { createAdminAuth } from './server/admin-auth.mjs';
 import { createStyleRoutes } from './server/style-routes.mjs';
+import { requireSameOrigin } from './server/request-guards.mjs';
+import { createCreditRoutes } from './server/credit-routes.mjs';
+import { createAdminOverviewRoute } from './server/admin-overview.mjs';
 
 let shuttingDown = false;
 const MIME_TYPES = new Map([
@@ -27,12 +30,16 @@ const bootConfig = await readLocalConfig().catch((error) => {
   process.exit(1);
 });
 const state = createStateStore(bootConfig.stateFile);
-globalThis.__LOG_FILE__ = bootConfig.logFile;
+initLogging(bootConfig.logFile);
 const styles = createStyleStore(bootConfig.styleDataDir, { log: logLine });
-const styleRoutes = createStyleRoutes({ store: styles, adminAuth: createAdminAuth(styles, bootConfig.cookieNamespace), readConfig: readLocalConfig, requireUser: requireApiAuth });
+const adminAuth = createAdminAuth(styles, bootConfig.cookieNamespace);
+const styleRoutes = createStyleRoutes({ store: styles, adminAuth, readConfig: readLocalConfig, requireUser: requireApiAuth });
+const creditRoutes = createCreditRoutes({ credits: state.credits, adminAuth, readConfig: readLocalConfig, revokeAccessCode: queue.revokeAccessCode });
+const adminOverviewRoute = createAdminOverviewRoute({ styles, credits: state.credits, adminAuth, readConfig: readLocalConfig });
 initAuth(state, bootConfig.cookieNamespace);
 queue.init({ readLocalConfig, upstreamHeaders, timeoutSignal, stripHtml, logLine });
 queue.initializePersistence(state);
+initText(state);
 
 async function health(req, res, detailed = false) {
   if (shuttingDown) return json(res, 503, { ok: false });
@@ -52,16 +59,23 @@ async function configResponse(req, res) {
   json(res, 200, { ...publicConfig(config), imageChannels, textChannels, imageCapabilities: { customSizes: config.imageProviders.some((provider) => provider.generationMode === 'images' && /^gpt-image-2(?:-|$)/.test(provider.imageModel)), formats: [...new Set(config.imageProviders.flatMap((provider) => provider.capabilities.outputFormats))], exactSize: config.imageProviders.every((provider) => provider.capabilities.exactSize), maxReferences: 4 } });
 }
 
-async function submit(req, res) {
-  const input = validateGenerationSubmission(await readJson(req));
-  const userId = sessionFromRequest(req).userId;
-  if (queue.findSubmission(userId, input.requestId)) return json(res, 202, queue.submitGeneration(input, userId));
-  const config = await readLocalConfig(input.providerId);
-  const payload = Buffer.from(JSON.stringify(toImagesPayload(input)));
-  if (!config.imageProviders.some((provider) => queue.providerSupportsRequest(provider, '/v1/images/generations', 'application/json', payload))) throw requestError('当前通道不支持这些生成参数');
-  const selected = input.providerId ? config : queue.chooseImageProvider(config, '/v1/images/generations', 'application/json', '', payload);
-  if (!queue.providerSupportsRequest(selected, '/v1/images/generations', 'application/json', payload)) throw requestError('当前通道不支持这些生成参数');
-  json(res, 202, queue.submitGeneration(input, userId, selected));
+async function submit(req, res, batch = false) {
+  const body = await readJson(req);
+  if (batch && (!body || !Array.isArray(body.jobs) || !body.jobs.length || body.jobs.length > 32 || Object.keys(body).some((key) => key !== 'jobs'))) throw requestError('批次必须包含 1 到 32 个任务');
+  const inputs = (batch ? body.jobs : [body]).map(validateGenerationSubmission);
+  const session = sessionFromRequest(req);
+  const providers = await Promise.all(inputs.map(async (input) => {
+    state.credits.checkQuote(session, input.creditQuote, !queue.findSubmission(session.userId, input.requestId));
+    if (queue.findSubmission(session.userId, input.requestId)) return undefined;
+    const config = await readLocalConfig(input.providerId);
+    const payload = Buffer.from(JSON.stringify(toImagesPayload(input)));
+    if (!config.imageProviders.some((provider) => queue.providerSupportsRequest(provider, '/v1/images/generations', 'application/json', payload))) throw requestError('当前通道不支持这些生成参数');
+    const selected = input.providerId ? config : queue.chooseImageProvider(config, '/v1/images/generations', 'application/json', '', payload);
+    if (!queue.providerSupportsRequest(selected, '/v1/images/generations', 'application/json', payload)) throw requestError('当前通道不支持这些生成参数');
+    return selected;
+  }));
+  const jobs = queue.submitGenerations(inputs, session.userId, providers, session);
+  json(res, 202, batch ? { jobs } : jobs[0]);
 }
 
 function result(req, res, jobId) {
@@ -120,7 +134,7 @@ const server = createServer((req, res) => {
   void route(req, res).catch((error) => {
     const statusCode = Number(error?.statusCode) || 500;
     if (statusCode >= 500) logLine('ERROR', `HTTP ${req.method} ${(req.url || '').split('?')[0]}: ${error.message}`);
-    json(res, statusCode, { error: statusCode >= 500 ? '服务暂时无法完成请求, 请稍后重试' : error.message });
+    json(res, statusCode, { error: statusCode >= 500 ? '服务暂时无法完成请求, 请稍后重试' : error.message, ...(error.code ? { code: error.code } : {}), ...(error.details || {}) }, error.retryAfterSeconds ? { 'Retry-After': String(error.retryAfterSeconds) } : {});
   });
 });
 
@@ -129,20 +143,28 @@ async function route(req, res) {
   if (url.pathname === '/health' && req.method === 'GET') return await health(req, res);
   if (url.pathname === '/ready' && req.method === 'GET') return await health(req, res, true);
   if (shuttingDown) throw requestError('服务正在重启, 请稍后重试', 503);
+  if (url.pathname.startsWith('/api/') && !['GET', 'HEAD', 'OPTIONS'].includes(req.method)) requireSameOrigin(req);
   if (url.pathname === '/api/auth/status' && req.method === 'GET') return await handleAuthStatus(req, res);
   if (url.pathname === '/api/auth/login' && req.method === 'POST') return await handleAuthLogin(req, res);
   if (url.pathname === '/api/auth/logout' && req.method === 'POST') return await handleAuthLogout(req, res);
   if (await styleRoutes(req, res, url)) return;
+  if (await creditRoutes(req, res, url)) return;
+  if (await adminOverviewRoute(req, res, url)) return;
   if (!url.pathname.startsWith('/api/')) return await serveStatic(req, res, url.pathname);
   if (!(await requireApiAuth(req, res))) return;
-  const userId = sessionFromRequest(req).userId;
+  const session = sessionFromRequest(req);
+  const userId = session.userId;
   if (url.pathname === '/api/config' && req.method === 'GET') return await configResponse(req, res);
-  if (url.pathname === '/api/text' && req.method === 'POST') return await handleTextGeneration(req, res);
+  if (url.pathname === '/api/credits' && req.method === 'GET') return json(res, 200, { credits: state.credits.balance(session.accessCodeId), prices: state.credits.prices() });
+  if (url.pathname === '/api/text' && req.method === 'POST') return await handleTextGeneration(req, res, session);
+  const textResult = url.pathname.match(/^\/api\/text\/([A-Za-z0-9_-]+)$/);
+  if (textResult && req.method === 'GET') return await handleTextResult(req, res, userId, textResult[1]);
   if (url.pathname === '/api/jobs' && req.method === 'POST') return await submit(req, res);
+  if (url.pathname === '/api/jobs/batch' && req.method === 'POST') return await submit(req, res, true);
   if (url.pathname === '/api/jobs/me' && req.method === 'GET') {
     const requestIds = (url.searchParams.get('requests') || '').split(',').filter(Boolean);
     if (requestIds.length > 100 || requestIds.some((id) => !/^[a-zA-Z0-9_-]{1,128}$/.test(id))) throw requestError('请求编号列表无效');
-    return json(res, 200, queue.getJobsForUser(userId, { cursor: url.searchParams.get('cursor') || '', limit: Number(url.searchParams.get('limit') || 30), requestIds }));
+    return json(res, 200, { ...queue.getJobsForUser(userId, { cursor: url.searchParams.get('cursor') || '', limit: Number(url.searchParams.get('limit') || 30), requestIds }), userId, credits: state.credits.balance(session.accessCodeId), prices: state.credits.prices() });
   }
   if (url.pathname === '/api/jobs/archive' && req.method === 'POST') {
     queue.archiveCompleted(userId); return json(res, 200, { ok: true });
@@ -153,13 +175,13 @@ async function route(req, res) {
   if (action === 'result' && req.method === 'GET') return result(req, res, jobId);
   if (action === 'ack' && req.method === 'POST') return json(res, 200, queue.acknowledge(jobId, userId));
   if (action === 'priority' && req.method === 'POST') return json(res, 200, queue.prioritize(jobId, userId));
-  if (action === 'resume' && req.method === 'POST') return json(res, 202, queue.resumeGeneration(jobId, userId, validateGenerationSubmission(await readJson(req))));
+  if (action === 'resume' && req.method === 'POST') return json(res, 202, queue.resumeGeneration(jobId, userId, validateGenerationSubmission(await readJson(req)), session));
   if (!action && req.method === 'PATCH') {
     const input = validateGenerationSubmission(await readJson(req));
     const job = queue.getJobStatus(jobId, userId);
     if (!job) throw requestError('任务不存在', 404);
     const provider = await readLocalConfig(job.providerId);
-    return json(res, 200, queue.updatePendingGeneration(jobId, userId, input, provider));
+    return json(res, 200, queue.updatePendingGeneration(jobId, userId, input, provider, session));
   }
   if (!action && req.method === 'DELETE') {
     const outcome = queue.cancel(jobId, userId);
@@ -188,8 +210,10 @@ async function shutdown(signal) {
   const httpClosed = new Promise((resolve) => server.close(resolve));
   await queue.stopWorker();
   await httpClosed;
+  await stopText();
   state.close();
   styles.close();
+  await flushLogs();
   clearTimeout(deadline);
   process.exit(0);
 }

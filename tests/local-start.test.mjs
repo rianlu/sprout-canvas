@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
 import { mkdtemp, readFile, stat } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -48,9 +49,11 @@ test('the local entry isolates data and credentials without touching deployment 
     const login = await app.api('/api/admin/auth/login', { method: 'POST', body: { password } });
     assert.equal(login.status, 200);
     assert.match(login.headers.get('set-cookie'), /^sprout_admin_local_[a-f0-9]{16}=/);
-    const userCookie = await app.login();
-    assert.match(userCookie, /^img_auth_max_local_[a-f0-9]{16}=/);
     const cookie = login.headers.get('set-cookie').split(';')[0];
+    const created = await app.api('/api/admin/access-codes', { method: 'POST', cookie, body: { requestId: randomUUID(), initialPoints: 0 } });
+    assert.equal(created.status, 201);
+    const userCookie = await app.login('isolated-local', created.data.codes[0].code);
+    assert.match(userCookie, /^img_auth_max_local_[a-f0-9]{16}=/);
     assert.equal((await app.api('/api/admin/styles', { cookie, method: 'POST', body: { prompt: '只属于本机测试的模板', imageDataUrl: PNG_URL } })).status, 201);
     await stop(); await start();
     assert.equal((await readFile(passwordFile, 'utf8')).trim(), password);

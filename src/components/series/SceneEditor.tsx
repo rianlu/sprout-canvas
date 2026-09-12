@@ -3,8 +3,9 @@ import { seriesAspects, type SceneEdit } from '../../hooks/useSeriesStudio';
 import { useFocusTrap } from '../../hooks/useFocusTrap';
 import { StitchIcon } from '../ui/StitchIcon';
 import type { ImageCapabilities } from '../../types/provider';
+import { CreditCost } from '../ui/CreditCost';
 
-export function SceneEditor({ value, onChange, onSave, onClose, actionLabel, imageCapabilities }: { value: SceneEdit; onChange: (value: SceneEdit) => void; onSave: () => Promise<void>; onClose: () => void; actionLabel: string; imageCapabilities?: ImageCapabilities }) {
+export function SceneEditor({ value, onChange, onSave, onClose, actionLabel, imageCapabilities, estimatedPoints = 0 }: { value: SceneEdit; onChange: (value: SceneEdit) => void; onSave: () => Promise<void>; onClose: () => void; actionLabel: string; imageCapabilities?: ImageCapabilities; estimatedPoints?: number }) {
   const ref = useFocusTrap<HTMLDivElement>(true);
   const [busy, setBusy] = useState(false);
   useEffect(() => { const key = (event: KeyboardEvent) => { if (event.key === 'Escape') onClose(); }; window.addEventListener('keydown', key); return () => window.removeEventListener('keydown', key); }, [onClose]);
@@ -17,7 +18,8 @@ export function SceneEditor({ value, onChange, onSave, onClose, actionLabel, ima
         <label>质量<select aria-label="本镜质量" value={value.quality} onChange={(event) => onChange({ ...value, quality: event.target.value as SceneEdit['quality'] })} className="w-full mt-1 p-2 rounded-lg bg-surface-container-low"><option value="low">快速</option><option value="medium">标准</option><option value="high">精细</option><option value="auto">自动</option></select></label>
         <label>格式<select aria-label="本镜格式" value={value.outputFormat} onChange={(event) => onChange({ ...value, outputFormat: event.target.value as SceneEdit['outputFormat'] })} className="w-full mt-1 p-2 rounded-lg bg-surface-container-low">{(imageCapabilities?.formats || ['png', 'jpeg', 'webp']).map((format) => <option key={format} value={format}>{format.toUpperCase()}</option>)}</select></label>
       </div>
-      <button type="button" disabled={busy || !value.prompt.trim()} onClick={() => { setBusy(true); void onSave().finally(() => setBusy(false)); }} className="w-full py-2.5 rounded-xl bg-primary text-on-primary disabled:opacity-50">{busy ? '保存中...' : actionLabel}</button>
+      {estimatedPoints === 0 && <p className="font-meta-sm text-meta-sm text-on-surface-variant">保存设置不额外扣点</p>}
+      <button type="button" disabled={busy || !value.prompt.trim()} onClick={() => { setBusy(true); void onSave().finally(() => setBusy(false)); }} className="w-full py-2.5 rounded-xl bg-primary text-on-primary inline-flex items-center justify-center gap-2 disabled:opacity-50">{busy ? '保存中...' : actionLabel}{estimatedPoints > 0 && <CreditCost points={estimatedPoints} />}</button>
     </div>
   </div>;
 }

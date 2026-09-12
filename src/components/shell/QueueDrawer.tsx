@@ -3,6 +3,8 @@ import { CircleAlert, CircleCheck, Info, LoaderCircle, RefreshCw, X } from '../u
 import { StitchIcon } from '../ui/StitchIcon';
 import { useFocusTrap } from '../../hooks/useFocusTrap';
 import type { QueueJob } from '../../types/queue';
+import { CreditStatus } from '../ui/CreditStatus';
+import { CreditCost } from '../ui/CreditCost';
 
 export interface QueueDrawerProps {
   open: boolean;
@@ -128,6 +130,7 @@ export function QueueDrawer({ open, onClose, jobs, onCancelJob, onRetryJob, onPr
                   <div className="flex-1 min-w-0">
                     <h4 className="font-body-sm text-body-sm font-medium text-on-surface truncate">{title}</h4>
                     <p className="font-meta-sm text-meta-sm text-on-surface-variant truncate">{meta}</p>
+                    <CreditStatus credit={job.credit} pending={job.settlementPending} />
                   </div>
                   {icon === 'running' && <LoaderCircle className="text-primary animate-spin" size={18} aria-hidden />}
                   {icon === 'queued' && <StitchIcon name="schedule" className="text-on-surface-variant" size={18} />}
@@ -155,7 +158,7 @@ export function QueueDrawer({ open, onClose, jobs, onCancelJob, onRetryJob, onPr
                       >
                         置顶
                       </button>}
-                      {job.status === 'unsubmitted' && <button type="button" className="font-meta-sm text-meta-sm text-primary" onClick={() => { void onRetryJob(job.id).catch((cause) => setError(cause.message)); }}>继续提交</button>}
+                      {job.status === 'unsubmitted' && <button type="button" className="inline-flex items-center gap-1.5 font-meta-sm text-meta-sm text-primary" onClick={() => { void onRetryJob(job.id).catch((cause) => setError(cause.message)); }}>继续提交<CreditCost /></button>}
                       <button
                         type="button"
                         className="font-meta-sm text-meta-sm hover:text-error transition-colors"
@@ -182,6 +185,7 @@ export function QueueDrawer({ open, onClose, jobs, onCancelJob, onRetryJob, onPr
                       }}
                     >
                       <RefreshCw size={12} aria-hidden /> {job.interruptionReason === 'pending-restart' ? '恢复排队' : '重新生成'}
+                      <CreditCost points={job.interruptionReason === 'pending-restart' ? job.credit?.points : undefined} unlimited={job.interruptionReason === 'pending-restart' ? job.credit?.unlimited : undefined} />
                     </button>
                   ) : null}
                 </div>

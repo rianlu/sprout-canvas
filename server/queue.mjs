@@ -3,6 +3,8 @@ import { generationRecipe, requestError, toImagesPayload } from '../shared/gener
 import { submissionHash } from './state-store.mjs';
 import { normalizeImageResult } from './image-result.mjs';
 import { imageHash, validateSubmissionImages } from './generation-input.mjs';
+import { creditError } from '../shared/credits-contract.mjs';
+import { randomUUID } from 'node:crypto';
 // Per-user image generation queue with strict single-worker concurrency.
 // Jobs are stored in memory, grouped by userId, served round-robin between users
 // (FIFO within each user). Designed to avoid upstream rate-limit while keeping
@@ -22,7 +24,6 @@ const imageJobs = new Map();        // jobId -> Job  (all known, until TTL)
 const recentImageDurations = [];
 let activeJob = null;
 let lastServedUserId = '';
-let imageJobSeq = 0;
 const DEFAULT_IMAGE_DURATION_MS = 90_000;
 const PROVIDER_FAILURE_THRESHOLD = 3;
 const PROVIDER_CIRCUIT_OPEN_MS = 30 * 60 * 1000;
@@ -35,8 +36,32 @@ const MAX_USER_QUEUED_JOBS = 32;
 const MAX_RETAINED_BYTES = 128 * 1024 * 1024;
 const META_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const cleanupTimers = new Map();
+const persistenceRetries = new Map();
 
-function persist(job) { stateStore?.saveJob(job); }
+function persist(job) {
+  stateStore?.saveJob(job);
+  job.settlementPending = false;
+  const pending = persistenceRetries.get(job.id);
+  if (pending) {
+    clearTimeout(pending.timer); persistenceRetries.delete(job.id); pending.resolve();
+  }
+}
+
+function persistEventually(job) {
+  job.settlementPending = true;
+  let pending = persistenceRetries.get(job.id);
+  if (!pending) {
+    pending = {};
+    pending.promise = new Promise((resolve) => { pending.resolve = resolve; });
+    persistenceRetries.set(job.id, pending);
+  }
+  clearTimeout(pending.timer);
+  pending.timer = setTimeout(() => {
+    try { persist(job); runWorker(); }
+    catch (error) { logLine('ERROR', `任务结算等待存储恢复: ${job.id}`); persistEventually(job); }
+  }, 5000);
+  if (!stopping) pending.timer.unref?.();
+}
 
 function requestBytes(job) {
   if (job.submission) return Buffer.byteLength(JSON.stringify(job.submission));
@@ -84,16 +109,18 @@ function retrySuccessor(job) {
 }
 
 /** Identical request IDs are accepted once, including across process restarts. */
-export function submitGeneration(input, userId, selectedProvider) {
+function prepareGeneration(input, userId, selectedProvider, prepared = new Map()) {
   const hash = submissionHash(input);
   const existing = findSubmission(userId, input.requestId);
   if (existing) {
     if (existing.requestHash !== hash) throw requestError('请求 ID 已用于不同内容, 请创建新的生成任务', 409);
-    return publicJob(existing, userId);
+    return existing;
   }
+  if (stateStore?.credits.byRequest(userId, input.requestId)) throw creditError('此请求已受理且任务历史已过期, 请查看本地作品或明确重新生成', 'REQUEST_ALREADY_ACCEPTED');
   validateSubmissionImages(input);
+  const referenceSource = input.referenceJobId && (imageJobs.get(input.referenceJobId) || findSubmission(userId, input.referenceJobId) || prepared.get(input.referenceJobId));
   if (input.referenceJobId) {
-    const source = imageJobs.get(input.referenceJobId) || findSubmission(userId, input.referenceJobId);
+    const source = referenceSource;
     if (!source || source.userId !== userId) throw requestError('参考任务不存在', 404);
     validateReferenceSnapshot(source, input.referenceImage);
     if (['succeeded', 'expired'].includes(source.status) && !source.result && !input.referenceImage) throw requestError('参考任务的临时图片已释放, 请从本地作品选择参考图', 409);
@@ -101,7 +128,7 @@ export function submitGeneration(input, userId, selectedProvider) {
   if (input.retryOf) {
     const source = imageJobs.get(input.retryOf);
     if (!source || source.userId !== userId) throw requestError('原任务不存在', 404);
-    if (retrySuccessor(source)) throw requestError('此任务已重新提交, 请查看最新任务', 409);
+    if (retrySuccessor(source) || [...prepared.values()].some((candidate) => candidate.retryOf === source.id)) throw requestError('此任务已重新提交, 请查看最新任务', 409);
     if (['running', 'pending', 'succeeded'].includes(source.status)) throw requestError('此任务无需重试', 409);
   }
   assertCapacity(userId, Buffer.byteLength(JSON.stringify(input)));
@@ -111,9 +138,32 @@ export function submitGeneration(input, userId, selectedProvider) {
     autoProviderRouting: !input.providerId, excludeProviderId: input.retryOf ? retryExcludeProviderIds(imageJobs.get(input.retryOf)) : '', clientContext: input.clientContext,
     queuedAt: Date.now(), startedAt: 0, finishedAt: 0, error: '', result: null,
     providerId: selectedProvider.id, providerName: selectedProvider.name,
-    recipe: generationRecipe(input, selectedProvider), referenceJobId: input.referenceJobId ? (imageJobs.get(input.referenceJobId) || findSubmission(userId, input.referenceJobId)).id : '', retryOf: input.retryOf || '',
+    recipe: generationRecipe(input, selectedProvider), referenceJobId: referenceSource ? referenceSource.id : '', retryOf: input.retryOf || '',
   };
-  return enqueue(job);
+  return job;
+}
+
+export function submitGeneration(input, userId, selectedProvider, session) {
+  return submitGenerations([input], userId, [selectedProvider], session)[0];
+}
+
+export function submitGenerations(inputs, userId, providers, session) {
+  if (!Array.isArray(inputs) || !inputs.length || inputs.length > MAX_USER_QUEUED_JOBS || new Set(inputs.map((input) => input.requestId)).size !== inputs.length || new Set(inputs.map((input) => input.clientContext.placeholderId)).size !== inputs.length) throw requestError('批次必须包含 1 到 32 个不同的任务');
+  const prepared = new Map();
+  const jobs = inputs.map((input, index) => {
+    if (session) stateStore.credits.checkQuote(session, input.creditQuote, !findSubmission(userId, input.requestId));
+    const job = prepareGeneration(input, userId, providers[index], prepared);
+    prepared.set(job.id, job); prepared.set(job.requestId, job);
+    return job;
+  });
+  const fresh = jobs.filter((job) => !imageJobs.has(job.id));
+  if (countGlobalQueued() + fresh.length > MAX_QUEUED_JOBS || (pendingByUser.get(userId)?.length || 0) + fresh.length > MAX_USER_QUEUED_JOBS) throw requestError('队列容量不足以接收整个批次, 请等待部分任务完成', 429);
+  if (retainedBytes() + fresh.reduce((total, job) => total + requestBytes(job), 0) > MAX_RETAINED_BYTES) throw requestError('批次参考图片过多, 请等待作品保存后再提交', 429);
+  if (session && fresh.length) stateStore.acceptImageJobs(fresh, session);
+  else if (fresh.length) stateStore?.transaction(() => { for (const job of fresh) persist(job); });
+  for (const job of fresh) enqueue(job, { persisted: Boolean(stateStore), start: false });
+  runWorker();
+  return jobs.map((job) => publicJob(job, userId));
 }
 
 function validateReferenceSnapshot(source, snapshot) {
@@ -121,11 +171,13 @@ function validateReferenceSnapshot(source, snapshot) {
   if (!source?.outputImageHash || snapshot.id !== source.clientContext?.placeholderId || imageHash(snapshot.dataUrl) !== source.outputImageHash) throw requestError('首镜参考图片与原任务结果不一致', 409);
 }
 
-export function resumeGeneration(jobId, userId, input) {
+export function resumeGeneration(jobId, userId, input, session) {
   const job = imageJobs.get(jobId);
   if (!job || job.userId !== userId) throw requestError('任务不存在', 404);
-  if (job.status !== 'interrupted' || job.outcomeUnknown) throw requestError('只有确认未执行的任务可以恢复排队', 409);
+  if (session) stateStore.credits.checkQuote(session, input.creditQuote, false);
   if (submissionHash(input) !== job.requestHash) throw requestError('恢复内容与原始任务不一致', 409);
+  if (['pending', 'running', 'succeeded'].includes(job.status)) return publicJob(job, userId);
+  if (job.status !== 'interrupted' || job.outcomeUnknown) throw requestError('只有确认未执行的任务可以恢复排队', 409);
   validateSubmissionImages(input);
   if (job.referenceJobId) {
     const source = imageJobs.get(job.referenceJobId);
@@ -135,14 +187,21 @@ export function resumeGeneration(jobId, userId, input) {
     if (!['pending', 'running'].includes(source.status) && !source.result && !input.referenceImage) throw requestError('请先在此浏览器保存首镜原图, 再恢复后续分镜', 409);
   }
   assertCapacity(userId, Buffer.byteLength(JSON.stringify(input)));
-  Object.assign(job, { submission: input, status: 'pending', method: 'POST', upstreamPath: '/v1/images/generations', contentType: 'application/json', autoProviderRouting: !input.providerId, queuedAt: Date.now(), startedAt: 0, finishedAt: 0, error: '', interruptionReason: '' });
-  return enqueue(job);
+  const next = { ...job, submission: input, status: 'pending', method: 'POST', upstreamPath: '/v1/images/generations', contentType: 'application/json', autoProviderRouting: !input.providerId, queuedAt: Date.now(), startedAt: 0, finishedAt: 0, error: '', interruptionReason: '', ...(session ? { codeEpoch: session.codeEpoch } : {}) };
+  if (session) stateStore.transaction(() => {
+    if (next.creditId) { stateStore.credits.resume(next, session, input.creditQuote); persist(next); }
+    else stateStore.acceptImageJobs([next], session);
+  });
+  else persist(next);
+  Object.assign(job, next);
+  return enqueue(job, { persisted: Boolean(stateStore) });
 }
 
-export function updatePendingGeneration(jobId, userId, input, provider) {
+export function updatePendingGeneration(jobId, userId, input, provider, session) {
   const job = imageJobs.get(jobId);
   if (!job || job.userId !== userId) throw requestError('任务不存在', 404);
   if (job.status !== 'pending') throw requestError('任务已经开始, 请在完成后重新绘制', 409);
+  if (session) stateStore.credits.checkQuote(session, input.creditQuote, false);
   validateSubmissionImages(input);
   if (input.requestId !== job.requestId || input.clientContext.placeholderId !== job.clientContext.placeholderId || input.referenceJobId !== job.submission?.referenceJobId || input.providerId !== job.submission?.providerId || input.retryOf !== job.submission?.retryOf) throw requestError('编辑不能更换任务身份, 通道或参考链', 409);
   if (input.referenceImage) validateReferenceSnapshot(imageJobs.get(job.referenceJobId), input.referenceImage);
@@ -207,6 +266,10 @@ export function providerHealth(providers) {
 export async function stopWorker() {
   stopping = true;
   if (workerPromise) await workerPromise;
+  for (const pending of persistenceRetries.values()) pending.timer.ref?.();
+  await Promise.all([...persistenceRetries.values()].map((pending) => pending.promise));
+  for (const timer of cleanupTimers.values()) clearTimeout(timer);
+  cleanupTimers.clear();
 }
 
 export function init(deps) {
@@ -222,19 +285,18 @@ export function init(deps) {
 }
 
 export function nextJobId() {
-  imageJobSeq += 1;
-  return `img_${Date.now()}_${imageJobSeq}`;
+  return `img_${randomUUID()}`;
 }
 
-export function enqueue(job) {
-  persist(job);
+export function enqueue(job, { persisted = false, start = true } = {}) {
+  if (!persisted) persist(job);
   clearTimeout(cleanupTimers.get(job.id));
   cleanupTimers.delete(job.id);
   imageJobs.set(job.id, job);
   if (!pendingByUser.has(job.userId)) pendingByUser.set(job.userId, []);
   pendingByUser.get(job.userId).push(job);
   logLine('INFO', `[image-job] queued ${job.id} user=${job.userId} provider=${job.providerName || job.providerId || 'auto'} path=${job.upstreamPath}`);
-  runWorker();
+  if (start) runWorker();
   return publicJob(job, job.userId);
 }
 
@@ -269,18 +331,14 @@ export function cancel(jobId, viewerUserId) {
   const job = imageJobs.get(jobId);
   if (!job || job.userId !== viewerUserId) return { ok: false, status: 404, error: '任务不存在或已过期' };
   if (job.status === 'pending') {
+    const next = { ...job, status: 'canceled', finishedAt: Date.now(), error: '已取消, 占用灵感点已释放', submission: null, body: null, originalBody: null };
+    persist(next);
     const queue = pendingByUser.get(job.userId);
     if (queue) {
       const idx = queue.indexOf(job);
       if (idx >= 0) queue.splice(idx, 1);
     }
-    job.status = 'canceled';
-    job.finishedAt = Date.now();
-    job.error = '已被用户取消';
-    job.submission = null;
-    job.body = null;
-    job.originalBody = null;
-    persist(job);
+    Object.assign(job, next);
     cleanupJobLater(job.id);
     releaseClaimedResults();
     logLine('INFO', `[image-job] canceled ${job.id} user=${viewerUserId}`);
@@ -290,6 +348,20 @@ export function cancel(jobId, viewerUserId) {
     return { ok: false, status: 409, error: '任务正在生成, 暂不支持取消' };
   }
   return { ok: false, status: 400, error: `任务已${terminalLabel(job.status)}` };
+}
+
+export function revokeAccessCode(accessCodeId) {
+  for (const job of imageJobs.values()) {
+    if (job.accessCodeId !== accessCodeId) continue;
+    // Replaying an earlier administrative request must not cancel work from a newer login.
+    try { stateStore.credits.authorized({ accessCodeId, codeEpoch: job.codeEpoch }); continue; }
+    catch { /* Only jobs whose authorization was revoked need cancellation. */ }
+    if (job.status === 'pending') cancel(job.id, job.userId);
+    else if (job.status === 'interrupted' && !job.outcomeUnknown) {
+      const next = { ...job, status: 'canceled', error: '访问码已停用或重置, 未执行任务已取消', finishedAt: Date.now() };
+      persist(next); Object.assign(job, next);
+    }
+  }
 }
 
 export function getJobsForUser(userId, { cursor = '', limit = 30, requestIds = [] } = {}) {
@@ -359,6 +431,8 @@ function publicJob(job, viewerUserId) {
   return {
     id: job.id,
     requestId: job.requestId || '',
+    credit: job.creditId ? stateStore?.credits.publicCharge(job.creditId) : null,
+    settlementPending: Boolean(job.settlementPending),
     status: job.status,
     error: job.error || '',
     providerId: job.providerId || '',
@@ -410,16 +484,29 @@ function cleanupJobLater(jobId) {
       if (job.status === 'succeeded' && !job.acknowledgedAt) {
         job.status = 'expired';
         job.error = '临时结果已过期, 请检查本地展馆. 服务器不保存图片.';
-        persist(job);
+        try { persist(job); }
+        catch { persistEventually(job); logLine('ERROR', `临时图片过期状态等待存储恢复: ${job.id}`); }
       }
     } else { cleanupJobLater(jobId); return; }
     runWorker();
-    const removal = setTimeout(() => { imageJobs.delete(jobId); stateStore?.deleteJob(jobId); cleanupTimers.delete(jobId); }, Math.max(1000, META_TTL_MS - (Date.now() - (job.finishedAt || job.queuedAt))));
-    removal.unref?.();
-    cleanupTimers.set(jobId, removal);
+    removeJobLater(jobId, Math.max(1000, META_TTL_MS - (Date.now() - (job.finishedAt || job.queuedAt))));
   }, Math.max(1000, JOB_TTL_MS - (Date.now() - (job.finishedAt || job.queuedAt))));
   timer.unref?.();
   cleanupTimers.set(jobId, timer);
+}
+
+function removeJobLater(jobId, delay) {
+  const timer = setTimeout(() => {
+    if (persistenceRetries.has(jobId)) { removeJobLater(jobId, 5000); return; }
+    try {
+      stateStore?.deleteJob(jobId);
+      imageJobs.delete(jobId); cleanupTimers.delete(jobId);
+    } catch {
+      logLine('ERROR', `任务历史清理等待存储恢复: ${jobId}`);
+      removeJobLater(jobId, 5000);
+    }
+  }, delay);
+  timer.unref?.(); cleanupTimers.set(jobId, timer);
 }
 
 function pickNextJob() {
@@ -449,7 +536,7 @@ function runWorker() {
   job.startedAt = Date.now();
   try { persist(job); } catch (error) {
     job.status = 'interrupted'; job.interruptionReason = 'pending-restart'; job.outcomeUnknown = false; job.error = '任务状态无法保存, 尚未调用上游'; job.finishedAt = Date.now();
-    activeJob = null; logLine('ERROR', `任务存储失败: ${error.message}`); return;
+    activeJob = null; persistEventually(job); cleanupJobLater(job.id); logLine('ERROR', `任务存储失败: ${error.message}`); return;
   }
   workerPromise = processImageJob(job).finally(() => {
     activeJob = null;
@@ -460,6 +547,7 @@ function runWorker() {
 }
 
 async function processImageJob(job) {
+  let outcomeUnknown = false;
   try {
     if (job.referenceJobId) {
       const source = imageJobs.get(job.referenceJobId);
@@ -484,14 +572,17 @@ async function processImageJob(job) {
       markAttemptedProvider(job, provider.id);
       const config = await readLocalConfig(provider.id);
       lastConfig = config;
+      if (job.creditId) stateStore.credits.authorized({ accessCodeId: job.accessCodeId, codeEpoch: job.codeEpoch });
       logLine('INFO', `[image-job] start ${job.id} user=${job.userId} provider=${config.name} mode=${config.generationMode} path=${job.upstreamPath}${index ? ' fallback' : ''}`);
       try {
+        outcomeUnknown = true;
         jobResult = await normalizeImageResult(await executeImageJobWithProvider(job, config));
       } catch (error) {
         const message = `上游请求异常: ${formatThrownError(error)}`;
         jobResult = failedImageJobResult(502, message);
-        jobResult.outcomeUnknown = true;
+        jobResult.outcomeUnknown = !error.definiteFailure;
       }
+      outcomeUnknown = Boolean(jobResult.ok || jobResult.outcomeUnknown);
       if (jobResult.ok) {
         const first = JSON.parse(jobResult.body.toString('utf8')).data[0];
         job.outputImageHash = imageHash(`data:${first.mime_type};base64,${first.b64_json}`);
@@ -519,6 +610,7 @@ async function processImageJob(job) {
     logLine('ERROR', `[image-job] crashed ${job.id} user=${job.userId} provider=${job.providerName || job.providerId} error=${error.message || error}`);
     job.finishedAt = Date.now();
     job.status = 'failed';
+    job.outcomeUnknown = outcomeUnknown;
     job.error = error.message || String(error);
     job.result = {
       status: 502,
@@ -526,10 +618,11 @@ async function processImageJob(job) {
       contentType: 'application/json; charset=utf-8',
       cacheControl: '',
       body: Buffer.from(JSON.stringify({ error: job.error })),
+      ok: false, outcomeUnknown,
     };
   } finally {
     if (job.status === 'succeeded') { job.submission = null; job.body = null; job.originalBody = null; }
-    try { persist(job); } catch (error) { logLine('ERROR', `任务状态保存失败: ${error.message}`); }
+    try { persist(job); } catch (error) { persistEventually(job); logLine('ERROR', `任务状态保存失败: ${error.message}`); }
     cleanupJobLater(job.id);
   }
 }

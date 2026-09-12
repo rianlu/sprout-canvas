@@ -1,4 +1,4 @@
-import { useMemo, useRef } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import {
   Brush,
   CircleCheck,
@@ -24,6 +24,11 @@ import { imageFileExtension } from '../../lib/image/format';
 import { RecordImage } from '../gallery/RecordImage';
 import type { ImageCapabilities } from '../../types/provider';
 import { MAX_PROMPT_LENGTH } from '../../../shared/generation-contract.mjs';
+import { CreditStatus } from '../ui/CreditStatus';
+import { CreditCost } from '../ui/CreditCost';
+import type { CreditCharge } from '../../../shared/credits-contract.mjs';
+import type { PromptHistory } from '../../lib/prompt-history';
+import { PromptActivityBorder } from '../ui/PromptActivityBorder';
 
 /* ============ 单图创作 · 控制轨 (照搬 Stitch 单图稿 LEFT CONTROL PANEL, 类名原样) ============ */
 
@@ -34,6 +39,11 @@ export interface StitchStudioRailProps {
   onPromptChange: (value: string) => void;
   onPolish: () => void;
   polishing: boolean;
+  promptHistory: PromptHistory | null;
+  onTogglePolish: () => void;
+  canAddReference: boolean;
+  imageBusy: boolean;
+  onAddRef: (file: File) => void;
   pinnedStyleName: string | null;
   onUnpinStyle: () => void;
   refImage: { name: string; dataUrl: string } | null;
@@ -167,12 +177,18 @@ export function StitchStudioRail(props: StitchStudioRailProps) {
     submitting,
   } = props;
   const fileRef = useRef<HTMLInputElement>(null);
+  const [dragging, setDragging] = useState(false);
   const isEdit = config.mode === 'edit';
   const outputFormats = props.imageCapabilities?.formats ?? [];
   const sourceRecipe = props.sourceRecord?.recipe;
 
   return (
-    <section className="w-full lg:w-[440px] shrink-0 bg-surface-container-lowest/80 backdrop-blur-xl rounded-xl p-space-lg shadow-[0_12px_36px_rgba(85,95,75,0.06)] flex flex-col gap-space-lg sticky top-20 z-20">
+    <section className="w-full lg:w-[440px] shrink-0 bg-surface-container-lowest/80 backdrop-blur-xl rounded-xl p-space-lg shadow-[0_12px_36px_rgba(85,95,75,0.06)] flex flex-col gap-space-lg" onPaste={(event) => {
+      const image = Array.from(event.clipboardData.items).find((item) => item.kind === 'file' && item.type.startsWith('image/'))?.getAsFile();
+      if (!image) return;
+      event.preventDefault();
+      if (props.canAddReference) props.onAddRef(image);
+    }}>
       {/* 灵感提示词 */}
       <div className="flex flex-col gap-space-xs">
         <div className="flex flex-wrap items-center justify-between gap-2">
@@ -190,23 +206,26 @@ export function StitchStudioRail(props: StitchStudioRailProps) {
               <X size={12} aria-hidden />
             </button>
           )}
-          <button type="button" className="font-meta-sm text-meta-sm text-on-surface-variant hover:text-primary disabled:opacity-50" title="清空文案, 参考图和蒙版, 保留常用生成设置" disabled={submitting || polishing} onClick={props.onNewCreation}>新建创作</button>
+          <button type="button" className="font-meta-sm text-meta-sm text-on-surface-variant hover:text-primary disabled:opacity-50" title="清空文案, 参考图和蒙版, 保留常用生成设置" disabled={submitting || polishing || props.imageBusy} onClick={props.onNewCreation}>新建创作</button>
         </div>
-        <div className="relative bg-surface-container-low rounded-xl p-space-md shadow-sm transition-all focus-within:shadow-[0_0_0_2px_#597445]">
+        <div className="studio-prompt-field bg-surface-container-low p-space-md shadow-sm" data-polishing={polishing} aria-busy={polishing}>
+          {polishing && <PromptActivityBorder />}
           <textarea
-            className="w-full bg-transparent border-0 outline-none resize-none font-body-md text-body-md text-on-surface placeholder:text-outline placeholder:italic leading-relaxed"
+            className="studio-prompt-input w-full bg-transparent border-0 outline-none resize-none font-body-md text-body-md text-on-surface placeholder:text-outline placeholder:italic leading-relaxed"
             maxLength={MAX_PROMPT_LENGTH}
             aria-label={isEdit ? '局部修改要求' : '画面提示词'}
             placeholder={isEdit ? '描述涂抹区域需要怎样修改, 例如: 把衣服改成红色, 保持人物姿势和背景.' : '描述清晨第一缕阳光穿透温室玻璃，照亮案头破土新芽的轻柔笔触，苔藓与湿润泥土的水彩质感...'}
             rows={4}
             value={prompt}
+            readOnly={polishing}
             onChange={(event) => onPromptChange(event.target.value)}
           />
-          <div className="flex items-center justify-between pt-space-xs mt-space-xs text-on-surface-variant font-meta-sm text-meta-sm">
-            <div className="flex items-center gap-space-sm">
+          <div className="flex flex-wrap items-center justify-between gap-2 pt-space-xs mt-space-xs text-on-surface-variant font-meta-sm text-meta-sm">
+            <div className="flex flex-wrap items-center gap-x-space-sm gap-y-2">
               <button
                 type="button"
-                className="flex items-center gap-1 hover:text-error transition-colors"
+                className="flex items-center gap-1 hover:text-error transition-colors disabled:opacity-50"
+                disabled={polishing}
                 onClick={() => onPromptChange('')}
               >
                 <Eraser size={14} aria-hidden />
@@ -216,35 +235,52 @@ export function StitchStudioRail(props: StitchStudioRailProps) {
                 type="button"
                 className="flex items-center gap-1 hover:text-primary transition-colors disabled:opacity-50"
                 onClick={onPolish}
-                disabled={polishing}
+                disabled={polishing || submitting}
               >
                 <Wand2 size={14} aria-hidden />
                 <span>{polishing ? '润色中...' : '润色扩写'}</span>
+                <CreditCost kind="text" />
+              </button>}
+              {!isEdit && props.promptHistory && <button type="button" className="flex items-center gap-1 hover:text-primary transition-colors disabled:opacity-50" disabled={polishing || submitting} onClick={props.onTogglePolish} title={props.promptHistory.restored ? '恢复撤销前的内容, 包括手动修改, 不消耗灵感点' : '还原本次润色前的原文, 当前修改可再次恢复'}>
+                <Undo2 size={14} aria-hidden className={props.promptHistory.restored ? '-scale-x-100' : ''} />
+                <span>{props.promptHistory.restored ? '恢复润色' : '撤销润色'}</span>
               </button>}
             </div>
             <span className="text-outline">{prompt.length} / {MAX_PROMPT_LENGTH}</span>
           </div>
         </div>
+        <span role="status" className="sr-only">{polishing ? '正在润色, 完成后可修改或撤销' : ''}</span>
       </div>
 
       {!isEdit && <button type="button" onClick={props.onOpenStyles} className="flex items-center justify-between w-full p-3 rounded-xl border border-outline-variant/30 bg-surface-container-low hover:bg-surface-container text-primary font-body-sm text-body-sm"><span className="flex items-center gap-2"><StitchIcon name="palette" size={18} />从风格库挑选提示词模板</span><StitchIcon name="north_east" size={16} /></button>}
 
       {/* 基底垫图与局部重绘 */}
-      <div className="bg-surface-container-low rounded-xl p-space-md flex flex-col gap-space-sm">
+      <div aria-label="参考图片" className={`studio-reference-area bg-surface-container-low rounded-xl p-space-md flex flex-col gap-space-sm ${dragging && props.canAddReference ? 'outline outline-2 outline-primary' : ''}`} onDragOver={(event) => {
+        if (!event.dataTransfer.types.includes('Files')) return;
+        event.preventDefault(); event.dataTransfer.dropEffect = props.canAddReference ? 'copy' : 'none';
+        if (props.canAddReference) setDragging(true);
+      }} onDragLeave={(event) => {
+        if (!(event.relatedTarget instanceof Node) || !event.currentTarget.contains(event.relatedTarget)) setDragging(false);
+      }} onDrop={(event) => {
+        if (!event.dataTransfer.types.includes('Files')) return;
+        event.preventDefault(); setDragging(false);
+        const image = Array.from(event.dataTransfer.files).find((file) => file.type.startsWith('image/'));
+        if (image && props.canAddReference) props.onAddRef(image);
+      }}>
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-space-xs">
             <Leaf className="text-primary" size={18} aria-hidden />
             <span className="font-body-md text-body-md font-medium text-on-surface">{isEdit ? '局部重绘原图' : '基底垫图与局部重绘'}</span>
           </div>
           {refImage && (
-            <div className="flex items-center gap-2"><span className="px-2 py-0.5 rounded-full bg-primary-fixed text-on-primary-fixed font-meta-sm text-meta-sm">1 张已载入</span><button type="button" aria-label="移除参考图" title="移除参考图和蒙版" onClick={props.onRemoveRef} className="text-outline hover:text-error"><X size={15} /></button></div>
+            <div className="flex items-center gap-2"><span className="px-2 py-0.5 rounded-full bg-primary-fixed text-on-primary-fixed font-meta-sm text-meta-sm">1 张已载入</span><button type="button" aria-label="移除参考图" title="移除参考图和蒙版" disabled={props.imageBusy} onClick={props.onRemoveRef} className="text-outline hover:text-error disabled:opacity-50"><X size={15} /></button></div>
           )}
         </div>
         {refImage ? (
           <>
             <div className="grid grid-cols-2 gap-1 rounded-lg bg-surface-container p-1" role="group" aria-label="图片使用方式">
               <button type="button" aria-pressed={!isEdit} title="切换后清除蒙版, 可调整画幅与风格" onClick={props.onSwitchToReference} className={`rounded-md px-2 py-1.5 font-meta-sm text-meta-sm ${!isEdit ? 'bg-surface-container-lowest text-primary shadow-sm' : 'text-on-surface-variant'}`}>参考图生成</button>
-              <button type="button" aria-pressed={isEdit} onClick={onOpenMaskEditor} className={`rounded-md px-2 py-1.5 font-meta-sm text-meta-sm ${isEdit ? 'bg-surface-container-lowest text-primary shadow-sm' : 'text-on-surface-variant'}`}>局部重绘</button>
+              <button type="button" aria-pressed={isEdit} disabled={polishing || props.imageBusy} onClick={onOpenMaskEditor} className={`rounded-md px-2 py-1.5 font-meta-sm text-meta-sm disabled:opacity-50 ${isEdit ? 'bg-surface-container-lowest text-primary shadow-sm' : 'text-on-surface-variant'}`}>局部重绘</button>
             </div>
             <p className="font-meta-sm text-meta-sm text-on-surface-variant">{isEdit ? '涂抹指定区域, 沿用原图参数和画风.' : '参考原图重新创作, 可自由调整画幅与风格.'}</p>
             <div className="flex items-center gap-space-md p-space-xs bg-surface-container-lowest rounded-lg shadow-sm">
@@ -264,6 +300,7 @@ export function StitchStudioRail(props: StitchStudioRailProps) {
                     type="button"
                     className="px-2 py-0.5 rounded bg-surface-container text-on-surface font-meta-sm text-meta-sm hover:bg-surface-container-high transition-colors"
                     title={isEdit ? '更换图片后重新选择编辑方式' : undefined}
+                    disabled={props.imageBusy}
                     onClick={() => fileRef.current?.click()}
                   >
                     更换图片
@@ -272,6 +309,7 @@ export function StitchStudioRail(props: StitchStudioRailProps) {
                     type="button"
                     className="px-2 py-0.5 rounded bg-secondary-container text-on-secondary-container font-meta-sm text-meta-sm hover:bg-secondary-fixed transition-colors flex items-center gap-1"
                     onClick={onOpenMaskEditor}
+                    disabled={polishing || props.imageBusy}
                   >
                     <Brush size={13} aria-hidden />
                     <span>局部涂抹修改</span>
@@ -301,12 +339,13 @@ export function StitchStudioRail(props: StitchStudioRailProps) {
           /* 空态: 拖拽上传区 (稿内隐藏状态; 结构照常用) */
           <button
             type="button"
+            disabled={props.imageBusy}
             className="w-full flex flex-col items-center justify-center gap-1 py-space-md rounded-lg border-2 border-dashed border-outline-variant/50 hover:border-primary/50 hover:bg-surface-container-lowest/50 transition-colors text-on-surface-variant"
             onClick={() => fileRef.current?.click()}
           >
             <Plus size={20} aria-hidden className="text-primary" />
-            <span className="font-body-sm text-body-sm">上传参考图</span>
-            <span className="font-meta-sm text-[10px] text-outline">支持图生图与局部重绘</span>
+            <span className="font-body-sm text-body-sm">{props.imageBusy ? '正在载入图片...' : '上传参考图'}</span>
+            <span className="font-meta-sm text-[10px] text-outline">支持拖拽或粘贴图片 · ⌘/Ctrl + V</span>
           </button>
         )}
         <input
@@ -314,6 +353,7 @@ export function StitchStudioRail(props: StitchStudioRailProps) {
           type="file"
           accept="image/png,image/jpeg,image/webp"
           className="hidden"
+          disabled={props.imageBusy}
           onChange={(event) => {
             const file = event.target.files?.[0];
             if (file) onReplaceRef(file);
@@ -475,23 +515,21 @@ export function StitchStudioRail(props: StitchStudioRailProps) {
               </div>
             ) : <span role="status" className="font-meta-sm text-meta-sm text-outline">正在读取可用格式...</span>}
           </div>
-          {outputFormats.length === 1 && <p className="font-meta-sm text-meta-sm text-on-surface-variant">当前通道仅支持 {outputFormats[0].toUpperCase()}</p>}
+          {outputFormats.length === 1 && <p className="font-meta-sm text-meta-sm text-on-surface-variant">当前支持 {outputFormats[0].toUpperCase()} 格式</p>}
         </div>
       </div>}
 
-      {/* 提交按钮 (sticky) */}
+      {/* 提交按钮 */}
       <div className="pt-space-xs mt-auto">
         <button
           type="button"
           className="w-full py-3.5 px-space-lg rounded-xl bg-primary hover:bg-primary-container text-on-primary font-headline-sm text-headline-sm flex items-center justify-center gap-space-sm shadow-[0_4px_16px_rgba(65,91,47,0.28)] hover:-translate-y-0.5 transition-all disabled:opacity-60 disabled:hover:translate-y-0"
-          disabled={submitting || !props.imageCapabilities || prompt.trim().length === 0 || (isEdit && maskStrokes === 0)}
+          disabled={submitting || polishing || props.imageBusy || !props.imageCapabilities || prompt.trim().length === 0 || (isEdit && maskStrokes === 0)}
           onClick={onSubmit}
         >
           <Leaf size={20} aria-hidden />
           <span>{submitting ? '入队中...' : isEdit ? '开始局部重绘' : '开始绘制'}</span>
-          <span className="ml-1 px-2 py-0.5 rounded-md bg-black/20 text-[11px] font-meta-sm text-white/90">
-            ⌘ + Enter
-          </span>
+          <CreditCost count={isEdit ? 1 : config.imageCount} />
         </button>
         {isEdit && maskStrokes === 0 && <p role="status" className="mt-2 font-meta-sm text-meta-sm text-on-surface-variant">请先涂抹并保存需要修改的区域.</p>}
       </div>
@@ -499,14 +537,13 @@ export function StitchStudioRail(props: StitchStudioRailProps) {
   );
 }
 
-/* ============ 单图创作 · 画板瀑布流 (照搬 Stitch RIGHT CANVAS STREAM, 类名原样) ============ */
+/* ============ 单图创作 · 最近创作 ============ */
+
+export type CanvasEntry = { key: string } & ({ kind: 'job'; job: QueueJobView } | { kind: 'result'; record: ResultRecord });
 
 export interface StitchCanvasStreamProps {
-  jobs: QueueJobView[];
-  results: ResultRecord[];
-  editingSceneId?: string;
-  filter: 'all' | 'today';
-  onFilterChange: (f: 'all' | 'today') => void;
+  entries: CanvasEntry[];
+  onOpenGallery: () => void;
   onDownload: (record: ResultRecord) => void;
   onUseAsRef: (record: ResultRecord) => void;
   onOpenMask: (record: ResultRecord) => void;
@@ -518,8 +555,12 @@ export interface StitchCanvasStreamProps {
 }
 
 export interface QueueJobView {
+  recoveryPoints?: number;
+  recoveryUnlimited?: boolean;
+  credit?: CreditCharge | null;
+  settlementPending?: boolean;
   id: string;
-  status: 'queued' | 'running' | 'failed';
+  status: 'queued' | 'running' | 'saving' | 'failed';
   prompt: string;
   elapsedMs: number;
   position: number;
@@ -539,10 +580,8 @@ function relativeTime(timestamp: number): string {
 
 export function StitchCanvasStream(props: StitchCanvasStreamProps) {
   const {
-    jobs,
-    results,
-    filter,
-    onFilterChange,
+    entries,
+    onOpenGallery,
     onDownload,
     onUseAsRef,
     onOpenMask,
@@ -551,82 +590,22 @@ export function StitchCanvasStream(props: StitchCanvasStreamProps) {
     onRetryJob,
     onOpenSplit,
   } = props;
+  const results = useMemo(() => entries.flatMap((entry) => entry.kind === 'result' ? [entry.record] : []), [entries]);
   const metadata = useImageMetadata(results);
-  const singleResults = useMemo(() => results.filter((record) => record.kind === 'single' || (props.editingSceneId && record.sceneId === props.editingSceneId)), [results, props.editingSceneId]);
-  const filteredJobs = useMemo(() => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    return filter === 'today' ? jobs.filter((job) => job.createdAt >= today.getTime()) : jobs;
-  }, [jobs, filter]);
-  const order = useMemo(() => {
-    const entries = [
-      ...jobs.map((job) => ({
-        key: `job-${job.id}`,
-        priority: job.status === 'running' || job.status === 'queued' ? 1 : 0,
-        time: job.createdAt,
-      })),
-      ...singleResults.map((record) => ({ key: `result-${record.id}`, priority: 0, time: record.createdAt })),
-    ];
-    return new Map(
-      entries.sort((a, b) => b.priority - a.priority || b.time - a.time).map((entry, index) => [entry.key, index]),
-    );
-  }, [jobs, singleResults]);
-  const filterCounts = useMemo(() => {
-    const todayStart = new Date();
-    todayStart.setHours(0, 0, 0, 0);
-    return {
-      all: singleResults.length + jobs.length,
-      today: singleResults.filter((r) => r.createdAt >= todayStart.getTime()).length + jobs.length,
-    };
-  }, [singleResults, jobs]);
-
-  const filteredResults = useMemo(() => {
-    if (filter === 'today') {
-      const todayStart = new Date();
-      todayStart.setHours(0, 0, 0, 0);
-      return singleResults.filter((r) => r.createdAt >= todayStart.getTime());
-    }
-    return singleResults;
-  }, [singleResults, filter]);
 
   return (
-    <div className="flex-1 w-full min-w-0 flex flex-col gap-space-lg">
-      {/* 头部 + 过滤 */}
-      <div className="flex flex-col 2xl:flex-row 2xl:items-center justify-between gap-space-sm pb-space-xs">
-        <div className="flex flex-wrap items-baseline gap-space-sm">
+    <section aria-label="创作画卷" className="studio-canvas flex-1 w-full min-w-0 flex flex-col gap-space-lg">
+      <div className="flex flex-wrap items-center justify-between gap-space-sm pb-space-xs">
+        <div>
           <h1 className="font-headline-lg text-headline-lg text-on-surface tracking-tight">创作画卷</h1>
-          <span className="font-meta-sm text-meta-sm text-on-surface-variant">作品仅保存在此浏览器</span>
+          <p className="mt-1 font-meta-sm text-meta-sm text-on-surface-variant">最近创作, 最多显示 4 个记录</p>
         </div>
-        <div className="flex items-center gap-1.5 p-1 bg-surface-container-low rounded-xl self-start">
-          <button
-            type="button"
-            className={
-              filter === 'all'
-                ? 'px-3 py-1 rounded-lg bg-surface-container-lowest shadow-sm text-on-surface font-body-sm text-body-sm font-medium'
-                : 'px-3 py-1 rounded-lg text-on-surface-variant hover:text-on-surface transition-colors font-body-sm text-body-sm'
-            }
-            onClick={() => onFilterChange('all')}
-          >
-            全部画稿 ({filterCounts.all})
-          </button>
-          <button
-            type="button"
-            className={
-              filter === 'today'
-                ? 'px-3 py-1 rounded-lg bg-surface-container-lowest shadow-sm text-on-surface font-body-sm text-body-sm font-medium'
-                : 'px-3 py-1 rounded-lg text-on-surface-variant hover:text-on-surface transition-colors font-body-sm text-body-sm'
-            }
-            onClick={() => onFilterChange('today')}
-          >
-            今日作品
-          </button>
-
-        </div>
+        <button type="button" onClick={onOpenGallery} className="flex items-center gap-2 rounded-xl px-3 py-2 bg-surface-container-low text-primary font-body-sm text-body-sm hover:bg-surface-container transition-colors">前往展馆<StitchIcon name="arrow_forward" size={17} /></button>
       </div>
 
       {/* 卡片流 */}
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-space-lg">
-        {filteredJobs.length === 0 && filteredResults.length === 0 && (
+      <div className="studio-feed grid grid-cols-1 xl:grid-cols-2 gap-space-lg">
+        {entries.length === 0 && (
           <div className="col-span-full rounded-xl bg-surface-container-lowest p-space-md shadow-[0_8px_24px_rgba(85,95,75,0.06)]">
             <div className="min-h-[440px] rounded-lg bg-surface-container-low flex flex-col items-center justify-center gap-space-md text-center p-space-xl">
               <div className="w-16 h-16 rounded-full bg-surface-container-lowest shadow-md flex items-center justify-center text-primary">
@@ -640,186 +619,192 @@ export function StitchCanvasStream(props: StitchCanvasStreamProps) {
           </div>
         )}
         {/* 生成中卡片 (呼吸纸纹, 真实时长, 无假百分比) */}
-        {filteredJobs.map((job) => {
-          if (job.status === 'failed') {
+        {entries.map((entry) => {
+          if (entry.kind === 'job') {
+            const job = entry.job;
+            if (job.status === 'failed') {
+              return (
+                <article
+                  key={entry.key}
+                  data-studio-entry={entry.key}
+                  aria-label={`未完成画稿: ${job.prompt}`}
+                  className="relative flex flex-col bg-error-container/40 rounded-xl p-space-md shadow-[0_8px_24px_rgba(85,95,75,0.06)]"
+                >
+                  <div className="w-full aspect-square rounded-lg bg-surface-container-lowest/80 flex flex-col items-center justify-center p-space-xl text-center">
+                    <div className="w-12 h-12 rounded-full bg-error/10 text-error flex items-center justify-center mb-space-sm">
+                      <StitchIcon name="gpp_bad" size={28} />
+                    </div>
+                    <h4 className="font-headline-sm text-headline-sm text-on-error-container mb-1">生成未完成</h4>
+                    <CreditStatus credit={job.credit} pending={job.settlementPending} />
+                    <p className="font-body-sm text-body-sm text-on-surface-variant max-w-sm mb-space-md leading-relaxed">
+                      {job.error || '生成暂时不可用, 请稍后重试'}
+                    </p>
+                    <div className="flex items-center gap-space-sm">
+                      <button
+                        type="button"
+                        className="px-space-md py-2 rounded-lg bg-surface-container text-on-surface font-body-sm text-body-sm hover:bg-surface-container-high transition-colors"
+                        disabled={job.retrying}
+                        onClick={() => props.onEditPrompt(job.prompt)}
+                      >
+                        修改提示词
+                      </button>
+                      <button
+                        type="button"
+                        className="px-space-md py-2 rounded-lg bg-primary text-on-primary font-body-sm text-body-sm hover:bg-primary-container shadow-sm flex items-center gap-1 transition-colors"
+                        disabled={!job.canRetry || job.retrying}
+                        onClick={() => onRetryJob(job.id)}
+                      >
+                        <RefreshCw size={16} aria-hidden />
+                        <span>{job.retrying ? '正在提交...' : '一键重试'}</span>
+                        <CreditCost points={job.recoveryPoints} unlimited={job.recoveryUnlimited} />
+                      </button>
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between pt-space-md text-on-surface-variant font-meta-sm text-meta-sm">
+                    <span className="truncate">任务已停止 · 可重试</span>
+                    <span>{relativeTime(job.createdAt)}</span>
+                  </div>
+                </article>
+              );
+            }
+            const isRunning = job.status === 'running';
+            const isSaving = job.status === 'saving';
             return (
               <article
-                key={job.id}
-                aria-label={`未完成画稿: ${job.prompt}`}
-                style={{ order: order.get(`job-${job.id}`) }}
-                className="relative flex flex-col bg-error-container/40 rounded-xl p-space-md shadow-[0_8px_24px_rgba(85,95,75,0.06)]"
+                key={entry.key}
+                data-studio-entry={entry.key}
+                className="relative flex flex-col bg-surface-container-lowest rounded-xl p-space-md shadow-[0_8px_24px_rgba(85,95,75,0.06)] overflow-hidden"
               >
-                <div className="w-full aspect-square rounded-lg bg-surface-container-lowest/80 flex flex-col items-center justify-center p-space-xl text-center">
-                  <div className="w-12 h-12 rounded-full bg-error/10 text-error flex items-center justify-center mb-space-sm">
-                    <StitchIcon name="gpp_bad" size={28} />
-                  </div>
-                  <h4 className="font-headline-sm text-headline-sm text-on-error-container mb-1">生成未完成</h4>
-                  <p className="font-body-sm text-body-sm text-on-surface-variant max-w-sm mb-space-md leading-relaxed">
-                    {job.error || '上游服务暂时不可用，可换服务商重试'}
-                  </p>
-                  <div className="flex items-center gap-space-sm">
-                    <button
-                      type="button"
-                      className="px-space-md py-2 rounded-lg bg-surface-container text-on-surface font-body-sm text-body-sm hover:bg-surface-container-high transition-colors"
-                      disabled={job.retrying}
-                      onClick={() => props.onEditPrompt(job.prompt)}
-                    >
-                      修改提示词
-                    </button>
-                    <button
-                      type="button"
-                      className="px-space-md py-2 rounded-lg bg-primary text-on-primary font-body-sm text-body-sm hover:bg-primary-container shadow-sm flex items-center gap-1 transition-colors"
-                      disabled={!job.canRetry || job.retrying}
-                      onClick={() => onRetryJob(job.id)}
-                    >
-                      <RefreshCw size={16} aria-hidden />
-                      <span>{job.retrying ? '正在提交...' : '一键重试'}</span>
-                    </button>
+                <div className="relative w-full aspect-square rounded-lg bg-surface-container-low overflow-hidden flex flex-col items-center justify-center p-space-lg">
+                  <div className="absolute inset-0 bg-gradient-to-tr from-surface-container via-surface-container-low to-secondary-fixed-dim/20 animate-pulse" />
+                  <div className="relative z-10 flex flex-col items-center gap-space-md text-center">
+                    <div className="w-16 h-16 rounded-full bg-surface-container-lowest/80 backdrop-blur-md shadow-md flex items-center justify-center text-primary">
+                      <StitchIcon name="filter_vintage" size={32} />
+                    </div>
+                    <div className="space-y-1">
+                      <h3 className="font-headline-sm text-headline-sm text-on-surface">
+                        {isSaving ? '正在保存作品' : isRunning ? '正在渲染' : '排队等候中'}
+                      </h3>
+                      <p className="font-meta-sm text-meta-sm text-on-surface-variant truncate max-w-[240px]">
+                        {job.prompt.slice(0, 40)}
+                      </p>
+                    </div>
+                    <div className="w-48 h-2 bg-surface-container rounded-full overflow-hidden">
+                      <div className={`h-full bg-primary rounded-full ${isRunning ? 'w-1/3 animate-pulse' : 'w-0'}`} />
+                    </div>
+                    <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-surface-bright text-on-surface-variant font-meta-sm text-meta-sm shadow-sm">
+                      <span className={`w-1.5 h-1.5 rounded-full bg-primary ${isRunning ? 'animate-pulse' : ''}`} />
+                      <span>
+                        {isSaving ? '正在保存到本地展馆' : isRunning
+                          ? `已等待 ${Math.max(1, Math.floor(job.elapsedMs / 1000))} 秒`
+                          : `第 ${job.position} 位 · 等待生成`}
+                      </span>
+                    </div>
                   </div>
                 </div>
-                <div className="flex items-center justify-between pt-space-md text-on-surface-variant font-meta-sm text-meta-sm">
-                  <span className="truncate">任务已停止 · 可重试</span>
-                  <span>{relativeTime(job.createdAt)}</span>
+                <div className="flex items-center justify-between pt-space-md">
+                  <span className="font-meta-sm text-meta-sm text-on-surface-variant truncate max-w-[240px]">
+                    {job.prompt.slice(0, 50)}
+                  </span>
+                  <button
+                    type="button"
+                    className="font-meta-sm text-meta-sm text-error hover:underline shrink-0"
+                    disabled={isRunning || isSaving}
+                    title={isSaving ? '正在保存作品, 请稍候' : isRunning ? '生成已开始, 当前无法中断' : '取消排队'}
+                    onClick={() => onCancelJob(job.id)}
+                  >
+                    中断生成
+                  </button>
                 </div>
               </article>
             );
           }
-          const isRunning = job.status === 'running';
+          const record = entry.record;
           return (
             <article
-              key={job.id}
-              style={{ order: order.get(`job-${job.id}`) }}
-              className="relative flex flex-col bg-surface-container-lowest rounded-xl p-space-md shadow-[0_8px_24px_rgba(85,95,75,0.06)] overflow-hidden"
+              key={entry.key}
+              data-studio-entry={entry.key}
+              className="group relative flex flex-col bg-surface-container-lowest rounded-xl p-space-md shadow-[0_8px_24px_rgba(85,95,75,0.06)] hover:shadow-[0_16px_40px_rgba(85,95,75,0.12)] transition-all"
             >
-              <div className="relative w-full aspect-square rounded-lg bg-surface-container-low overflow-hidden flex flex-col items-center justify-center p-space-lg">
-                <div className="absolute inset-0 bg-gradient-to-tr from-surface-container via-surface-container-low to-secondary-fixed-dim/20 animate-pulse" />
-                <div className="relative z-10 flex flex-col items-center gap-space-md text-center">
-                  <div className="w-16 h-16 rounded-full bg-surface-container-lowest/80 backdrop-blur-md shadow-md flex items-center justify-center text-primary">
-                    <StitchIcon name="filter_vintage" size={32} />
-                  </div>
-                  <div className="space-y-1">
-                    <h3 className="font-headline-sm text-headline-sm text-on-surface">
-                      {isRunning ? '正在渲染' : '排队等候中'}
-                    </h3>
-                    <p className="font-meta-sm text-meta-sm text-on-surface-variant truncate max-w-[240px]">
-                      {job.prompt.slice(0, 40)}
-                    </p>
-                  </div>
-                  <div className="w-48 h-2 bg-surface-container rounded-full overflow-hidden">
-                    <div className={`h-full bg-primary rounded-full ${isRunning ? 'w-1/3 animate-pulse' : 'w-0'}`} />
-                  </div>
-                  <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-surface-bright text-on-surface-variant font-meta-sm text-meta-sm shadow-sm">
-                    <span className={`w-1.5 h-1.5 rounded-full bg-primary ${isRunning ? 'animate-pulse' : ''}`} />
-                    <span>
-                      {isRunning
-                        ? `已等待 ${Math.max(1, Math.floor(job.elapsedMs / 1000))} 秒`
-                        : `第 ${job.position} 位 · 通道忙`}
-                    </span>
-                  </div>
+              <div className="relative w-full aspect-square rounded-lg overflow-hidden bg-surface-container">
+                <RecordImage
+                  className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-[1.02]"
+                  record={record}
+                  alt={record.prompt.slice(0, 60)}
+                />
+                {/* 悬浮动作条 */}
+                <div className="absolute top-space-sm right-space-sm flex items-center gap-1 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity duration-200 bg-surface-bright/90 backdrop-blur-md p-1 rounded-lg shadow-md">
+                  <button
+                    type="button"
+                    className="w-8 h-8 rounded-md hover:bg-surface-container flex items-center justify-center text-on-surface transition-colors"
+                    title="下载无损图"
+                    onClick={() => onDownload(record)}
+                  >
+                    <Download size={18} aria-hidden />
+                  </button>
+                  <button
+                    type="button"
+                    className="w-8 h-8 rounded-md hover:bg-surface-container flex items-center justify-center text-on-surface transition-colors"
+                    title="设为新参考"
+                    onClick={() => onUseAsRef(record)}
+                  >
+                    <Plus size={18} aria-hidden />
+                  </button>
+                  <button
+                    type="button"
+                    className="w-8 h-8 rounded-md hover:bg-surface-container flex items-center justify-center text-on-surface transition-colors"
+                    title="局部涂抹修改"
+                    onClick={() => onOpenMask(record)}
+                  >
+                    <Brush size={18} aria-hidden />
+                  </button>
+                  <button
+                    type="button"
+                    className="w-8 h-8 rounded-md hover:bg-surface-container flex items-center justify-center text-on-surface transition-colors"
+                    title="全屏查看"
+                    onClick={() => onFullscreen(record)}
+                  >
+                    <Maximize2 size={18} aria-hidden />
+                  </button>
+                </div>
+                <div className="absolute top-space-sm left-space-sm">
+                  <span className="px-2 py-0.5 rounded bg-surface-bright/90 backdrop-blur-md font-meta-sm text-meta-sm text-primary font-medium shadow-sm">
+                    作品 #{record.id.slice(-3)}
+                  </span>
                 </div>
               </div>
-              <div className="flex items-center justify-between pt-space-md">
-                <span className="font-meta-sm text-meta-sm text-on-surface-variant truncate max-w-[240px]">
-                  {job.prompt.slice(0, 50)}
-                </span>
-                <button
-                  type="button"
-                  className="font-meta-sm text-meta-sm text-error hover:underline shrink-0"
-                  disabled={isRunning}
-                  title={isRunning ? '生成已开始, 当前无法中断' : '取消排队'}
-                  onClick={() => onCancelJob(job.id)}
-                >
-                  中断生成
-                </button>
+              <div className="flex flex-col gap-1.5 pt-space-md">
+                <div className="flex items-center justify-between">
+                  <h3 className="font-headline-sm text-headline-sm text-on-surface truncate">
+                    {record.prompt.slice(0, 24) || '未命名作品'}
+                  </h3>
+                  <span className="font-meta-sm text-meta-sm text-on-surface-variant shrink-0">
+                    {relativeTime(record.createdAt)}
+                  </span>
+                </div>
+                <div className="flex flex-wrap items-center gap-1.5 text-on-surface-variant font-meta-sm text-meta-sm">
+                  <span className="px-2 py-0.5 rounded bg-surface-container-low">
+                    {metadata[record.id]?.size || '读取画幅...'}
+                  </span>
+                  <span className="px-2 py-0.5 rounded bg-surface-container-low">
+                    {record.mode === 'edit' ? '局部重绘' : record.mode === 'reference' ? '参考图生成' : '文生图'}
+                  </span>
+                  <span className="px-2 py-0.5 rounded bg-secondary-container text-on-secondary-container">
+                    {imageFileExtension(record.dataUrl, record.outputFormat).toUpperCase()}
+                  </span>
+                  <details className="relative ml-auto">
+                    <summary className="cursor-pointer rounded px-2 py-0.5 hover:bg-surface-container-low">工具</summary>
+                    <div className="absolute bottom-full right-0 mb-1 rounded-lg bg-surface-bright p-1 shadow-lg z-10">
+                      <button type="button" className="flex items-center gap-2 whitespace-nowrap px-3 py-2 rounded-md hover:bg-surface-container" onClick={(event) => { event.currentTarget.closest('details')?.removeAttribute('open'); onOpenSplit(record); }}><Scissors size={16} aria-hidden />切图拆分</button>
+                    </div>
+                  </details>
+                </div>
               </div>
             </article>
           );
         })}
-
-        {/* 完成卡 (真实数据) */}
-        {filteredResults.map((record) => (
-          <article
-            key={record.id}
-            style={{ order: order.get(`result-${record.id}`) }}
-            className="group relative flex flex-col bg-surface-container-lowest rounded-xl p-space-md shadow-[0_8px_24px_rgba(85,95,75,0.06)] hover:shadow-[0_16px_40px_rgba(85,95,75,0.12)] transition-all"
-          >
-            <div className="relative w-full aspect-square rounded-lg overflow-hidden bg-surface-container">
-              <RecordImage
-                className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-[1.02]"
-                record={record}
-                alt={record.prompt.slice(0, 60)}
-              />
-              {/* 悬浮动作条 */}
-              <div className="absolute top-space-sm right-space-sm flex items-center gap-1 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity duration-200 bg-surface-bright/90 backdrop-blur-md p-1 rounded-lg shadow-md">
-                <button
-                  type="button"
-                  className="w-8 h-8 rounded-md hover:bg-surface-container flex items-center justify-center text-on-surface transition-colors"
-                  title="下载无损图"
-                  onClick={() => onDownload(record)}
-                >
-                  <Download size={18} aria-hidden />
-                </button>
-                <button
-                  type="button"
-                  className="w-8 h-8 rounded-md hover:bg-surface-container flex items-center justify-center text-on-surface transition-colors"
-                  title="设为新参考"
-                  onClick={() => onUseAsRef(record)}
-                >
-                  <Plus size={18} aria-hidden />
-                </button>
-                <button
-                  type="button"
-                  className="w-8 h-8 rounded-md hover:bg-surface-container flex items-center justify-center text-on-surface transition-colors"
-                  title="局部涂抹修改"
-                  onClick={() => onOpenMask(record)}
-                >
-                  <Brush size={18} aria-hidden />
-                </button>
-                <button
-                  type="button"
-                  className="w-8 h-8 rounded-md hover:bg-surface-container flex items-center justify-center text-on-surface transition-colors"
-                  title="全屏查看"
-                  onClick={() => onFullscreen(record)}
-                >
-                  <Maximize2 size={18} aria-hidden />
-                </button>
-              </div>
-              <div className="absolute top-space-sm left-space-sm">
-                <span className="px-2 py-0.5 rounded bg-surface-bright/90 backdrop-blur-md font-meta-sm text-meta-sm text-primary font-medium shadow-sm">
-                  作品 #{record.id.slice(-3)}
-                </span>
-              </div>
-            </div>
-            <div className="flex flex-col gap-1.5 pt-space-md">
-              <div className="flex items-center justify-between">
-                <h3 className="font-headline-sm text-headline-sm text-on-surface truncate">
-                  {record.prompt.slice(0, 24) || '未命名作品'}
-                </h3>
-                <span className="font-meta-sm text-meta-sm text-on-surface-variant shrink-0">
-                  {relativeTime(record.createdAt)}
-                </span>
-              </div>
-              <div className="flex flex-wrap items-center gap-1.5 text-on-surface-variant font-meta-sm text-meta-sm">
-                <span className="px-2 py-0.5 rounded bg-surface-container-low">
-                  {metadata[record.id]?.size || '读取画幅...'}
-                </span>
-                <span className="px-2 py-0.5 rounded bg-surface-container-low">
-                  {record.mode === 'edit' ? '局部重绘' : record.mode === 'reference' ? '参考图生成' : '文生图'}
-                </span>
-                <span className="px-2 py-0.5 rounded bg-secondary-container text-on-secondary-container">
-                  {imageFileExtension(record.dataUrl, record.outputFormat).toUpperCase()}
-                </span>
-                <details className="relative ml-auto">
-                  <summary className="cursor-pointer rounded px-2 py-0.5 hover:bg-surface-container-low">工具</summary>
-                  <div className="absolute bottom-full right-0 mb-1 rounded-lg bg-surface-bright p-1 shadow-lg z-10">
-                    <button type="button" className="flex items-center gap-2 whitespace-nowrap px-3 py-2 rounded-md hover:bg-surface-container" onClick={(event) => { event.currentTarget.closest('details')?.removeAttribute('open'); props.onOpenSplit(record); }}><Scissors size={16} aria-hidden />切图拆分</button>
-                  </div>
-                </details>
-              </div>
-            </div>
-          </article>
-        ))}
       </div>
-    </div>
+      <p className="font-meta-sm text-meta-sm text-on-surface-variant">作品仅保存在此浏览器, 完整作品可前往展馆查看.</p>
+    </section>
   );
 }

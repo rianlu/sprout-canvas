@@ -6,6 +6,8 @@ import type { ImageCapabilities } from '../types/provider';
 import type { QueueSubmitInput } from '../lib/api/queue';
 import { buildGenerationPayload, resolveSize } from '../lib/api/generation';
 import { requestTextGeneration } from '../lib/api/text';
+import { getCreditQuote } from '../lib/credits';
+import { recoverSubmissionBatch } from '../lib/queue-recovery';
 import { getOutboxInput, getRecordDataUrl, readWorkspaceDraft, writeWorkspaceDraft, registerWorkspaceSubmission } from '../lib/storage/gallery-db';
 import { randomId } from '../lib/random/id';
 import { readDraft, writeDraft } from '../lib/storage/drafts';
@@ -140,7 +142,7 @@ export function useSeriesStudio({ onSubmit, onSubmitBatch, onUpdate, results, jo
     if (tasks.some((task) => task.prompt.trim()) && !window.confirm('重新拆解会替换当前分镜提示词, 包括手动修改的内容. 是否继续?')) return false;
     lock.current = true; setBusy(true);
     try {
-      const response = await requestTextGeneration(buildSeriesSplitPrompt(template, count), `系列梗概: ${brief}\n从梗概中提取主体与画面风格要求, 保持全系列一致.`);
+      const response = await requestTextGeneration(buildSeriesSplitPrompt(template, count), `系列梗概: ${brief}\n从梗概中提取主体与画面风格要求, 保持全系列一致.`, 'series', count);
       const parsed = parseSeriesPlan(response.text, count);
       setTaskText(parsed.map((task) => `${task.title}: ${task.prompt.replaceAll('\n', ' ')}`).join('\n'));
       pushToast('success', `已拆解 ${parsed.length} 幕, 请逐镜检查后确认生成图片`);
@@ -152,12 +154,13 @@ export function useSeriesStudio({ onSubmit, onSubmitBatch, onUpdate, results, jo
   }
 
   async function createInput(index: number, task: BatchTask, identity: { seriesId: string; sceneId: string; placeholderId: string; requestId: string }, referenceJobId?: string, override?: Partial<GenerationConfig>, refOverride?: RefImage[]) {
+    const creditQuote = getCreditQuote();
     const previous = allSeriesResults.filter((item) => item.sceneId === identity.sceneId).sort((a, b) => (b.version || 1) - (a.version || 1))[0];
     const settings = { ...config, ...overrides[identity.sceneId], ...override };
     const size = resolveSize(settings.aspectRatio, settings.sizeTier);
     const prompt = scenePrompt({ brief, prompt: task.prompt, index, count });
     const request = await buildGenerationPayload({ ...settings, requestSize: size.size, sizeHint: size.hint, prompt, refImages: refOverride ?? (reference ? [reference] : []) });
-    return { requestId: identity.requestId, request, ...(referenceJobId ? { referenceJobId } : {}), clientContext: { kind: 'series', placeholderId: identity.placeholderId, prompt: task.prompt, mode: request.references.length || referenceJobId ? 'reference' : 'text', seriesId: identity.seriesId, sceneId: identity.sceneId, sceneIndex: index, version: (previous?.version || 0) + 1, parentId: previous?.id, template, masterPrompt: brief.trim() } } satisfies QueueSubmitInput;
+    return { requestId: identity.requestId, request, creditQuote, ...(referenceJobId ? { referenceJobId } : {}), clientContext: { kind: 'series', placeholderId: identity.placeholderId, prompt: task.prompt, mode: request.references.length || referenceJobId ? 'reference' : 'text', seriesId: identity.seriesId, sceneId: identity.sceneId, sceneIndex: index, version: (previous?.version || 0) + 1, parentId: previous?.id, template, masterPrompt: brief.trim() } } satisfies QueueSubmitInput;
   }
 
   async function submitBatch(redraw = false) {
@@ -165,8 +168,17 @@ export function useSeriesStudio({ onSubmit, onSubmitBatch, onUpdate, results, jo
     if (!canContinue && tasks.some((task) => !task.prompt.trim())) { pushToast('error', '请先完成并检查所有分镜提示词, 再确认生成'); return; }
     lock.current = true; setSubmitting(true);
     try {
+      const quote = getCreditQuote();
       if (!redraw && missingStaged.length) {
-        await onSubmitBatch(missingStaged);
+        const recovered = await recoverSubmissionBatch(missingStaged, quote);
+        if (recovered.recreated) {
+          const replacements = new Map(missingStaged.map((input, index) => [input.requestId, recovered.inputs[index]]));
+          const placeholders = new Map(missingStaged.map((input, index) => [input.clientContext.placeholderId, recovered.inputs[index].clientContext.placeholderId]));
+          setStaged((current) => current.map((input) => replacements.get(input.requestId) || input));
+          setStagedIds((current) => current.map((id) => replacements.get(id)?.requestId || id));
+          setShotIds((current) => current.map((id) => placeholders.get(id) || id));
+        }
+        await onSubmitBatch(recovered.inputs);
         pushToast('success', `已继续提交 ${missingStaged.length} 幕`);
         return;
       }
@@ -185,7 +197,7 @@ export function useSeriesStudio({ onSubmit, onSubmitBatch, onUpdate, results, jo
           refs = [{ id: record.id, recordId: record.id, name: '首镜主体参考.png', dataUrl: await getRecordDataUrl(record), size: record.bytes || 0 }];
           anchor = undefined;
         }
-        inputs.push(await createInput(index, task, { seriesId: nextSeriesId, sceneId: nextSceneIds[index], placeholderId: nextShotIds[index], requestId: requestIds[index] }, anchor, undefined, refs));
+        inputs.push({ ...await createInput(index, task, { seriesId: nextSeriesId, sceneId: nextSceneIds[index], placeholderId: nextShotIds[index], requestId: requestIds[index] }, anchor, undefined, refs), creditQuote: quote });
       }
       if (!inputs.length) { pushToast('info', '所有分镜均已完成, 可选择单镜或整套重绘'); return; }
       setSeriesId(nextSeriesId); setSceneIds(nextSceneIds); setShotIds(nextShotIds); setStaged(inputs); setStagedIds(inputs.map((input) => input.requestId));
@@ -253,5 +265,5 @@ export function useSeriesStudio({ onSubmit, onSubmitBatch, onUpdate, results, jo
   }
   async function exportSeries() { try { await downloadRecords(seriesResults, `sprout-series-${seriesId}`); pushToast('success', `已打包 ${seriesResults.length} 幕`); } catch { pushToast('error', '打包失败, 请检查本地原图'); } }
   function removeShot(index: number) { setTaskText(tasks.filter((_, i) => i !== index).map((task) => `${task.title}: ${task.prompt}`).join('\n')); setSceneIds((old) => old.filter((_, i) => i !== index)); setShotIds((old) => old.filter((_, i) => i !== index)); setCount((old) => Math.max(3, old - 1)); }
-  return { ready, template, setTemplate, brief, setBrief, taskText, setTaskText, count, setCount, config, setConfig, tasks, busy, submitting, toasts, pushToast, seriesId, seriesResults, allSeriesResults, activeJobs, canContinue, metadata, view, setView, preview, setPreview, shots, shotIds, splitStory, submitBatch, exportSeries, updateTask, removeShot, resetSeries, redrawShot, reference, setReference, uploadReference, editing, setEditing, beginEdit, saveEdit };
+  return { ready, template, setTemplate, brief, setBrief, taskText, setTaskText, count, setCount, config, setConfig, tasks, busy, submitting, toasts, pushToast, seriesId, seriesResults, allSeriesResults, activeJobs, canContinue, submissionCount: canContinue ? missingStaged.length : shots.filter((shot) => !shot.record).length, metadata, view, setView, preview, setPreview, shots, shotIds, splitStory, submitBatch, exportSeries, updateTask, removeShot, resetSeries, redrawShot, reference, setReference, uploadReference, editing, setEditing, beginEdit, saveEdit };
 }

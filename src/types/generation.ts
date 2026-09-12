@@ -47,6 +47,8 @@ export interface ResultRecord {
   createdAt: number;
   jobId?: string;
   requestId?: string;
+  batchId?: string;
+  submittedAt?: number;
   width?: number;
   height?: number;
   bytes?: number;

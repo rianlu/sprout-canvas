@@ -6,6 +6,7 @@ export function createStyleRoutes({ store, adminAuth, readConfig, requireUser })
   return async function route(req, res, url) {
     const admin = url.pathname.startsWith('/api/admin/');
     if (!admin && !url.pathname.startsWith('/api/styles')) return false;
+    if (admin && !/^\/api\/admin\/(auth|styles)(\/|$)/.test(url.pathname)) return false;
     if (admin) {
       const config = await readConfig();
       if (url.pathname === '/api/admin/auth/status' && req.method === 'GET') { json(res, 200, adminAuth.status(req, config)); return true; }
