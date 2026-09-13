@@ -96,7 +96,7 @@ try {
   const errors = [];
   page.on('pageerror', (error) => errors.push(error.message));
   await page.goto(base);
-  await page.getByLabel('访问码').fill(accessCode.code);
+  await page.getByLabel('访问码', { exact: true }).fill(accessCode.code);
   await page.getByRole('button', { name: '进入工作台', exact: true }).click();
   await page.locator('.studio-rail textarea').waitFor();
   assert.equal(await page.locator('.studio-rail').evaluate((element) => Math.round(element.getBoundingClientRect().width)), 440);

@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTheme } from '../hooks/useTheme';
 import { StitchIcon } from '../components/ui/StitchIcon';
-import { adminButton, adminField } from '../components/admin/AdminUI';
+import { adminButton } from '../components/admin/AdminUI';
+import { AuthConnection, AuthLayout, AuthSecretField, AuthSubmit } from '../components/auth/AuthLayout';
 import { adminStatus, adminLogin, adminLogout } from '../lib/api/styles';
 import { StyleManager } from './StyleAdmin';
 import { AccessCodeManager } from './AccessCodeAdmin';
@@ -25,7 +26,6 @@ export function AdminPage({ onBack }: { onBack: () => void }) {
   const [reviewCodeId, setReviewCodeId] = useState<string | null>(null);
   const [editStyleId, setEditStyleId] = useState<string | null>(null);
   const [password, setPassword] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [working, setWorking] = useState(false);
   const lock = useRef(false);
@@ -58,7 +58,7 @@ export function AdminPage({ onBack }: { onBack: () => void }) {
   }
   const authenticated = Boolean(session?.authenticated);
   return <div className="admin-shell min-h-[100dvh] bg-surface text-on-surface font-body-md text-body-md">
-    <header className="sticky top-0 z-40 bg-surface/95 backdrop-blur-xl border-b border-outline-variant/25 shadow-[0_1px_8px_rgba(85,95,75,0.04)]">
+    {authenticated && <header className="sticky top-0 z-40 bg-surface/95 backdrop-blur-xl border-b border-outline-variant/25 shadow-[0_1px_8px_rgba(85,95,75,0.04)]">
       <div className={`admin-header-inner ${authenticated ? 'admin-header-authenticated' : ''}`}>
         <div className="flex items-center gap-3 min-w-0 select-none">
           <img src="/assets/stitch/gallery-00.png" alt="芽绘台 SproutCanvas Logo" className="w-9 h-9 shrink-0 object-contain" />
@@ -71,22 +71,17 @@ export function AdminPage({ onBack }: { onBack: () => void }) {
           {authenticated && <button type="button" aria-label="退出管理" title="退出管理" disabled={working} className="w-9 h-9 rounded-full bg-primary text-on-primary flex items-center justify-center disabled:opacity-50" onClick={() => void run(async () => { await adminLogout(); setSession((value) => value && { ...value, authenticated: false }); })}><StitchIcon name="logout" size={18} /></button>}
         </div>
       </div>
-    </header>
-    {!authenticated && <main className="admin-login-main">
-      <section className="w-full max-w-[440px] rounded-3xl bg-surface-container-lowest border border-outline-variant/30 p-7 sm:p-10 shadow-[0_16px_64px_rgba(85,95,75,0.09)]">
-        <img src="/assets/stitch/gallery-00.png" alt="" className="w-14 h-14 object-contain mb-7" />
-        <p className="inline-flex items-center gap-1.5 font-meta-sm text-meta-sm tracking-wider text-secondary mb-3"><StitchIcon name="lock" size={15} />芽绘台 · 管理员入口</p>
-        <h1 className="font-headline-lg text-headline-lg tracking-tight">进入管理后台</h1>
-        <p className="mt-3 mb-7 font-body-md text-body-md text-on-surface-variant leading-relaxed">整理风格素材, 分配访问额度.<br />让每一份灵感有序生长.</p>
-        {error && <p role="alert" className="mb-4 p-3 rounded-xl bg-error-container text-on-error-container text-body-sm">{error}</p>}
-        {!session ? <div className="space-y-4"><p role="status" className="text-on-surface-variant">正在连接...</p>{error && <button type="button" className={`${adminButton} w-full bg-primary text-on-primary`} onClick={() => void refresh()}>重新连接</button>}</div> : !session.configured ? <p className="p-4 rounded-xl bg-surface-container-low font-body-sm text-body-sm text-on-surface-variant">管理员入口尚未启用. 请在服务端配置管理员密码后重新进入.</p> : <form className="space-y-5" onSubmit={(event) => { event.preventDefault(); if (!password) return; void run(async () => { await adminLogin(password); setPassword(''); setShowPassword(false); await refresh(); }); }}>
-          <label className="block font-body-sm text-body-sm font-medium" htmlFor="admin-password">管理员密码</label>
-          <div className="relative !mt-2"><input id="admin-password" type={showPassword ? 'text' : 'password'} autoComplete="current-password" autoFocus maxLength={256} required disabled={working} value={password} placeholder="输入管理员密码" onChange={(event) => { setPassword(event.target.value); setError(''); }} className={`${adminField} pr-16 !min-h-12`} /><button type="button" aria-label={showPassword ? '隐藏密码' : '显示密码'} aria-pressed={showPassword} className="absolute right-1.5 top-1.5 px-3 h-9 rounded-lg text-primary font-body-sm text-body-sm hover:bg-surface-container" onClick={() => setShowPassword((value) => !value)}>{showPassword ? '隐藏' : '显示'}</button></div>
-          <button type="submit" disabled={working || !password} className={`${adminButton} w-full !min-h-12 bg-primary hover:bg-primary-container text-on-primary shadow-[0_4px_16px_rgba(65,91,47,0.16)]`}>{working ? '登录中...' : '登录管理后台'}<StitchIcon name="arrow_forward" size={18} /></button>
-        </form>}
-        <p className="mt-7 pt-5 border-t border-outline-variant/25 font-meta-sm text-meta-sm text-outline">使用独立的管理员密码登录.</p>
-      </section>
-    </main>}
+    </header>}
+    {!authenticated && <AuthLayout kind="admin" theme={theme} onToggleTheme={toggle} onBack={onBack}>
+      {!session ? <AuthConnection error={error} onRetry={() => { setError(''); void refresh(); }} /> : !session.configured ? <p role="status" className="rounded-xl bg-surface-container-low p-4 font-body-sm text-body-sm text-on-surface-variant">管理员入口尚未启用. 请在服务端配置管理员密码后重新进入.</p> : <form aria-busy={working} onSubmit={(event) => {
+        event.preventDefault();
+        if (!password) return;
+        void run(async () => { await adminLogin(password); setPassword(''); await refresh(); });
+      }}>
+        <AuthSecretField id="admin-password" label="管理员密码" visibilityLabel="密码" value={password} placeholder="输入管理员密码" hint="请输入此工作台的管理员密码." error={error} disabled={working} maxLength={256} onChange={(value) => { setPassword(value); setError(''); }} />
+        <AuthSubmit busy={working} disabled={working || !password}>登录管理后台</AuthSubmit>
+      </form>}
+    </AuthLayout>}
     {authenticated && error && <p role="alert" className="admin-page !py-3 text-error">{error}</p>}
     <div hidden={!authenticated || tab !== 'overview'}><AdminDashboard active={authenticated && tab === 'overview'} onNavigate={navigate} onReview={(id) => { setReviewCodeId(id); navigate('access'); }} onEditStyle={(id) => { setEditStyleId(id); navigate('styles'); }} /></div>
     <div hidden={!authenticated || tab !== 'styles'}><StyleManager active={authenticated && tab === 'styles'} editStyleId={editStyleId} onStyleOpened={styleOpened} /></div>

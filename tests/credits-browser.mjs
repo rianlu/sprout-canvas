@@ -103,7 +103,7 @@ try {
 
   const a = await newPage(), b = await newPage();
   let logins = 0; a.on('request', (request) => { if (request.url().endsWith('/api/auth/login')) logins++; });
-  await a.goto(app.base); await a.getByLabel('访问码').fill(` ${secret} `);
+  await a.goto(app.base); await a.getByLabel('访问码', { exact: true }).fill(` ${secret} `);
   await a.locator('form').evaluate((form) => { form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })); form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })); });
   await a.locator('.studio-rail textarea').waitFor(); assert.equal(logins, 1);
   await signIn(b, secret); assert.notEqual((await auth(a)).userId, (await auth(b)).userId);
@@ -249,9 +249,9 @@ try {
   const reset = await dialog.getByRole('textbox', { name: /^完整访问码/ }).inputValue();
   assert.notEqual(reset, secret); await dialog.getByLabel('关闭访问码弹窗').click();
   assert.equal((await api(admin, `/api/admin/access-codes/${sharedId}/ledger`)).data.entries.find((entry) => entry.event === 'reset').reason, '管理员重置访问码');
-  await a.getByRole('button', { name: '用户菜单', exact: true }).click(); await a.getByRole('button', { name: '退出登录', exact: true }).click(); await a.getByLabel('访问码').fill(reset);
+  await a.getByRole('button', { name: '用户菜单', exact: true }).click(); await a.getByRole('button', { name: '退出登录', exact: true }).click(); await a.getByLabel('访问码', { exact: true }).fill(reset);
   await a.getByRole('button', { name: '进入工作台', exact: true }).click();
-  await a.locator('header').waitFor(); assert.equal((await auth(a)).userId, owner.userId);
+  await a.getByRole('button', { name: '用户菜单', exact: true }).waitFor(); assert.equal((await auth(a)).userId, owner.userId);
   assert.equal((await auth(a)).credits.spent, 20);
   await a.getByRole('navigation', { name: '主导航', exact: true }).getByRole('link', { name: '单图创作', exact: true }).click();
   for (const [width, height, device] of [[1600, 1000, 'desktop'], [1024, 900, 'tablet'], [768, 1024, 'small-tablet'], [390, 844, 'mobile']]) {

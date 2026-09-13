@@ -151,7 +151,7 @@ try {
   assert.equal(app.calls.length, 0);
   await second.context().close();
   await page.setViewportSize({ width: 1600, height: 1000 });
-  await page.getByLabel('访问码').fill(app.accessCode);
+  await page.getByLabel('访问码', { exact: true }).fill(app.accessCode);
   await page.getByRole('button', { name: '进入工作台', exact: true }).click();
   await page.locator('.studio-rail textarea').waitFor();
   checks.push('后台改名自动同步, 长名称与窄屏不溢出, 空名称使用创作者, 退出不影响共用码的其他浏览器');

@@ -57,7 +57,7 @@ async function contextPage(init, initValue, options = {}) {
   page.on('pageerror', (error) => errors.push(error.message));
   page.setDefaultTimeout(8000);
   await page.goto(app.base);
-  await page.getByLabel('访问码').fill(app.accessCode);
+  await page.getByLabel('访问码', { exact: true }).fill(app.accessCode);
   await page.getByRole('button', { name: '进入工作台', exact: true }).click();
   await page.locator('.studio-rail textarea').waitFor();
   await page.waitForFunction(() => !document.querySelector('main')?.textContent?.includes('正在加载...'));
@@ -641,12 +641,12 @@ try {
   }
   checks.push('桌面, 平板, 手机深浅主题下展馆与风格库的标题字体, 字号, 字重, 行高及背景颜色一致');
   await page.getByRole('button', { name: '用户菜单', exact: true }).click(); await page.getByRole('button', { name: '退出登录', exact: true }).click();
-  await page.getByLabel('访问码').waitFor();
-  await page.getByLabel('访问码').fill(app.accessCode);
+  await page.getByLabel('访问码', { exact: true }).waitFor();
+  await page.getByLabel('访问码', { exact: true }).fill(app.accessCode);
   await page.getByRole('button', { name: '进入工作台', exact: true }).click();
-  await page.locator('header').waitFor();
+  await page.getByRole('button', { name: '用户菜单', exact: true }).waitFor();
   await page.evaluate(() => fetch('/api/auth/logout', { method: 'POST' }));
-  await page.waitForFunction(() => document.querySelector('input[aria-label="访问码"]'), undefined, { timeout: 10000 });
+  await page.getByLabel('访问码', { exact: true }).waitFor({ timeout: 10000 });
   checks.push('桌面, 平板, 手机, 深浅主题四页布局, 手机退出和会话过期');
 
   // Simulate a quota failure inside the image-saving transaction, then retry successfully.
@@ -1327,7 +1327,7 @@ try {
   const blockedPage = await blockedStorage.newPage();
   blockedPage.on('pageerror', (error) => errors.push(error.message));
   await blockedPage.goto(app.base);
-  await blockedPage.getByLabel('访问码').fill(app.accessCode);
+  await blockedPage.getByLabel('访问码', { exact: true }).fill(app.accessCode);
   await blockedPage.getByRole('button', { name: '进入工作台', exact: true }).click();
   await blockedPage.locator('.studio-rail textarea').waitFor();
   assert.equal(await blockedPage.evaluate(async () => (await (await fetch('/api/auth/status')).json()).authenticated), true);

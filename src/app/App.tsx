@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { AppShell } from '../components/shell/AppShell';
 import { GalleryGrid } from '../pages/StitchGalleryGrid';
 import { HelpDialog } from '../components/shell/HelpDialog';
@@ -7,6 +7,7 @@ import { CreativeStudio } from '../pages/StitchCreativeStudio';
 import { SeriesStudio } from '../pages/StitchSeriesStudio';
 import { StylesLibrary } from '../pages/StitchStylesLibrary';
 import { AdminPage } from '../pages/AdminPage';
+import { WorkspaceLogin } from '../pages/WorkspaceLogin';
 import { useAuth } from '../hooks/useAuth';
 import { useGallery } from '../hooks/useGallery';
 import { useQueue } from '../hooks/useQueue';
@@ -27,70 +28,6 @@ const pageFromHash = (): PageKey => {
   const value = location.hash.slice(1).split('/')[0];
   return ['studio', 'series', 'styles', 'gallery', 'admin'].includes(value) ? value as PageKey : 'studio';
 };
-
-function LoginScreen({ onLogin, loading }: { onLogin: (code: string) => Promise<void>; loading: boolean }) {
-  const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
-  const [working, setWorking] = useState(false);
-  const loginLock = useRef(false);
-  return (
-    <main className="min-h-screen bg-surface flex items-center justify-center px-gutter-canvas">
-      <section className="w-full max-w-sm bg-surface-container-lowest/90 backdrop-blur-xl rounded-2xl p-space-xl shadow-[0_12px_36px_rgba(85,95,75,0.10)] border border-outline-variant/30 flex flex-col gap-space-lg">
-        <div className="flex flex-col items-center gap-space-sm text-center">
-          <img
-            alt="芽绘台 SproutCanvas Logo"
-            className="h-14 w-auto object-contain"
-            src="/assets/stitch/gallery-00.png"
-          />
-          <div className="flex flex-col gap-1">
-            <h1 className="font-headline-lg text-headline-lg text-on-surface tracking-tight">进入工作台</h1>
-            <p className="font-body-sm text-body-sm text-on-surface-variant">芽绘台 SproutCanvas · 自然心流创作</p>
-          </div>
-        </div>
-        <form
-          className="flex flex-col gap-space-sm"
-          onSubmit={(event) => {
-            event.preventDefault();
-            if (loginLock.current || loading || !password.trim()) return;
-            loginLock.current = true;
-            setWorking(true); setError('');
-            void onLogin(password).catch((cause) => setError(cause instanceof Error ? cause.message : '登录失败, 请重试')).finally(() => { loginLock.current = false; setWorking(false); });
-          }}
-        >
-          <div className="relative bg-surface-container-low rounded-xl px-space-md py-2 flex items-center gap-2 border border-outline-variant/30 focus-within:border-primary transition-colors">
-            <input
-              type="password"
-              className="w-full bg-transparent border-0 outline-none font-body-md text-body-md text-on-surface placeholder:text-outline"
-              placeholder="粘贴访问码"
-              aria-label="访问码"
-              autoComplete="current-password"
-              maxLength={128}
-              autoFocus
-              value={password}
-              onChange={(event) => {
-                setPassword(event.target.value);
-                setError('');
-              }}
-            />
-          </div>
-          {error && (
-            <p className="font-body-sm text-body-sm text-error text-center" role="alert">
-              {error}
-            </p>
-          )}
-          <button
-            type="submit"
-            className="w-full py-3 rounded-xl bg-primary hover:bg-primary-container text-on-primary font-headline-sm text-headline-sm shadow-[0_4px_16px_rgba(65,91,47,0.28)] hover:-translate-y-0.5 transition-all disabled:opacity-60 disabled:hover:translate-y-0"
-            disabled={loading || working || !password.trim()}
-          >
-            {loading || working ? '登录中...' : '进入工作台'}
-          </button>
-        </form>
-        <p className="font-meta-sm text-meta-sm text-outline text-center">使用管理员提供的访问码, 以灵感点开启创作</p>
-      </section>
-    </main>
-  );
-}
 
 export function App() {
   const [page, setCurrentPage] = useState<PageKey>(pageFromHash);
@@ -198,15 +135,7 @@ export function App() {
   }, [setPage]);
 
   if (page === 'admin') return <AdminPage onBack={() => setPage('styles')} />;
-  if (auth.loading) {
-    return (
-      <main className="min-h-screen bg-surface flex items-center justify-center">
-        <p className="font-body-sm text-body-sm text-on-surface-variant">正在加载...</p>
-      </main>
-    );
-  }
-  if (auth.error) return <main className="min-h-screen flex flex-col items-center justify-center gap-4 bg-surface"><p role="alert">{auth.error}</p><button type="button" onClick={() => void auth.refresh()} className="px-4 py-2 rounded-xl bg-primary text-on-primary">重新连接</button></main>;
-  if (!auth.authenticated) return <LoginScreen loading={auth.loading} onLogin={auth.signIn} />;
+  if (auth.loading || auth.error || !auth.authenticated) return <WorkspaceLogin loading={auth.loading} connectionError={auth.error} onLogin={auth.signIn} onRetry={() => void auth.refresh(true)} />;
 
   return (
     <AppShell

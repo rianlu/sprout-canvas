@@ -92,7 +92,7 @@ try {
   assert.equal((await api(page, '/api/jobs/me')).status, 401);
   const user = await newPage();
   await user.goto(app.base);
-  await user.getByLabel('访问码').fill(app.accessCode);
+  await user.getByLabel('访问码', { exact: true }).fill(app.accessCode);
   await user.getByRole('button', { name: '进入工作台', exact: true }).click();
   await user.locator('.studio-rail textarea').waitFor();
   assert.equal((await api(user, '/api/admin/styles')).status, 401);
@@ -300,7 +300,7 @@ try {
   const other = await page.context().newPage();
   other.on('pageerror', (error) => errors.push(error.message));
   await other.goto(isolated.base);
-  await other.getByLabel('访问码').fill(isolated.accessCode);
+  await other.getByLabel('访问码', { exact: true }).fill(isolated.accessCode);
   await other.getByRole('button', { name: '进入工作台', exact: true }).click();
   await other.locator('.studio-rail textarea').waitFor();
   await other.goto(isolated.base + '/#admin');
