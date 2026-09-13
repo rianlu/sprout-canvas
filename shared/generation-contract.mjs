@@ -7,6 +7,7 @@ export const GENERATION_DEFAULTS = Object.freeze({
 export const IMAGE_SIZES = Object.freeze(['auto', '1024x1024', '1536x1024', '1024x1536']);
 export const SERIES_TEMPLATES = Object.freeze(['picture-book', 'ecommerce', 'video-board', 'brand-ip']);
 export const MAX_PROMPT_LENGTH = 24000;
+export const MAX_REFERENCE_IMAGES = 4;
 export const MAX_REFERENCE_BYTES = 12 * 1024 * 1024;
 
 export function validateImageSize(size) {
@@ -71,7 +72,7 @@ export function validateGenerationSubmission(value) {
   const request = object(input.request, '生成参数');
   onlyKeys(request, ['prompt', 'size', 'quality', 'outputFormat', 'background', 'outputCompression', 'references', 'mask'], '生成参数');
   const references = request.references ?? [];
-  if (!Array.isArray(references) || references.length > 4) throw requestError('最多使用 4 张参考图');
+  if (!Array.isArray(references) || references.length > MAX_REFERENCE_IMAGES) throw requestError(`最多使用 ${MAX_REFERENCE_IMAGES} 张参考图`);
   const normalized = {
     prompt: text(request.prompt, '提示词', MAX_PROMPT_LENGTH, true).trim(),
     size: validateImageSize(request.size ?? GENERATION_DEFAULTS.size),
@@ -86,6 +87,7 @@ export function validateGenerationSubmission(value) {
   if (request.mask) {
     if (input.referenceJobId) throw requestError('蒙版重绘请直接选择本地原图');
     if (!normalized.references.length) throw requestError('局部重绘需要参考图');
+    if (normalized.references.length !== 1) throw requestError('局部重绘只能使用一张原图, 请先选择要编辑的图片');
     normalized.mask = image(request.mask, '蒙版');
     if (!normalized.mask.startsWith('data:image/png;')) throw requestError('蒙版必须使用带透明通道的 PNG');
   }
@@ -108,7 +110,7 @@ export function validateGenerationSubmission(value) {
   }
   if (clientContext.kind === 'series' && (!clientContext.seriesId || !clientContext.sceneId || !clientContext.template)) throw requestError('系列任务需要系列, 分镜和模板信息');
   if (input.referenceImage && !input.referenceJobId) throw requestError('恢复参考图片需要对应的参考任务');
-  if (input.referenceJobId && normalized.references.length > 3) throw requestError('首镜参考和上传参考图合计最多 4 张');
+  if (input.referenceJobId && normalized.references.length >= MAX_REFERENCE_IMAGES) throw requestError(`首镜参考和上传参考图合计最多 ${MAX_REFERENCE_IMAGES} 张`);
   return {
     requestId: id(input.requestId, '请求 ID', true), request: normalized, clientContext,
     ...(input.creditQuote ? { creditQuote: validateCreditQuote(input.creditQuote) } : {}),

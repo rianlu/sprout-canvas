@@ -218,7 +218,7 @@ try {
   await publicCard.getByRole('button', { name: '复制模板', exact: true }).click();
   assert.equal(await user.evaluate(() => navigator.clipboard.readText()), editedPrompt);
   await publicCard.getByRole('button', { name: '发送到单图', exact: true }).click();
-  await user.getByRole('button', { name: pasted.name, exact: true }).waitFor();
+  await user.getByRole('group', { name: '已选提示词模板' }).getByRole('heading', { name: pasted.name, exact: true }).waitFor();
   assert.equal(await user.locator('.studio-rail textarea').inputValue(), editedPrompt);
   assert.equal((await api(user, '/api/jobs/me')).data.jobs.length, 0);
   const draft = await user.evaluate(async () => {

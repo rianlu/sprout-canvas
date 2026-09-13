@@ -1,4 +1,4 @@
-import { MAX_REFERENCE_BYTES, type GenerationRequest } from '../../../shared/generation-contract.mjs';
+import { MAX_REFERENCE_BYTES, MAX_REFERENCE_IMAGES, type GenerationRequest } from '../../../shared/generation-contract.mjs';
 import type { GenerationConfig, ImageSizeTier, RefImage } from '../../types/generation';
 import { prepareImageDataUrl } from '../image/compress';
 import { dataUrlToBlob } from '../image/data-url';
@@ -80,6 +80,8 @@ export function qualityLabel(quality: GenerationConfig['quality']) {
 }
 
 export async function buildGenerationPayload(config: GenerationConfig, maskFactory?: (imageDataUrl: string) => Promise<string>): Promise<GenerationRequest> {
+  if (config.refImages.length > MAX_REFERENCE_IMAGES) throw new Error(`最多使用 ${MAX_REFERENCE_IMAGES} 张参考图`);
+  if (config.mode === 'edit' && config.refImages.length !== 1) throw new Error('局部重绘需要选择一张原图');
   const preparedRefs = await Promise.all(config.refImages.map(async (ref: RefImage) => {
     if (config.mode === 'edit') {
       const blob = dataUrlToBlob(ref.dataUrl);

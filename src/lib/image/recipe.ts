@@ -5,17 +5,33 @@ import { blobDataUrl, getArtifact, getRecordDataUrl } from '../storage/gallery-d
 import { resolveSize, sizePreset } from '../api/generation';
 import { imageFileExtension } from './format';
 import type { PromptHistory } from '../prompt-history';
+import type { StyleRecord } from '../../../shared/style-contract.mjs';
+
+export type StudioStyleTemplate = Pick<StyleRecord, 'id' | 'name' | 'image' | 'author' | 'category'>;
+
+export function styleTemplateSnapshot(style: StyleRecord): StudioStyleTemplate {
+  const { id, name, image, author, category } = style;
+  return { id, name, image, author, category };
+}
 
 export interface StudioDraft {
   config?: Partial<GenerationConfig>;
   styleId?: string;
   styleName?: string;
+  styleTemplate?: StudioStyleTemplate | null;
   refImage?: RefImage | null;
   sourceRecord?: ResultRecord | null;
   mask?: BrushMaskData | null;
   maskDataUrl?: string;
   tone?: 'soft' | 'vivid' | 'none';
   promptHistory?: PromptHistory | null;
+}
+
+/** Retain reference order while the selected edit original may be a different image. */
+export function studioReferenceImages(draft: Pick<StudioDraft, 'refImage' | 'config'>): RefImage[] {
+  const references = draft.config?.refImages || [];
+  const first = draft.refImage;
+  return first && !references.some((reference) => reference.id === first.id) ? [first, ...references] : references;
 }
 
 /** Edit the selected output, retaining its recipe without reusing earlier references or masks. */
@@ -37,7 +53,7 @@ export function imageEditConfig(source?: ResultRecord | null): Partial<Generatio
 export async function sourceImageDraft(record: ResultRecord, edit = false): Promise<StudioDraft> {
   const dataUrl = await getRecordDataUrl(record);
   return {
-    styleId: 'default', styleName: '',
+    styleId: 'default', styleName: '', styleTemplate: null,
     refImage: { id: record.id, recordId: record.id, name: `作品-${record.id.slice(-4)}.${imageFileExtension(dataUrl)}`, dataUrl, size: record.bytes || 0 },
     sourceRecord: { ...record, dataUrl: '' },
     config: edit ? imageEditConfig(record) : { mode: 'reference', prompt: '', refImages: [], imageCount: 1 },
@@ -62,5 +78,5 @@ export async function recipeDraft(record: ResultRecord) {
   }
   const { aspectRatio, sizeTier } = sizePreset(recipe.size);
   const config: Partial<GenerationConfig> = { prompt: record.mode === 'edit' ? record.prompt : recipe.prompt, quality: recipe.quality, outputFormat: recipe.outputFormat, background: recipe.background, outputCompression: recipe.outputCompression, requestSize: recipe.size, aspectRatio, sizeTier, sizeHint: resolveSize(aspectRatio, sizeTier).hint, refImages, imageCount: 1, mode: record.mode };
-  return { config, styleId: 'default', styleName: '', refImage: refImages[0] || null, sourceRecord: null, mask: null, maskDataUrl, tone: 'none' as const };
+  return { config, styleId: 'default', styleName: '', styleTemplate: null, refImage: refImages[0] || null, sourceRecord: null, mask: null, maskDataUrl, tone: 'none' as const };
 }

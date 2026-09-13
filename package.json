@@ -9,7 +9,7 @@
     "preview": "vite preview --host 127.0.0.1",
     "start": "npm run build && node server.mjs",
     "test": "node --test tests/*.test.mjs && npm run build",
-    "test:browser": "node tests/browser-check.mjs && node tests/style-admin-browser.mjs && node tests/credits-browser.mjs && node tests/credits-recovery-browser.mjs && node tests/admin-overview-browser.mjs && node tests/workspace-browser.mjs && node tests/studio-input-browser.mjs",
+    "test:browser": "node tests/browser-check.mjs && node tests/style-admin-browser.mjs && node tests/credits-browser.mjs && node tests/credits-recovery-browser.mjs && node tests/admin-overview-browser.mjs && node tests/workspace-browser.mjs && node tests/studio-input-browser.mjs && node tests/studio-tools-browser.mjs",
     "test:docker": "node tests/docker-check.mjs",
     "start:server": "node server.mjs",
     "start:local": "npm run build && node server/local.mjs",

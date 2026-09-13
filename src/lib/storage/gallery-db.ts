@@ -36,7 +36,7 @@ function emptyWorkspaceContent(key: string, data: unknown) {
   const value = (data || {}) as Record<string, unknown>;
   if (key === 'studio') return {
     ...value, config: { ...(value.config as object), mode: 'text', prompt: '', refImages: [] },
-    refImage: null, sourceRecord: null, mask: null, maskDataUrl: '', styleId: 'default', styleName: '', promptHistory: null,
+    refImage: null, sourceRecord: null, mask: null, maskDataUrl: '', styleId: 'default', styleName: '', styleTemplate: null, promptHistory: null,
   };
   return { ...value, brief: '', taskText: '', reference: null, seriesId: '', sceneIds: [], shotIds: [], stagedIds: [], overrides: {} };
 }

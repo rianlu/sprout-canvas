@@ -6,6 +6,8 @@ import { prepareImageFile } from '../lib/image/compress';
 import { buildGenerationPayload, resolveSize } from '../lib/api/generation';
 import type { QueueSubmitInput } from '../lib/api/queue';
 import { requestTextGeneration } from '../lib/api/text';
+import { getStyles } from '../lib/api/styles';
+import { MAX_REFERENCE_IMAGES } from '../../shared/generation-contract.mjs';
 import { getCreditQuote } from '../lib/credits';
 import { brushMaskToDataUrl, brushStrokeCount, hasEditableRegion, type BrushMaskData } from '../lib/editor/brush-mask';
 import { MaskEditor } from '../components/editor/MaskEditor';
@@ -15,7 +17,7 @@ import { readDraft, writeDraft } from '../lib/storage/drafts';
 import { downloadRecord } from '../lib/image/gallery';
 import { readWorkspaceDraft, writeWorkspaceDraft, registerWorkspaceSubmission, unconfirmedWorkspaceBatch } from '../lib/storage/gallery-db';
 import { recoverSubmissionBatch } from '../lib/queue-recovery';
-import { imageEditConfig, sourceImageDraft, type StudioDraft } from '../lib/image/recipe';
+import { imageEditConfig, sourceImageDraft, studioReferenceImages, styleTemplateSnapshot, type StudioDraft, type StudioStyleTemplate } from '../lib/image/recipe';
 import { StitchStudioRail, StitchCanvasStream, type CanvasEntry } from '../components/stitch-studio/StitchStudioRail';
 import { selectStudioFeed } from '../lib/studio-feed';
 import { readPromptHistory, togglePromptHistory, type PromptHistory } from '../lib/prompt-history';
@@ -66,8 +68,11 @@ export function CreativeStudio({ onOpenStyles, onOpenGallery, onSubmitBatch, onC
   const [tone, setTone] = useState<'soft' | 'vivid' | 'none'>('soft');
   const [styleId, setStyleId] = useState(() => readDraft(STUDIO_STYLE_DRAFT_KEY) || 'default');
   const [styleName, setStyleName] = useState('');
+  const [styleTemplate, setStyleTemplate] = useState<StudioStyleTemplate | null>(null);
+  const [catalogTemplate, setCatalogTemplate] = useState<StudioStyleTemplate | null>(null);
   const [mask, setMask] = useState<BrushMaskData | null>(null);
   const [maskEditorOpen, setMaskEditorOpen] = useState(() => readDraft('studio_open_mask') === '1');
+  const [choosingOriginal, setChoosingOriginal] = useState(false);
   const [refImage, setRefImage] = useState<RefImage | null>(() => {
     try {
       const raw = readDraft('studio_ref_image');
@@ -129,7 +134,8 @@ export function CreativeStudio({ onOpenStyles, onOpenGallery, onSubmitBatch, onC
       if (draft.config) setConfig((current) => ({ ...current, ...stored?.config, ...transfer?.config, prompt: transfer?.config?.prompt ?? stored?.config?.prompt ?? current.prompt }));
       if (draft.styleId !== undefined) setStyleId(draft.styleId || 'default');
       setStyleName(draft.styleName || '');
-      if (draft.refImage !== undefined) setRefImage(draft.refImage);
+      setStyleTemplate(draft.styleTemplate && draft.styleTemplate.id === draft.styleId ? draft.styleTemplate : null);
+      if (draft.refImage !== undefined || draft.config?.refImages?.length) setRefImage(draft.refImage || studioReferenceImages(draft)[0] || null);
       setSourceRecord(draft.sourceRecord || null);
       if (draft.mask !== undefined) setMask(draft.mask);
       if (draft.tone) setTone(draft.tone);
@@ -148,13 +154,23 @@ export function CreativeStudio({ onOpenStyles, onOpenGallery, onSubmitBatch, onC
     })().catch((error) => { if (alive) { setDraftLoaded(true); pushToast('error', error instanceof Error ? error.message : '草稿读取失败'); } });
     return () => { alive = false; };
   }, [pushToast]);
-  const currentDraft = useMemo<StudioDraft>(() => ({ config, styleId, styleName, refImage, sourceRecord, mask, tone, maskDataUrl: restoredMask, promptHistory }), [config, styleId, styleName, refImage, sourceRecord, mask, tone, restoredMask, promptHistory]);
+  const currentDraft = useMemo<StudioDraft>(() => ({ config, styleId, styleName, styleTemplate, refImage, sourceRecord, mask, tone, maskDataUrl: restoredMask, promptHistory }), [config, styleId, styleName, styleTemplate, refImage, sourceRecord, mask, tone, restoredMask, promptHistory]);
   const currentDraftRef = useRef(currentDraft);
   currentDraftRef.current = currentDraft;
   useEffect(() => {
     if (!draftLoaded) return;
     void writeWorkspaceDraft('studio', currentDraft).catch(() => pushToast('error', '草稿未能保存, 请检查本地空间'));
   }, [currentDraft, draftLoaded, pushToast]);
+
+  useEffect(() => {
+    if (!draftLoaded || styleId === 'default' || styleTemplate) return;
+    let cancelled = false;
+    void getStyles().then((catalog) => {
+      const style = catalog.styles.find((item) => item.id === styleId);
+      if (!cancelled && style) setCatalogTemplate({ ...styleTemplateSnapshot(style), name: styleName || style.name });
+    }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [draftLoaded, styleId, styleName, styleTemplate]);
 
   // 草稿持久化 (v2 兼容键名)
   useEffect(() => {
@@ -233,20 +249,34 @@ export function CreativeStudio({ onOpenStyles, onOpenGallery, onSubmitBatch, onC
     return !draft.refImage && !draft.sourceRecord && !draft.mask && !draft.maskDataUrl && draft.config?.mode !== 'edit' && !draft.config?.refImages?.length;
   }, []);
 
-  // 参考图
-  const handleReplaceRef = useCallback(
-    async (file: File, onlyEmpty = false) => {
-      if (imageLock.current || (onlyEmpty && (!referenceIsEmpty() || maskEditorOpen))) return;
+  const maxReferences = Math.min(MAX_REFERENCE_IMAGES, imageCapabilities?.maxReferences ?? MAX_REFERENCE_IMAGES);
+  const referenceImages = useMemo(() => studioReferenceImages({ refImage, config }), [refImage, config]);
+
+  // Explicit uploads append or replace one image. Clipboard and drop remain empty-only.
+  const handleUploadRefs = useCallback(
+    async (files: File[], replaceId?: string, onlyEmpty = false) => {
+      if (!files.length || imageLock.current || submitLock.current || maskEditorOpen || (onlyEmpty && !referenceIsEmpty())) return;
+      const previous = currentDraftRef.current;
+      const references = studioReferenceImages(previous);
+      if (replaceId && !references.some((reference) => reference.id === replaceId)) return;
+      if (previous.config?.mode === 'edit' && !replaceId) return;
+      if (replaceId && files.length !== 1) { pushToast('error', '更换图片时请选择一张图片'); return; }
+      if (!replaceId && references.length + files.length > maxReferences) {
+        pushToast('error', `最多使用 ${maxReferences} 张参考图, 当前还可添加 ${Math.max(0, maxReferences - references.length)} 张`);
+        return;
+      }
       const sequence = ++imageSequence.current;
       imageLock.current = true; setImageBusy(true);
       try {
-        const prepared = await prepareImageFile(file, { preserveOriginal: true });
+        const prepared: RefImage[] = [];
+        for (const file of files) prepared.push({ id: randomId(), ...await prepareImageFile(file, { preserveOriginal: true }) });
         if (!alive.current || imageSequence.current !== sequence || (onlyEmpty && !referenceIsEmpty())) return;
-        const reference = { id: randomId(), ...prepared };
-        currentDraftRef.current = { ...currentDraftRef.current, refImage: reference, sourceRecord: null, mask: null, maskDataUrl: '', config: { ...currentDraftRef.current.config, mode: 'reference', refImages: [] } };
-        setRefImage(reference);
-        setSourceRecord(null);
-        setConfig((current) => ({ ...current, mode: 'reference', refImages: [] }));
+        const next = replaceId ? references.map((reference) => reference.id === replaceId ? prepared[0] : reference) : [...references, ...prepared];
+        const source = next[0].recordId ? (previous.sourceRecord?.id === next[0].recordId ? previous.sourceRecord : results.find((record) => record.id === next[0].recordId) || null) : null;
+        currentDraftRef.current = { ...currentDraftRef.current, refImage: next[0], sourceRecord: source, mask: null, maskDataUrl: '', config: { ...currentDraftRef.current.config, mode: 'reference', refImages: next } };
+        setRefImage(next[0]);
+        setSourceRecord(source);
+        setConfig((current) => ({ ...current, mode: 'reference', refImages: next }));
         setMask(null);
         setRestoredMask('');
       } catch (error) {
@@ -255,12 +285,24 @@ export function CreativeStudio({ onOpenStyles, onOpenGallery, onSubmitBatch, onC
         if (imageSequence.current === sequence) { imageLock.current = false; if (alive.current) setImageBusy(false); }
       }
     },
-    [pushToast, referenceIsEmpty, maskEditorOpen],
+    [pushToast, referenceIsEmpty, maskEditorOpen, maxReferences, results],
   );
+
+  const handleRemoveRef = useCallback((id?: string) => {
+    if (imageLock.current || submitLock.current) return;
+    const draft = currentDraftRef.current;
+    const next = id ? studioReferenceImages(draft).filter((reference) => reference.id !== id) : [];
+    const first = next[0] || null;
+    const source = first?.recordId ? (draft.sourceRecord?.id === first.recordId ? draft.sourceRecord : results.find((record) => record.id === first.recordId) || null) : null;
+    const mode = next.length ? 'reference' : 'text';
+    currentDraftRef.current = { ...draft, refImage: first, sourceRecord: source, mask: null, maskDataUrl: '', config: { ...draft.config, mode, refImages: next } };
+    setRefImage(first); setSourceRecord(source); setMask(null); setRestoredMask('');
+    setConfig((current) => ({ ...current, mode, refImages: next }));
+  }, [results]);
 
   // 提交 (buildGenerationPayload 走真实协议: ref_images + maskFactory)
   const handleSubmit = useCallback(async () => {
-    if (!config.prompt.trim() || submitLock.current || imageLock.current || !draftLoaded || !imageCapabilities || submitting || polishing || maskEditorOpen || fullscreen || splitOpen) return;
+    if (!config.prompt.trim() || submitLock.current || imageLock.current || !draftLoaded || !imageCapabilities || submitting || polishing || choosingOriginal || maskEditorOpen || fullscreen || splitOpen) return;
     submitLock.current = true;
     setSubmitting(true);
     try {
@@ -281,9 +323,8 @@ export function CreativeStudio({ onOpenStyles, onOpenGallery, onSubmitBatch, onC
       const styledPrompt = isEdit
         ? `在输入原图上进行局部编辑, 仅修改蒙版指定区域, 保持原图画幅, 构图和画风, 尽量保留未涂抹区域的内容与细节.\n修改要求: ${config.prompt}`
         : config.prompt + (TONE_SUFFIX[tone] ?? '');
-      const refImages: RefImage[] = refImage
-        ? [refImage, ...config.refImages.filter((ref) => ref.id !== refImage.id)]
-        : [];
+      const refImages = isEdit ? [refImage!] : referenceImages;
+      if (refImages.length > maxReferences) throw new Error(`最多使用 ${maxReferences} 张参考图, 请先移除多余图片`);
       const payload = await buildGenerationPayload(
         {
           ...config,
@@ -328,6 +369,8 @@ export function CreativeStudio({ onOpenStyles, onOpenGallery, onSubmitBatch, onC
     styleName,
     tone,
     refImage,
+    referenceImages,
+    maxReferences,
     mask,
     onSubmitBatch,
     draftLoaded,
@@ -337,6 +380,7 @@ export function CreativeStudio({ onOpenStyles, onOpenGallery, onSubmitBatch, onC
     submitting,
     polishing,
     maskEditorOpen,
+    choosingOriginal,
     fullscreen,
     splitOpen,
   ]);
@@ -376,7 +420,9 @@ export function CreativeStudio({ onOpenStyles, onOpenGallery, onSubmitBatch, onC
     };
   }), [jobs, results, retryingJobs, config.mode, sourceRecord?.sceneId]);
 
-  const pinnedStyleName = styleId && styleId !== 'default' ? styleName || '已载入模板' : null;
+  const selectedTemplate = styleId && styleId !== 'default'
+    ? styleTemplate || (catalogTemplate?.id === styleId ? catalogTemplate : null) || { id: styleId, name: styleName || '已载入模板', image: '', author: '', category: '' }
+    : null;
 
   const maskStrokes = mask ? brushStrokeCount(mask) : restoredMask ? 1 : 0;
 
@@ -397,6 +443,7 @@ export function CreativeStudio({ onOpenStyles, onOpenGallery, onSubmitBatch, onC
       setConfig((current) => ({ ...current, ...draft.config }));
       setStyleId('default');
       setStyleName('');
+      setStyleTemplate(null);
       setTone('none');
       setMask(null);
       setRestoredMask('');
@@ -407,18 +454,25 @@ export function CreativeStudio({ onOpenStyles, onOpenGallery, onSubmitBatch, onC
     }
   }, []);
 
-  const openMaskEditor = useCallback(() => {
-    if (imageLock.current || polishLock.current) return;
-    if (!refImage) { pushToast('info', '先上传图片才能涂抹蒙版'); return; }
+  const openMaskEditor = useCallback((referenceId?: string) => {
+    if (imageLock.current || polishLock.current || submitLock.current) return;
+    const selected = referenceId ? referenceImages.find((reference) => reference.id === referenceId) : refImage;
+    if (!selected) { pushToast('info', '先上传图片才能涂抹蒙版'); return; }
     if (config.mode !== 'edit') {
-      setConfig((current) => ({ ...current, ...imageEditConfig(sourceRecord) }));
+      const source = selected.recordId ? (sourceRecord?.id === selected.recordId ? sourceRecord : results.find((record) => record.id === selected.recordId) || null) : null;
+      const editConfig = { ...imageEditConfig(source), refImages: referenceImages };
+      currentDraftRef.current = { ...currentDraftRef.current, config: { ...config, ...editConfig }, refImage: selected, sourceRecord: source, styleId: 'default', styleName: '', styleTemplate: null, tone: 'none', promptHistory: null };
+      setRefImage(selected);
+      setSourceRecord(source);
+      setConfig((current) => ({ ...current, ...editConfig }));
       setStyleId('default');
       setStyleName('');
+      setStyleTemplate(null);
       setTone('none');
       setPromptHistory(null);
     }
     setMaskEditorOpen(true);
-  }, [refImage, config.mode, sourceRecord, pushToast]);
+  }, [refImage, referenceImages, config, sourceRecord, results, pushToast]);
 
   const railRef = useRef<HTMLDivElement>(null);
 
@@ -435,7 +489,7 @@ export function CreativeStudio({ onOpenStyles, onOpenGallery, onSubmitBatch, onC
                   imageSequence.current++; imageLock.current = false; setImageBusy(false);
                   setConfig((current) => ({ ...current, mode: 'text', prompt: '', refImages: [] }));
                   setRefImage(null); setSourceRecord(null); setMask(null); setRestoredMask(''); setMaskEditorOpen(false);
-                  setStyleId('default'); setStyleName('');
+                  setStyleId('default'); setStyleName(''); setStyleTemplate(null);
                   setPromptHistory(null);
                   writeDraft('studio_ref_image', ''); writeDraft('studio_open_mask', '');
                 }}
@@ -450,17 +504,26 @@ export function CreativeStudio({ onOpenStyles, onOpenGallery, onSubmitBatch, onC
                 onTogglePolish={handleTogglePolish}
                 imageBusy={imageBusy}
                 canAddReference={referenceIsEmpty() && !maskEditorOpen && !imageBusy && !submitting}
-                onAddRef={(file) => { void handleReplaceRef(file, true); }}
-                pinnedStyleName={pinnedStyleName}
-                onUnpinStyle={() => { setStyleId('default'); setStyleName(''); }}
+                onAddRef={(file) => { void handleUploadRefs([file], undefined, true); }}
+                selectedTemplate={selectedTemplate}
+                onUnpinStyle={() => { setStyleId('default'); setStyleName(''); setStyleTemplate(null); }}
                 refImage={refImage}
-                onRemoveRef={() => { setRefImage(null); setSourceRecord(null); setMask(null); setRestoredMask(''); setConfig((current) => ({ ...current, mode: 'text', refImages: [] })); }}
+                referenceImages={referenceImages}
+                maxReferences={maxReferences}
+                onRemoveRef={handleRemoveRef}
                 imageCapabilities={imageCapabilities}
-                onReplaceRef={(file) => {
-                  void handleReplaceRef(file);
+                onUploadRefs={(files, replaceId) => {
+                  void handleUploadRefs(files, replaceId);
                 }}
                 onOpenMaskEditor={openMaskEditor}
-                onSwitchToReference={() => { setMask(null); setRestoredMask(''); setConfig((current) => ({ ...current, mode: 'reference' })); }}
+                choosingOriginal={choosingOriginal}
+                onChoosingOriginalChange={setChoosingOriginal}
+                onSwitchToReference={() => {
+                  const first = referenceImages[0] || refImage;
+                  const source = first?.recordId ? (sourceRecord?.id === first.recordId ? sourceRecord : results.find((record) => record.id === first.recordId) || null) : null;
+                  setRefImage(first); setSourceRecord(source); setMask(null); setRestoredMask('');
+                  setConfig((current) => ({ ...current, mode: 'reference', refImages: referenceImages }));
+                }}
                 sourceRecord={sourceRecord}
                 maskStrokes={maskStrokes}
                 tone={tone}
@@ -517,7 +580,7 @@ export function CreativeStudio({ onOpenStyles, onOpenGallery, onSubmitBatch, onC
           regionPrompt={config.prompt}
           onClose={() => setMaskEditorOpen(false)}
           onApply={async (nextMask, prompt, maskDataUrl = '') => {
-            await writeWorkspaceDraft('studio', { config: { ...config, prompt, mode: 'edit' }, refImage, sourceRecord, mask: nextMask, tone, maskDataUrl });
+            await writeWorkspaceDraft('studio', { ...currentDraftRef.current, config: { ...config, prompt, mode: 'edit' }, refImage, sourceRecord, mask: nextMask, tone, maskDataUrl });
             setMask(nextMask);
             setRestoredMask(maskDataUrl);
             setConfig((current) => ({ ...current, prompt, mode: 'edit' }));

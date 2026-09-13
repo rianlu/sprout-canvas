@@ -17,7 +17,7 @@ import type { QueueSubmitInput } from '../lib/api/queue';
 import type { GenerationConfig, ResultRecord } from '../types/generation';
 import type { ServerConfig } from '../types/provider';
 import { getRecordDataUrl, writeWorkspaceDraft } from '../lib/storage/gallery-db';
-import { recipeDraft, sourceImageDraft, type StudioDraft } from '../lib/image/recipe';
+import { recipeDraft, sourceImageDraft, styleTemplateSnapshot, type StudioDraft } from '../lib/image/recipe';
 import type { StyleRecord } from '../../shared/style-contract.mjs';
 import { sizePreset, resolveSize } from '../lib/api/generation';
 import { randomId } from '../lib/random/id';
@@ -98,7 +98,7 @@ export function App() {
   const useStyle = useCallback(async (style: StyleRecord) => {
     const draft: StudioDraft = {
       config: { mode: 'text', prompt: style.prompt, imageCount: 1, refImages: [] },
-      styleId: style.id, styleName: style.name, refImage: null, sourceRecord: null, mask: null, maskDataUrl: '', tone: 'none',
+      styleId: style.id, styleName: style.name, styleTemplate: styleTemplateSnapshot(style), refImage: null, sourceRecord: null, mask: null, maskDataUrl: '', tone: 'none',
     };
     await writeWorkspaceDraft('studio-transfer', draft);
     setStudioRevision((value) => value + 1);

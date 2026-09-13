@@ -19,6 +19,12 @@ assert.throws(() => validateGenerationSubmission(submission('bad-quality', { qua
 assert.throws(() => validateGenerationSubmission(submission('bad-mask', { mask: MASK_URL })), /需要参考图/);
 assert.throws(() => validateGenerationSubmission(submission('refs', { references: Array(5).fill({ id: 'ref', name: 'ref', dataUrl: PNG_URL }) })), /最多/);
 const edit = validateGenerationSubmission(submission('edit', { references: [{ id: 'ref', name: 'ref.png', dataUrl: PNG_URL }], mask: MASK_URL }));
+const references = Array.from({ length: 4 }, (_, index) => ({ id: `ref-${index}`, name: `reference-${index + 1}.png`, dataUrl: PNG_URL }));
+const multiReference = validateGenerationSubmission(submission('four-references', { references }));
+assert.equal(multiReference.clientContext.mode, 'reference');
+assert.deepEqual(toImagesPayload(multiReference).ref_images.map((ref) => ref.name), references.map((ref) => ref.name));
+assert.deepEqual(generationRecipe(multiReference).references.map((ref) => ref.id), references.map((ref) => ref.id));
+assert.throws(() => validateGenerationSubmission(submission('multiple-edit-originals', { references, mask: MASK_URL })), /只能使用一张原图/);
 validateSubmissionImages(edit);
 assert.equal(edit.clientContext.mode, 'edit');
 assert.equal(generationRecipe(edit).hasMask, true);

@@ -251,7 +251,8 @@ try {
   await page.evaluate((text) => navigator.clipboard.writeText(text), clipboardText); await paste(page);
   assert.equal(await input(page).inputValue(), clipboardText);
   await screenshot(page, 'pasted-reference');
-  await page.getByRole('button', { name: '局部涂抹修改', exact: true }).click();
+  assert.equal(await page.locator('.studio-reference-area').getByRole('button', { name: /^(局部涂抹修改|绘制蒙版|编辑蒙版)$/ }).count(), 0);
+  await page.getByRole('button', { name: '局部重绘', exact: true }).click();
   const mask = page.getByRole('dialog', { name: '局部重绘工作区', exact: true }); await mask.waitFor();
   const canvas = mask.getByLabel('蒙版画布, 按住拖动涂抹');
   await until(async () => (await canvas.boundingBox())?.width > 0, 'mask canvas ready');
@@ -272,7 +273,9 @@ try {
   await screenshot(page, 'masked-paste-protected');
   checks.push('真实剪贴板载入空参考区, 普通文字正常粘贴, 已有图片与编辑蒙版均不被覆盖且无弹窗或生成');
 
-  await page.locator('.studio-rail input[type=file]').setInputFiles({ name: '手动替换.png', mimeType: 'image/png', buffer: imageB });
+  const replacement = page.waitForEvent('filechooser');
+  await page.getByRole('button', { name: '更换图片', exact: true }).click();
+  await (await replacement).setFiles({ name: '手动替换.png', mimeType: 'image/png', buffer: imageB });
   await until(async () => (await reference.getAttribute('src')) !== firstImage, 'explicit image replacement');
   assert.equal((await stored(page)).data.mask, null);
   await newCreation(page);

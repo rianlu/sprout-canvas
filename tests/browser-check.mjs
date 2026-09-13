@@ -105,7 +105,7 @@ async function useTemplate(page, id) {
   const style = styles.find((item) => item.id === id);
   await nav(page, '风格库');
   await page.locator('main article').filter({ has: page.getByRole('heading', { name: style.name, exact: true }) }).getByRole('button', { name: '发送到单图', exact: true }).click();
-  await page.getByRole('button', { name: style.name, exact: true }).waitFor();
+  await page.getByRole('group', { name: '已选提示词模板' }).getByRole('heading', { name: style.name, exact: true }).waitFor();
 }
 async function screenshot(page, name, fullPage = false) {
   await page.evaluate(async () => { await document.fonts.ready; });
@@ -293,7 +293,7 @@ try {
 
   // Save a real brush mask, navigate away and reload without losing it.
   await page.locator('.studio-rail input[type=file]').setInputFiles({ name: 'reference.png', mimeType: 'image/png', buffer: png(640, 360) });
-  await page.locator('.studio-rail').getByRole('button', { name: '局部涂抹修改', exact: true }).click();
+  await page.locator('.studio-rail').getByRole('button', { name: '局部重绘', exact: true }).click();
   const maskDialog = page.getByRole('dialog', { name: /局部重绘/ });
   await maskDialog.waitFor();
   await drawMask(page, maskDialog);
@@ -558,7 +558,7 @@ try {
   await watercolorCard.getByRole('button', { name: '发送到单图', exact: true }).click();
   await sp.getByText(`已载入 ${watercolor.name}, 可修改后开始绘制`, { exact: true }).waitFor();
   assert.equal(await stylePrompt.inputValue(), watercolor.prompt);
-  await sp.getByRole('button', { name: watercolor.name, exact: true }).waitFor();
+  await sp.getByRole('group', { name: '已选提示词模板' }).getByRole('heading', { name: watercolor.name, exact: true }).waitFor();
   const sentStyle = await workspaceDraft(sp);
   assert.equal(sentStyle.styleId, watercolor.id);
   assert.equal(sentStyle.config.mode, 'text');
@@ -568,7 +568,7 @@ try {
   await sp.reload();
   await stylePrompt.waitFor();
   assert.equal(await stylePrompt.inputValue(), watercolor.prompt);
-  await sp.getByRole('button', { name: watercolor.name, exact: true }).waitFor();
+  await sp.getByRole('group', { name: '已选提示词模板' }).getByRole('heading', { name: watercolor.name, exact: true }).waitFor();
   assert.equal(await sp.getByText(/^已载入 .*, 可修改后开始绘制/).count(), 0, 'reload does not replay the transfer');
   assert.equal((await jobs(sp)).length, 0);
   assert.equal((await rows(sp, 'outbox')).length, 0);
@@ -595,7 +595,7 @@ try {
   await longStyleDialog.getByRole('button', { name: '发送到单图', exact: true }).click();
   await sp.getByText(`已载入 ${longStyle.name}, 可修改后开始绘制`, { exact: true }).waitFor();
   assert.equal(await stylePrompt.inputValue(), longStyle.prompt);
-  await sp.getByRole('button', { name: longStyle.name, exact: true }).waitFor();
+  await sp.getByRole('group', { name: '已选提示词模板' }).getByRole('heading', { name: longStyle.name, exact: true }).waitFor();
   const reviewedTemplate = `${longStyle.prompt}\n主题: 植物研究所, 使用薄荷绿与奶油黄色.`;
   await stylePrompt.fill(reviewedTemplate);
   await until(async () => (await workspaceDraft(sp))?.config?.prompt === reviewedTemplate, 'reviewed long template saved');
@@ -858,7 +858,7 @@ try {
   await closeQueue(ep);
 
   // Clearing a mask cannot silently turn an edit into whole-image generation.
-  await ep.locator('.studio-rail').getByRole('button', { name: '局部涂抹修改', exact: true }).click();
+  await ep.locator('.studio-rail').getByRole('button', { name: '编辑蒙版', exact: true }).click();
   await wideMask.getByRole('button', { name: '清空蒙版', exact: true }).click();
   await wideMask.getByRole('button', { name: '保存并应用蒙版', exact: true }).click();
   await wideMask.waitFor({ state: 'hidden' });
@@ -884,7 +884,7 @@ try {
   checks.push('清空蒙版保持编辑模式并阻止提交, 显式切换参考图后可修改参数, 展馆编辑入口一致');
 
   // An explicit template transfer starts text creation, even after editing an output.
-  await ep.locator('.studio-rail').getByRole('button', { name: '局部涂抹修改', exact: true }).click();
+  await ep.locator('.studio-rail').getByRole('button', { name: '绘制蒙版', exact: true }).click();
   await wideMask.waitFor();
   await drawMask(ep, wideMask);
   await wideMask.getByLabel('局部重绘提示词').fill('这份旧蒙版要求不能影响风格模板');
@@ -899,7 +899,7 @@ try {
     const prompt = ep.getByLabel('画面提示词', { exact: true });
     await prompt.waitFor();
     assert.equal(await prompt.inputValue(), watercolor.prompt);
-    await ep.getByRole('button', { name: watercolor.name, exact: true }).waitFor();
+    await ep.getByRole('group', { name: '已选提示词模板' }).getByRole('heading', { name: watercolor.name, exact: true }).waitFor();
     assert.equal(await ep.getByRole('region', { name: '局部重绘参数', exact: true }).count(), 0);
     assert.equal(await wideMask.count(), 0);
     const draft = await workspaceDraft(ep);
@@ -1170,7 +1170,7 @@ try {
   await dp.locator('.studio-rail input[type=file]').setInputFiles(referenceFile);
   await until(async () => (await workspaceDraft(dp))?.refImage?.name === referenceFile.name, 'unsubmitted reference saved');
   await dp.reload();
-  await dp.locator('.studio-rail').getByRole('button', { name: '局部涂抹修改', exact: true }).waitFor();
+  await dp.locator('.studio-rail').getByRole('button', { name: '局部重绘', exact: true }).waitFor();
   assert.equal(await dp.getByLabel('画面提示词', { exact: true }).inputValue(), draftPrompt);
   assert.equal((await workspaceDraft(dp)).config.aspectRatio, '16:9');
   assert.equal((await workspaceDraft(dp)).refImage.name, referenceFile.name);
@@ -1232,7 +1232,7 @@ try {
   await until(async () => (await jobs(dp)).some((job) => job.status === 'running'), 'unchanged completed draft submitted again');
   assert.equal((await workspaceDraft(dp)).config.prompt, failedDraftPrompt, 'explicitly resubmitting the open editor creates a recoverable draft again');
   await dp.reload();
-  await dp.locator('.studio-rail').getByRole('button', { name: '局部涂抹修改', exact: true }).waitFor();
+  await dp.locator('.studio-rail').getByRole('button', { name: '局部重绘', exact: true }).waitFor();
   assert.equal(await dp.getByLabel('画面提示词', { exact: true }).inputValue(), failedDraftPrompt);
   releaseImage(); releaseImage = undefined; holdImage = undefined;
   await waitRecords(dp, 6);
@@ -1250,16 +1250,18 @@ try {
   await closeQueue(dp);
   const nextDraftPrompt = '生成期间修改的新文案必须保留';
   await dp.getByLabel('画面提示词', { exact: true }).fill(nextDraftPrompt);
-  await dp.locator('.studio-rail input[type=file]').setInputFiles({ ...referenceFile, name: 'next-draft.png', buffer: png(360, 640) });
+  const nextDraftFile = dp.waitForEvent('filechooser');
+  await dp.getByRole('button', { name: '更换图片', exact: true }).click();
+  await (await nextDraftFile).setFiles({ ...referenceFile, name: 'next-draft.png', buffer: png(360, 640) });
   await until(async () => (await workspaceDraft(dp))?.refImage?.name === 'next-draft.png', 'new draft saved while the previous one is running');
   releaseImage(); releaseImage = undefined; holdImage = undefined;
   await waitRecords(dp, 7);
   await until(async () => (await jobs(dp)).filter((job) => job.status === 'succeeded').every((job) => job.acknowledgedAt), 'all successful jobs acknowledged');
   await dp.reload();
-  await dp.locator('.studio-rail').getByRole('button', { name: '局部涂抹修改', exact: true }).waitFor();
+  await dp.locator('.studio-rail').getByRole('button', { name: '局部重绘', exact: true }).waitFor();
   assert.equal(await dp.getByLabel('画面提示词', { exact: true }).inputValue(), nextDraftPrompt);
   assert.equal((await workspaceDraft(dp)).refImage.name, 'next-draft.png');
-  await dp.locator('.studio-rail').getByRole('button', { name: '局部涂抹修改', exact: true }).click();
+  await dp.locator('.studio-rail').getByRole('button', { name: '局部重绘', exact: true }).click();
   const newDraftMask = dp.getByRole('dialog', { name: /局部重绘工作区/ });
   await drawMask(dp, newDraftMask);
   await newDraftMask.getByLabel('局部重绘提示词').fill('保留尚未提交的局部修改');

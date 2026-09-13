@@ -8,7 +8,7 @@ import { initAuth, sessionFromRequest, handleAuthStatus, handleAuthLogin, handle
 import { initText, stopText, handleTextGeneration, handleTextResult } from './server/text.mjs';
 import { getTextProviderCircuitState, isTextProviderCircuitOpen } from './server/text-routing.mjs';
 import { createStateStore } from './server/state-store.mjs';
-import { validateGenerationSubmission, toImagesPayload, requestError } from './shared/generation-contract.mjs';
+import { validateGenerationSubmission, toImagesPayload, requestError, MAX_REFERENCE_IMAGES } from './shared/generation-contract.mjs';
 import * as queue from './server/queue.mjs';
 import { createStyleStore } from './server/style-store.mjs';
 import { createAdminAuth } from './server/admin-auth.mjs';
@@ -56,7 +56,7 @@ async function configResponse(req, res) {
     const state = getTextProviderCircuitState(provider.id);
     return { id: provider.id, name: provider.name, status: open ? 'cooldown' : state.lastError ? 'degraded' : state.lastSuccessAt ? 'available' : 'untested', failures: state.failures, openUntil: state.openUntil, lastSuccessAt: state.lastSuccessAt || 0 };
   });
-  json(res, 200, { ...publicConfig(config), imageChannels, textChannels, imageCapabilities: { customSizes: config.imageProviders.some((provider) => provider.generationMode === 'images' && /^gpt-image-2(?:-|$)/.test(provider.imageModel)), formats: [...new Set(config.imageProviders.flatMap((provider) => provider.capabilities.outputFormats))], exactSize: config.imageProviders.every((provider) => provider.capabilities.exactSize), maxReferences: 4 } });
+  json(res, 200, { ...publicConfig(config), imageChannels, textChannels, imageCapabilities: { customSizes: config.imageProviders.some((provider) => provider.generationMode === 'images' && /^gpt-image-2(?:-|$)/.test(provider.imageModel)), formats: [...new Set(config.imageProviders.flatMap((provider) => provider.capabilities.outputFormats))], exactSize: config.imageProviders.every((provider) => provider.capabilities.exactSize), maxReferences: MAX_REFERENCE_IMAGES } });
 }
 
 async function submit(req, res, batch = false) {

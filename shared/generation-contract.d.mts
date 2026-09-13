@@ -26,6 +26,7 @@ export const GENERATION_DEFAULTS: Readonly<Pick<GenerationRequest, 'size' | 'qua
 export const IMAGE_SIZES: readonly string[];
 export const SERIES_TEMPLATES: readonly SeriesTemplate[];
 export const MAX_PROMPT_LENGTH: number;
+export const MAX_REFERENCE_IMAGES: number;
 export const MAX_REFERENCE_BYTES: number;
 export function validateGenerationSubmission(input: unknown): GenerationSubmission;
 export function generationRecipe(input: GenerationSubmission, provider?: { imageModel?: string; id?: string; name?: string; generationMode?: string }): GenerationRecipe;
