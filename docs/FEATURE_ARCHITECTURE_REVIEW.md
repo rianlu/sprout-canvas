@@ -226,7 +226,7 @@ flowchart LR
 - [x] 更新 README 的 8 张预览, 保留页面靠前且不折叠, 将单图主预览高度限制到左侧功能区. 验证本次实际服务与截图流程均未发起真实模型调用.
 - [x] 运行 `git diff --check`, 保留当前分支未提交改动, 不自动提交或推送.
 
-使用本次报告复核结果: Node 日志 `/tmp/sprout-credits-final-tests.log`; 本机浏览器 `/tmp/sprout-credits-final-browser/`; Linux 浏览器 `/tmp/sprout-credits-final-linux/`; Docker `/tmp/sprout-credits-final-docker/docker-report.json`; 实际服务 `/tmp/sprout-credits-local-upgrade/report.json`. 保留停机备份 `/Users/lu/.local/share/sprout-canvas/backups/access-credits-20260912-9wL6uS/`.
+使用本次报告复核结果: Node 日志 `/tmp/sprout-credits-final-tests.log`; 本机浏览器 `/tmp/sprout-credits-final-browser/`; Linux 浏览器 `/tmp/sprout-credits-final-linux/`; Docker `/tmp/sprout-credits-final-docker/docker-report.json`; 实际服务 `/tmp/sprout-credits-local-upgrade/report.json`. 保留停机备份 `$HOME/.local/share/sprout-canvas/backups/access-credits-20260912-9wL6uS/`.
 
 使用原管理员密码进入 `http://127.0.0.1:8888/#admin` 创建首批访问码. 保持默认图片 10 点, 文字 1 点, 由管理员按测试需要调整; 将验收用零额度码保持停用, 不自动发放无限额度.
 
@@ -240,7 +240,7 @@ flowchart LR
 - [x] 通过 84 项 Node 测试与构建, Node 22 容器的 34 项异常专项, 本机 Chrome 与 Linux Chromium 各 32 + 11 + 7 + 8 组浏览器检查, 独立 Docker 12 项验收.
 - [x] 在无活动任务, 待落账操作和未领取图片时备份并更新本机 Docker. 核对运行中的前后端文件哈希, 原配置与点数数据保持不变, 原有 56 款风格/56 张示例图/50 条任务保持完整. 实际验收未调用付费模型.
 
-使用 [异常结算清单](ACCESS_CODE_CREDITS_PLAN.md#10-异常结算整改) 查看逐场景规则与报告. 保留本次完整备份 `/Users/lu/.local/share/sprout-canvas/backups/credit-exceptions-20260912-1wQl1N/` 和实际服务报告 `/tmp/sprout-credit-exceptions-release/report.json`.
+使用 [异常结算清单](ACCESS_CODE_CREDITS_PLAN.md#10-异常结算整改) 查看逐场景规则与报告. 保留本次完整备份 `$HOME/.local/share/sprout-canvas/backups/credit-exceptions-20260912-1wQl1N/` 和实际服务报告 `/tmp/sprout-credit-exceptions-release/report.json`.
 
 ### 8.4 无限额度与管理交互验收, 2026-09-12
 
@@ -260,7 +260,7 @@ flowchart LR
 - [x] 在无活动任务和未领取结果时备份并更新本机 Docker. 核对升级前后配置, 访问码, 点值, 账本, 56 款风格/56 张示例图/50 条任务的完整性, 并在实际服务验证登录, 仪表盘, 管理弹窗与前端资源哈希. 不调用真实付费模型.
 - [x] 同步 README 的登录/仪表盘/管理页面预览图和功能说明, 保留已有用户端预览排版.
 
-保留完整备份 `/Users/lu/.local/share/sprout-canvas/backups/admin-ui-20260912-73y8Eb/`, 本机浏览器报告 `/tmp/sprout-admin-redesign-browser/`, Linux 浏览器报告 `/tmp/sprout-admin-redesign-linux/`, Docker 报告 `/tmp/sprout-admin-redesign-docker/docker-report.json` 与实际服务报告 `/tmp/sprout-admin-redesign-release/report.json`.
+保留完整备份 `$HOME/.local/share/sprout-canvas/backups/admin-ui-20260912-73y8Eb/`, 本机浏览器报告 `/tmp/sprout-admin-redesign-browser/`, Linux 浏览器报告 `/tmp/sprout-admin-redesign-linux/`, Docker 报告 `/tmp/sprout-admin-redesign-docker/docker-report.json` 与实际服务报告 `/tmp/sprout-admin-redesign-release/report.json`.
 
 ### 8.6 后台交互与时间统计验收, 2026-09-12
 
@@ -271,7 +271,7 @@ flowchart LR
 - [x] 在无活动任务和未领取结果时完成备份与本机 Docker 更新. 核对 56 款风格, 56 张示例图, 51 条任务记录和 3 个未删除访问码; 比较完整配置, 风格文本/文件, 任务及额度账本摘要, 验证前后端资源与实际管理交互一致. 保留既有数据, 不调用真实模型.
 - [x] 更新 README 的仪表盘, 风格列表, 访问码列表与风格编辑预览, 使用隔离测试数据; 同步 PRD, DESIGN, DEPLOY 和项目约束.
 
-保留备份 `/Users/lu/.local/share/sprout-canvas/backups/admin-refinements-20260912-P3RAks/`, Node 报告 `/tmp/sprout-admin-refinements-tests.log`, Chrome 报告 `/tmp/sprout-admin-refinements-browser-final/`, Linux 报告 `/tmp/sprout-admin-refinements-linux/`, Docker 报告 `/tmp/sprout-admin-refinements-docker/docker-report.json` 和实际服务报告 `/tmp/sprout-admin-refinements-release/report.json`. 保持当前分支的未提交改动, 按用户授权再提交.
+保留备份 `$HOME/.local/share/sprout-canvas/backups/admin-refinements-20260912-P3RAks/`, Node 报告 `/tmp/sprout-admin-refinements-tests.log`, Chrome 报告 `/tmp/sprout-admin-refinements-browser-final/`, Linux 报告 `/tmp/sprout-admin-refinements-linux/`, Docker 报告 `/tmp/sprout-admin-refinements-docker/docker-report.json` 和实际服务报告 `/tmp/sprout-admin-refinements-release/report.json`. 保持当前分支的未提交改动, 按用户授权再提交.
 
 ### 8.7 前台用户浮窗与近期画卷验收, 2026-09-12
 
@@ -282,7 +282,7 @@ flowchart LR
 - [x] 通过 100 项 Node 自动测试与 TypeScript/Vite 构建, 本机 Chrome 与 Linux Chromium 各 75 组浏览器检查, Node 22.23.2 独立 Docker 13 项验收. 使用虚拟上游验证生成与结算, 不调用真实模型.
 - [x] 在无活动任务和未领取结果时备份并更新本机 Docker. 核对配置, 56 款风格/56 张示例图, 51 条任务和 3 个未删除访问码及账本摘要保持一致; 验证实际前后端文件哈希, 管理员登录和访问名称字段, 确认服务健康且无页面脚本错误.
 
-保留完整备份 `/Users/lu/.local/share/sprout-canvas/backups/workspace-ui-20260912-WcRZXx/`, Chrome 报告 `/tmp/sprout-workspace-browser-final/`, Linux 报告 `/tmp/sprout-workspace-linux/`, Docker 报告 `/tmp/sprout-workspace-docker/docker-report.json`, 预览报告 `/tmp/sprout-workspace-previews/report.json` 和实际服务报告 `/tmp/sprout-workspace-release/report.json`. 保留当前分支的未提交改动, 按用户授权再提交或推送.
+保留完整备份 `$HOME/.local/share/sprout-canvas/backups/workspace-ui-20260912-WcRZXx/`, Chrome 报告 `/tmp/sprout-workspace-browser-final/`, Linux 报告 `/tmp/sprout-workspace-linux/`, Docker 报告 `/tmp/sprout-workspace-docker/docker-report.json`, 预览报告 `/tmp/sprout-workspace-previews/report.json` 和实际服务报告 `/tmp/sprout-workspace-release/report.json`. 保留当前分支的未提交改动, 按用户授权再提交或推送.
 
 ### 8.8 提示词润色与参考图输入验收, 2026-09-12
 
@@ -294,7 +294,7 @@ flowchart LR
 - [x] 在无活动图片/文字和未领取图片时停机备份并更新本机 Docker. 核对原配置, 56 款风格/56 张示例图, 52 条任务, 3 个未删除访问码及账本摘要保持一致; 验证前后端文件哈希和实际管理交互, 服务健康且无页面脚本错误. 不调用真实付费模型.
 - [x] 同步帮助, PRD, DESIGN, 额度清单和项目约束, 更新 README 四张前台预览. 保持单图主预览高度与左侧功能区一致, 保留页面预览靠前且不折叠.
 
-保留完整备份 `/Users/lu/.local/share/sprout-canvas/backups/studio-input-20260912-VR2tNW/`, Node 报告 `/tmp/sprout-input-tests.log`, Chrome 报告 `/tmp/sprout-input-browser-final/`, Linux 报告 `/tmp/sprout-input-linux/`, Docker 报告 `/tmp/sprout-input-docker/docker-report.json`, 预览报告 `/tmp/sprout-input-previews/report.json` 和实际服务报告 `/tmp/sprout-input-release/report.json`. 保留当前分支的未提交改动, 按用户授权再提交或推送.
+保留完整备份 `$HOME/.local/share/sprout-canvas/backups/studio-input-20260912-VR2tNW/`, Node 报告 `/tmp/sprout-input-tests.log`, Chrome 报告 `/tmp/sprout-input-browser-final/`, Linux 报告 `/tmp/sprout-input-linux/`, Docker 报告 `/tmp/sprout-input-docker/docker-report.json`, 预览报告 `/tmp/sprout-input-previews/report.json` 和实际服务报告 `/tmp/sprout-input-release/report.json`. 保留当前分支的未提交改动, 按用户授权再提交或推送.
 
 ### 8.9 访问码操作简化验收, 2026-09-13
 
@@ -304,7 +304,7 @@ flowchart LR
 - [x] 通过 102 项 Node 自动测试与 TypeScript/Vite 构建, 本机 Chrome 和 Linux Chromium 各 85 组浏览器检查, Node 22.23.2 独立 Docker 13 项验收. 全部生成场景使用隔离数据与虚拟上游.
 - [x] 在无活动图片/文字和未领取图片时备份并更新本机 Docker. 核对配置, 56 款风格/56 张示例图, 52 条任务, 3 个未删除访问码及账本摘要保持一致; 验证实际确认区无原因输入且常态无刷新按钮, 前后端文件哈希一致, 服务健康且无页面脚本错误. 实际服务验证只打开并取消确认, 不删除/重置原访问码, 不调用真实模型.
 
-保留完整备份 `/Users/lu/.local/share/sprout-canvas/backups/admin-actions-20260913-kVPcBQ/`, Node 报告 `/tmp/sprout-admin-actions-tests.log`, Chrome 报告 `/tmp/sprout-admin-actions-browser/`, Linux 报告 `/tmp/sprout-admin-actions-linux/`, Docker 报告 `/tmp/sprout-admin-actions-docker/docker-report.json` 和实际服务报告 `/tmp/sprout-admin-actions-release/report.json`. 按本节报告核对已验收范围, 远端验证以对应提交的 Verify 结果为准.
+保留完整备份 `$HOME/.local/share/sprout-canvas/backups/admin-actions-20260913-kVPcBQ/`, Node 报告 `/tmp/sprout-admin-actions-tests.log`, Chrome 报告 `/tmp/sprout-admin-actions-browser/`, Linux 报告 `/tmp/sprout-admin-actions-linux/`, Docker 报告 `/tmp/sprout-admin-actions-docker/docker-report.json` 和实际服务报告 `/tmp/sprout-admin-actions-release/report.json`. 按本节报告核对已验收范围, 远端验证以对应提交的 Verify 结果为准.
 
 ## 9. 当前剩余验收与处理清单
 

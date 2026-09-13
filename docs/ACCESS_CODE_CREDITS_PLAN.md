@@ -118,7 +118,7 @@
 | README 预览 | 更新 8 张页面图, 主预览按左侧功能区高度截取, 页面预览保持靠前且不折叠 | `docs/images/`, `/tmp/sprout-readme-previews/report.json` |
 | Git 检查 | `git diff --check` 通过, 保留当前分支所有既有修改, 未提交或推送 | 当前工作区 |
 
-- 保留本次停机完整备份: `/Users/lu/.local/share/sprout-canvas/backups/access-credits-20260912-9wL6uS/`.
+- 保留本次停机完整备份: `$HOME/.local/share/sprout-canvas/backups/access-credits-20260912-9wL6uS/`.
 - 使用原管理员密码登录 `http://127.0.0.1:8888/#admin`, 在访问码管理中创建并分发首批有限额度码. 默认图片 10 点, 文字 1 点, 可在后台修改.
 - 保留实际验收使用的零额度码为停用状态, 不将其作为可分发码. 实际服务验收未发起图片或文字生成, 未消费真实 Provider 额度.
 - 将模拟上游结算验证与真实模型效果验证分开, 不将本次结果理解为所有模型效果或大规模容量均已验证.
@@ -153,7 +153,7 @@
 | 独立 Docker | 12 项通过, 验证账本/点值/风格持久化, 整卷恢复, 健康检查和权限 | `/tmp/sprout-credits-exceptions-docker/docker-report.json` |
 | 本机实际服务 | 前后端文件哈希一致, 登录与零额度浏览通过; 原配置, 访问码, 余额, 流水以及 56 款风格/56 张示例图/50 条任务保持完整 | `/tmp/sprout-credit-exceptions-release/report.json` |
 
-- 保留异常整改前的完整停机备份: `/Users/lu/.local/share/sprout-canvas/backups/credit-exceptions-20260912-1wQl1N/`.
+- 保留异常整改前的完整停机备份: `$HOME/.local/share/sprout-canvas/backups/credit-exceptions-20260912-1wQl1N/`.
 - 将本次新增的零额度验收码保持停用. 不修改原访问码的点数与价格; 实际服务验收未发起图片或文字生成.
 - 使用隔离虚拟上游验证故障和结算, 不将模拟结果等同于所有真实 Provider 的效果保证. 保留当前未提交改动, 按用户授权再提交或推送.
 
@@ -177,7 +177,7 @@
 | 独立 Docker | 13 项通过, 验证无限额度使用和删除状态跨重启/重建/整卷恢复保留 | `/tmp/sprout-credits-ui-docker/docker-report.json` |
 | 本机实际服务 | 前后端哈希一致, 管理弹窗/切换额度/扣点标记/删除通过; 原有访问码, 配置, 点值与账本保持不变, 56 款风格/56 张示例图/50 条任务完整 | `/tmp/sprout-credit-ui-release/report.json` |
 
-- 保留完整停机备份: `/Users/lu/.local/share/sprout-canvas/backups/credit-ui-20260912-T8H8Qi/`.
+- 保留完整停机备份: `$HOME/.local/share/sprout-canvas/backups/credit-ui-20260912-T8H8Qi/`.
 - 删除本轮新增的临时验收码, 不改动原访问码. 实际服务验收不发起生成请求, 不消费真实 Provider 额度.
 - 保留当前分支的全部未提交改动, 按用户授权再提交或推送.
 

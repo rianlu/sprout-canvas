@@ -3,6 +3,7 @@ import { StitchIcon } from '../ui/StitchIcon';
 import type { PageKey } from '../../app/App';
 import { compactPoints, useCredits } from '../../lib/credits';
 import { UserPopover } from './UserPopover';
+import { version as appVersion } from '../../../package.json';
 
 export interface AppShellProps {
   page: PageKey;
@@ -108,7 +109,7 @@ export function AppShell({ page, onPageChange, onOpenHelp, onSignOut, queueCount
           </div>
           <div className="flex items-center gap-space-lg">
             <button type="button" onClick={onOpenHelp} className="font-body-sm text-body-sm hover:text-primary">使用帮助与创作守则</button>
-            <span className="font-meta-sm text-meta-sm text-outline">v3.5.0-stitch</span>
+            <span className="font-meta-sm text-meta-sm text-outline">v{appVersion}</span>
           </div>
         </div>
       </footer>
