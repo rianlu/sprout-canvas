@@ -14,3 +14,45 @@ services:
       HOST: 0.0.0.0
     restart: unless-stopped
     stop_grace_period: 460s
+
+  cloudflared:
+    image: cloudflare/cloudflared:2026.9.0
+    profiles:
+      - tunnel
+    command:
+      - tunnel
+      - --no-autoupdate
+      - --protocol
+      - http2
+      - --metrics
+      - 127.0.0.1:2000
+      - --grace-period
+      - 3m
+      - --url
+      - http://sprout-canvas:8787
+    environment:
+      TUNNEL_EDGE_IP_VERSION: ${TUNNEL_EDGE_IP_VERSION:-auto}
+    depends_on:
+      sprout-canvas:
+        condition: service_healthy
+    networks:
+      - default
+      - tunnel-egress
+    restart: unless-stopped
+    stop_grace_period: 190s
+    healthcheck:
+      test: ["CMD", "cloudflared", "tunnel", "--metrics", "127.0.0.1:2000", "ready"]
+      interval: 30s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+    logging:
+      driver: local
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+networks:
+  default:
+  tunnel-egress:
+    enable_ipv6: ${TUNNEL_IPV6:-false}

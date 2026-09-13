@@ -113,6 +113,10 @@
 
 Docker 默认使用主机端口 `8888`. 持久化目录, 密码规则, HTTPS 与更新步骤见 [部署与配置](docs/DEPLOY.md#32-docker).
 
+没有域名时, 可启用 [临时公网入口](docs/DEPLOY.md#321-临时公网入口), 让 Cloudflare Tunnel 随 Docker 项目一起启动和停止.
+
+已有域名时, 按 [正式公网入口](docs/DEPLOY.md#322-正式公网入口) 配置固定网址, 继续复用现有 Docker 部署.
+
 已有共享密码版按 [升级步骤](docs/DEPLOY.md#43-从共享密码版升级) 迁移, 原密码不再作为生成入口.
 
 <details>

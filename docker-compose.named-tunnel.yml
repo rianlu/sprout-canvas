@@ -1,0 +1,20 @@
+services:
+  cloudflared:
+    command:
+      - tunnel
+      - --no-autoupdate
+      - --protocol
+      - http2
+      - --metrics
+      - 127.0.0.1:2000
+      - --grace-period
+      - 3m
+      - run
+      - --token-file
+      - /run/secrets/cloudflare_tunnel_token
+    secrets:
+      - cloudflare_tunnel_token
+
+secrets:
+  cloudflare_tunnel_token:
+    environment: TUNNEL_TOKEN
