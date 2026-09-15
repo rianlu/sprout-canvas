@@ -26,7 +26,7 @@ export function selectStudioFeed(jobs: QueueJob[], records: ResultRecord[], edit
   for (const job of matchingJobs) {
     if (job.supersededBy || job.archivedAt || savedJobs.has(job.id) || savedRequests.has(job.requestId) || savedIds.has(job.clientContext?.placeholderId || '')) continue;
     if (job.localOnly && job.retryOf && byJob.has(job.retryOf)) continue;
-    if (!['pending', 'running', 'failed', 'interrupted', 'expired', 'unsubmitted'].includes(job.status) && !(job.status === 'succeeded' && !job.acknowledgedAt)) continue;
+    if (!['pending', 'running', 'failed', 'interrupted', 'expired', 'unsubmitted', 'submitting'].includes(job.status) && !(job.status === 'succeeded' && !job.acknowledgedAt)) continue;
     entries.push({ kind: 'job', job, key: job.clientContext?.placeholderId || job.requestId || job.id, batchId: job.clientContext?.batchId || job.requestId || job.id, submittedAt: job.queuedAt });
   }
   if (!entries.length) return [];

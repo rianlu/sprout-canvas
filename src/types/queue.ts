@@ -1,14 +1,21 @@
 import type { GenerationContext, GenerationRecipe } from '../../shared/generation-contract.mjs';
 import type { CreditCharge, CreditBalance, CreditPrices } from '../../shared/credits-contract.mjs';
 
-export type QueueStatus = 'pending' | 'running' | 'succeeded' | 'failed' | 'canceled' | 'interrupted' | 'expired' | 'unsubmitted';
+export type QueueStatus = 'pending' | 'running' | 'succeeded' | 'failed' | 'canceled' | 'interrupted' | 'expired' | 'unsubmitted' | 'submitting';
 export type QueueClientContext = GenerationContext;
+
+export interface QueueDelivery {
+  phase: 'downloading' | 'saving' | 'confirming' | 'error';
+  failedPhase?: 'downloading' | 'saving' | 'confirming';
+  error?: string;
+}
 
 export interface QueueJob {
   id: string;
   requestId: string;
   credit?: CreditCharge | null;
   settlementPending?: boolean;
+  delivery?: QueueDelivery;
   status: QueueStatus;
   error: string;
   providerId: string;

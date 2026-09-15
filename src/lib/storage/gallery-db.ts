@@ -9,7 +9,7 @@ const DB_NAME = 'img-gen-gallery';
 const DB_VERSION = 4;
 const LEGACY_KEY = 'sprout_canvas_gallery_v1';
 type Metadata = Omit<ResultRecord, 'dataUrl'> & { legacyDataUrl?: string };
-export type Outbox = { requestId: string; input: GenerationSubmission; jobId?: string; savedAt: number; error?: string; retryRequestId?: string };
+export type Outbox = { requestId: string; input: GenerationSubmission; jobId?: string; submissionConfirmed?: boolean; savedAt: number; error?: string; retryRequestId?: string };
 let connection: Promise<IDBDatabase> | undefined;
 let migration: Promise<void> | undefined;
 type WorkspaceSubmission = { revision: string; requestIds: string[]; completedIds: string[]; scope?: unknown };
@@ -306,6 +306,19 @@ export async function saveOutbox(input: GenerationSubmission, jobId?: string) {
   return saveOutboxBatch([{ input, jobId }]);
 }
 
+/** Link an accepted job without recreating an outbox already consumed by another receipt. */
+export async function markOutboxAccepted(jobs: Array<{ id: string; requestId: string }>, responseConfirmed = true) {
+  const db = await openGalleryDb();
+  await transact(db, ['outbox'], async (tx) => {
+    const outbox = tx.objectStore('outbox');
+    for (const job of jobs) {
+      const row: Outbox | undefined = await request(outbox.get(job.requestId));
+      // Polling can discover acceptance before a lost POST response is retried by the user.
+      if (row) outbox.put({ ...row, jobId: job.id, submissionConfirmed: responseConfirmed || (row.submissionConfirmed ?? Boolean(row.jobId)) }, job.requestId);
+    }
+  });
+}
+
 export async function saveOutboxBatch(entries: { input: GenerationSubmission; jobId?: string }[], replacements = new Map<string, string>()) {
   if (replacements.size) await Promise.all([...draftWrites.values()]);
   const db = await openGalleryDb();
@@ -325,7 +338,7 @@ export async function saveOutboxBatch(entries: { input: GenerationSubmission; jo
     for (const { snapshot, images, jobId } of prepared) {
       images.forEach(({ id, blob }) => tx.objectStore('artifacts').put(blob, id));
       const previous: Outbox | undefined = await request(tx.objectStore('outbox').get(snapshot.requestId));
-      tx.objectStore('outbox').put({ ...previous, requestId: snapshot.requestId, input: snapshot, jobId: jobId || previous?.jobId, savedAt: previous?.savedAt || Date.now() }, snapshot.requestId);
+      tx.objectStore('outbox').put({ ...previous, requestId: snapshot.requestId, input: snapshot, jobId: jobId || previous?.jobId, submissionConfirmed: jobId ? true : previous?.submissionConfirmed, savedAt: previous?.savedAt || Date.now() }, snapshot.requestId);
     }
     if (replacements.size) {
       const placeholders = new Map<string, string>();
@@ -414,7 +427,7 @@ export async function unconfirmedWorkspaceBatch(key: 'studio' | 'series', data: 
   if (!entry?.submission || entry.revision !== entry.submission.revision || !sameDraftData(entry.data, data)) return [];
   const outbox = await listOutbox();
   const rows = entry.submission.requestIds.map((id) => outbox.find((row) => row.requestId === id)).filter((row): row is Outbox => Boolean(row));
-  if (!rows.some((row) => !row.jobId)) return [];
+  if (!rows.some((row) => row.submissionConfirmed === false || !row.jobId)) return [];
   const inputs = await Promise.all(rows.map((row) => getOutboxInput(row.requestId)));
   return inputs.filter((input): input is GenerationSubmission => Boolean(input));
 }

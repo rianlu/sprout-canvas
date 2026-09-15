@@ -31,6 +31,8 @@ import { CreditCost } from '../ui/CreditCost';
 import type { CreditCharge } from '../../../shared/credits-contract.mjs';
 import type { PromptHistory } from '../../lib/prompt-history';
 import { PromptActivityBorder } from '../ui/PromptActivityBorder';
+import type { QueueDelivery } from '../../types/queue';
+import { deliveryMessage } from '../../lib/queue-presentation';
 
 /* ============ 单图创作 · 控制轨 (照搬 Stitch 单图稿 LEFT CONTROL PANEL, 类名原样) ============ */
 
@@ -595,8 +597,9 @@ export interface QueueJobView {
   recoveryUnlimited?: boolean;
   credit?: CreditCharge | null;
   settlementPending?: boolean;
+  delivery?: QueueDelivery;
   id: string;
-  status: 'queued' | 'running' | 'saving' | 'failed';
+  status: 'queued' | 'running' | 'receiving' | 'failed' | 'submitting' | 'unsubmitted';
   prompt: string;
   elapsedMs: number;
   position: number;
@@ -704,7 +707,13 @@ export function StitchCanvasStream(props: StitchCanvasStreamProps) {
               );
             }
             const isRunning = job.status === 'running';
-            const isSaving = job.status === 'saving';
+            const isReceiving = job.status === 'receiving';
+            const isSubmitting = job.status === 'submitting';
+            const isUnsubmitted = job.status === 'unsubmitted';
+            const receipt = deliveryMessage(job.delivery);
+            const active = isRunning || isSubmitting || isReceiving && job.delivery?.phase !== 'error';
+            const title = isReceiving ? receipt.title : isSubmitting ? '正在提交画稿' : isUnsubmitted ? '提交待确认' : isRunning ? '正在渲染' : '排队等候中';
+            const detail = isReceiving ? receipt.detail : isSubmitting ? '正在上传并等待确认' : isUnsubmitted ? '可继续提交, 已受理的任务不会重复生成' : isRunning ? `已等待 ${Math.max(1, Math.floor(job.elapsedMs / 1000))} 秒` : `第 ${job.position} 位 · 等待生成`;
             return (
               <article
                 key={entry.key}
@@ -712,29 +721,25 @@ export function StitchCanvasStream(props: StitchCanvasStreamProps) {
                 className="relative flex flex-col bg-surface-container-lowest rounded-xl p-space-md shadow-[0_8px_24px_rgba(85,95,75,0.06)] overflow-hidden"
               >
                 <div className="relative w-full aspect-square rounded-lg bg-surface-container-low overflow-hidden flex flex-col items-center justify-center p-space-lg">
-                  <div className="absolute inset-0 bg-gradient-to-tr from-surface-container via-surface-container-low to-secondary-fixed-dim/20 animate-pulse" />
+                  <div className={`absolute inset-0 bg-gradient-to-tr from-surface-container via-surface-container-low to-secondary-fixed-dim/20 ${active ? 'motion-safe:animate-pulse' : ''}`} />
                   <div className="relative z-10 flex flex-col items-center gap-space-md text-center">
                     <div className="w-16 h-16 rounded-full bg-surface-container-lowest/80 backdrop-blur-md shadow-md flex items-center justify-center text-primary">
                       <StitchIcon name="filter_vintage" size={32} />
                     </div>
                     <div className="space-y-1">
                       <h3 className="font-headline-sm text-headline-sm text-on-surface">
-                        {isSaving ? '正在保存作品' : isRunning ? '正在渲染' : '排队等候中'}
+                        {title}
                       </h3>
                       <p className="font-meta-sm text-meta-sm text-on-surface-variant truncate max-w-[240px]">
                         {job.prompt.slice(0, 40)}
                       </p>
                     </div>
                     <div className="w-48 h-2 bg-surface-container rounded-full overflow-hidden">
-                      <div className={`h-full bg-primary rounded-full ${isRunning ? 'w-1/3 animate-pulse' : 'w-0'}`} />
+                      <div className={`h-full bg-primary rounded-full ${active ? 'w-1/3 motion-safe:animate-pulse' : 'w-0'}`} />
                     </div>
                     <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-surface-bright text-on-surface-variant font-meta-sm text-meta-sm shadow-sm">
-                      <span className={`w-1.5 h-1.5 rounded-full bg-primary ${isRunning ? 'animate-pulse' : ''}`} />
-                      <span>
-                        {isSaving ? '正在保存到本地展馆' : isRunning
-                          ? `已等待 ${Math.max(1, Math.floor(job.elapsedMs / 1000))} 秒`
-                          : `第 ${job.position} 位 · 等待生成`}
-                      </span>
+                      <span className={`w-1.5 h-1.5 shrink-0 rounded-full bg-primary ${active ? 'motion-safe:animate-pulse' : ''}`} />
+                      <span className="break-words">{detail}</span>
                     </div>
                   </div>
                 </div>
@@ -742,15 +747,13 @@ export function StitchCanvasStream(props: StitchCanvasStreamProps) {
                   <span className="font-meta-sm text-meta-sm text-on-surface-variant truncate max-w-[240px]">
                     {job.prompt.slice(0, 50)}
                   </span>
-                  <button
-                    type="button"
-                    className="font-meta-sm text-meta-sm text-error hover:underline shrink-0"
-                    disabled={isRunning || isSaving}
-                    title={isSaving ? '正在保存作品, 请稍候' : isRunning ? '生成已开始, 当前无法中断' : '取消排队'}
-                    onClick={() => onCancelJob(job.id)}
-                  >
-                    中断生成
-                  </button>
+                  {isReceiving && job.delivery?.phase === 'error' ? (
+                    <button type="button" className="font-meta-sm text-meta-sm text-primary hover:underline shrink-0" disabled={job.retrying} onClick={() => onRetryJob(job.id)}>重试领取</button>
+                  ) : isUnsubmitted ? (
+                    <button type="button" className="inline-flex items-center gap-1.5 font-meta-sm text-meta-sm text-primary shrink-0" disabled={!job.canRetry || job.retrying} onClick={() => onRetryJob(job.id)}>继续提交<CreditCost /></button>
+                  ) : job.status === 'queued' ? (
+                    <button type="button" className="font-meta-sm text-meta-sm text-error hover:underline shrink-0" onClick={() => onCancelJob(job.id)}>取消排队</button>
+                  ) : <span className="font-meta-sm text-meta-sm text-outline shrink-0">{isSubmitting ? '提交中' : isReceiving ? '领取中' : '生成中'}</span>}
                 </div>
               </article>
             );

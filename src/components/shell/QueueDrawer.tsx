@@ -5,6 +5,7 @@ import { useFocusTrap } from '../../hooks/useFocusTrap';
 import type { QueueJob } from '../../types/queue';
 import { CreditStatus } from '../ui/CreditStatus';
 import { CreditCost } from '../ui/CreditCost';
+import { deliveryMessage, isQueueActive } from '../../lib/queue-presentation';
 
 export interface QueueDrawerProps {
   open: boolean;
@@ -39,10 +40,13 @@ function statusLabel(job: QueueJob): {
   if (job.status === 'failed') return { title: jobTitle(job), meta: '生成失败 · 可换服务商重试', icon: 'failed' };
   if (job.status === 'interrupted') return { title: jobTitle(job), meta: job.outcomeUnknown ? '结果未知 · 需手动处理' : '等待恢复排队', icon: 'failed' };
   if (job.status === 'expired') return { title: jobTitle(job), meta: '临时结果已过期', icon: 'failed' };
-  if (job.status === 'unsubmitted') return { title: jobTitle(job), meta: '提交待确认 · 可继续提交', icon: 'failed' };
+  if (job.status === 'submitting') return { title: jobTitle(job), meta: '正在提交 · 等待确认', icon: 'running' };
+  if (job.status === 'unsubmitted') return { title: jobTitle(job), meta: '提交待确认 · 可继续提交', icon: 'queued' };
   if (job.status === 'running')
     return { title: jobTitle(job), meta: `${formatElapsed(job.elapsedMs)} · 渲染中`, icon: 'running' };
-  if (job.status === 'succeeded') return { title: jobTitle(job), meta: '已完成', icon: 'succeeded' };
+  if (job.status === 'succeeded') return job.acknowledgedAt && !job.delivery
+    ? { title: jobTitle(job), meta: '已完成', icon: 'succeeded' }
+    : { title: jobTitle(job), meta: deliveryMessage(job.delivery).title, icon: job.delivery?.phase === 'error' ? 'queued' : 'running' };
   if (job.status === 'canceled') return { title: jobTitle(job), meta: '已取消', icon: 'succeeded' };
   return { title: jobTitle(job), meta: `排队中 · 第 ${job.yourPosition} 位`, icon: 'queued' };
 }
@@ -62,7 +66,7 @@ export function QueueDrawer({ open, onClose, jobs, onCancelJob, onRetryJob, onPr
     if (b.status === 'pending') return 1;
     return b.queuedAt - a.queuedAt;
   });
-  const activeCount = jobs.filter((j) => j.status === 'running' || j.status === 'pending').length;
+  const activeCount = jobs.filter(isQueueActive).length;
   const runningLabel = activeCount > 0 ? `${activeCount} 进行中` : '空闲';
 
   // Esc 关闭
@@ -139,11 +143,11 @@ export function QueueDrawer({ open, onClose, jobs, onCancelJob, onRetryJob, onPr
                 </div>
                 {/* 呼吸进度条: running 时有 shimmer (无假百分比) */}
                 <div className="w-full h-1.5 bg-surface-container rounded-full overflow-hidden mb-space-xs">
-                  {job.status === 'running' && <div className="h-full w-1/3 bg-primary rounded-full animate-pulse" />}
+                  {icon === 'running' && <div className="h-full w-1/3 bg-primary rounded-full motion-safe:animate-pulse" />}
                   {job.status === 'pending' && <div className="h-full w-0 bg-secondary-fixed rounded-full" />}
-                  {job.status === 'succeeded' && <div className="h-full w-full bg-primary rounded-full" />}
+                  {icon === 'succeeded' && <div className="h-full w-full bg-primary rounded-full" />}
                 </div>
-                {job.error && <p className="font-meta-sm text-meta-sm text-error mb-space-xs break-words">{job.error}</p>}
+                {(job.delivery?.error || job.error) && <p className={`font-meta-sm text-meta-sm mb-space-xs break-words ${job.status === 'unsubmitted' ? 'text-on-surface-variant' : 'text-error'}`}>{job.delivery?.error || job.error}</p>}
                 <div className="flex justify-between items-center text-on-surface-variant">
                   <span className="font-meta-sm text-meta-sm">
                     {job.status === 'running' || job.status === 'pending' ? '单任务通道 · 按序渲染' : ''}
@@ -159,7 +163,7 @@ export function QueueDrawer({ open, onClose, jobs, onCancelJob, onRetryJob, onPr
                         置顶
                       </button>}
                       {job.status === 'unsubmitted' && <button type="button" className="inline-flex items-center gap-1.5 font-meta-sm text-meta-sm text-primary" onClick={() => { void onRetryJob(job.id).catch((cause) => setError(cause.message)); }}>继续提交<CreditCost /></button>}
-                      <button
+                      {job.status === 'pending' && <button
                         type="button"
                         className="font-meta-sm text-meta-sm hover:text-error transition-colors"
                         onClick={() => {
@@ -168,8 +172,12 @@ export function QueueDrawer({ open, onClose, jobs, onCancelJob, onRetryJob, onPr
                         }}
                       >
                         取消
-                      </button>
+                      </button>}
                     </div>
+                  ) : job.status === 'submitting' ? (
+                    <span className="font-meta-sm text-meta-sm text-outline">提交中</span>
+                  ) : job.status === 'succeeded' && job.delivery?.phase === 'error' ? (
+                    <button type="button" className="font-meta-sm text-meta-sm text-primary flex items-center gap-1" onClick={() => { setError(''); void onRetryJob(job.id).catch((cause) => setError(cause.message)); }}><RefreshCw size={12} aria-hidden />重试领取</button>
                   ) : job.status === 'running' ? (
                     <span title="请求已发往上游, 无法撤回" className="font-meta-sm text-meta-sm text-outline">生成中</span>
                   ) : job.supersededBy ? (

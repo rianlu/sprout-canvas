@@ -22,6 +22,7 @@ import type { StyleRecord } from '../../shared/style-contract.mjs';
 import { sizePreset, resolveSize } from '../lib/api/generation';
 import { randomId } from '../lib/random/id';
 import type { SeriesCard } from '../lib/image/gallery';
+import { isQueueActive } from '../lib/queue-presentation';
 
 export type PageKey = 'studio' | 'series' | 'styles' | 'gallery' | 'admin';
 const pageFromHash = (): PageKey => {
@@ -143,7 +144,7 @@ export function App() {
       onPageChange={setPage}
       onOpenHelp={() => setHelpOpen(true)}
       onSignOut={() => void auth.signOut().catch(() => setMessage('退出失败, 请重试'))}
-      queueCount={queue.jobs.filter((job) => ['running', 'pending', 'unsubmitted'].includes(job.status)).length}
+      queueCount={queue.jobs.filter((job) => isQueueActive(job) || job.status === 'unsubmitted').length}
       onOpenQueue={() => setQueueOpen(true)}
     >
       {!auth.canGenerate && <div role="status" className="fixed bottom-5 left-1/2 -translate-x-1/2 z-[65] max-w-[90vw] rounded-xl bg-secondary-container text-on-secondary-container p-3 shadow-lg text-body-sm">访问码已停用或重置, 可领取已完成结果. <button type="button" className="underline" onClick={() => void auth.signOut()}>更换访问码</button></div>}

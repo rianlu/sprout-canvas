@@ -14,6 +14,7 @@ import { readDraft, writeDraft } from '../lib/storage/drafts';
 import { downloadRecords, latestSceneVersions } from '../lib/image/gallery';
 import { prepareImageFile } from '../lib/image/compress';
 import { useImageMetadata } from './useImageMetadata';
+import { isQueueActive } from '../lib/queue-presentation';
 
 export const TEMPLATES = SERIES_PRESETS;
 export const MAX_BATCH_COUNT = 8;
@@ -42,7 +43,7 @@ export interface SeriesActions {
   imageCapabilities?: ImageCapabilities;
 }
 interface SeriesDraft { version: 1; seriesId: string; reference: RefImage | null; sceneIds: string[]; shotIds: string[]; overrides: Record<string, Partial<GenerationConfig>>; stagedIds: string[]; config?: GenerationConfig; brief?: string; taskText?: string; template?: SeriesTemplate; count?: number }
-type ShotState = { kind: 'done' | 'generating' | 'waiting' | 'planned' | 'failed'; task: BatchTask; record?: ResultRecord; job?: QueueJob };
+type ShotState = { kind: 'done' | 'generating' | 'waiting' | 'planned' | 'failed' | 'submitting' | 'unsubmitted' | 'receiving'; task: BatchTask; record?: ResultRecord; job?: QueueJob };
 function readIds(key: string): string[] { try { const ids: unknown = JSON.parse(readDraft(key) || '[]'); return Array.isArray(ids) ? ids.filter((id): id is string => typeof id === 'string') : []; } catch { return []; } }
 function parseTaskLines(text: string): BatchTask[] {
   return text.split('\n').map((line) => line.trim()).filter(Boolean).map((line) => {
@@ -92,7 +93,7 @@ export function useSeriesStudio({ onSubmit, onSubmitBatch, onUpdate, results, jo
   const allSeriesResults = useMemo(() => results.filter((record) => record.kind === 'series' && record.seriesId === seriesId), [results, seriesId]);
   const seriesResults = useMemo(() => latestSceneVersions(allSeriesResults), [allSeriesResults]);
   const seriesJobs = useMemo(() => jobs.filter((job) => job.clientContext?.seriesId === seriesId), [jobs, seriesId]);
-  const activeJobs = seriesJobs.some((job) => ['pending', 'running'].includes(job.status));
+  const activeJobs = seriesJobs.some(isQueueActive);
   const metadata = useImageMetadata(seriesResults);
   const missingStaged = staged.filter((input) => !seriesJobs.some((job) => job.requestId === input.requestId && job.status !== 'unsubmitted') && !seriesResults.some((record) => record.requestId === input.requestId));
   const canContinue = missingStaged.length > 0;
@@ -100,7 +101,14 @@ export function useSeriesStudio({ onSubmit, onSubmitBatch, onUpdate, results, jo
     const sceneId = sceneIds[index];
     const record = seriesResults.find((item) => sceneId ? item.sceneId === sceneId : item.id === shotIds[index]);
     const job = seriesJobs.filter((item) => sceneId ? item.clientContext?.sceneId === sceneId : item.clientContext?.placeholderId === shotIds[index]).sort((a, b) => (b.clientContext?.version || 1) - (a.clientContext?.version || 1) || b.queuedAt - a.queuedAt)[0];
-    const kind = job?.status === 'running' ? 'generating' : job?.status === 'pending' ? 'waiting' : job && ['failed', 'expired', 'interrupted', 'unsubmitted'].includes(job.status) && (!record || (job.clientContext?.version || 1) >= (record.version || 1)) ? 'failed' : record ? 'done' : 'planned';
+    let kind: ShotState['kind'] = record ? 'done' : 'planned';
+    if (job && (!record || (job.clientContext?.version || 1) >= (record.version || 1))) {
+      if (job.status === 'submitting' || job.status === 'unsubmitted') kind = job.status;
+      else if (job.status === 'running') kind = 'generating';
+      else if (job.status === 'pending') kind = 'waiting';
+      else if (['failed', 'expired', 'interrupted'].includes(job.status)) kind = 'failed';
+      else if (job.status === 'succeeded' && !job.acknowledgedAt && record?.jobId !== job.id && record?.requestId !== job.requestId) kind = 'receiving';
+    }
     return { kind, task, record, job };
   });
 
@@ -213,7 +221,7 @@ export function useSeriesStudio({ onSubmit, onSubmitBatch, onUpdate, results, jo
 
   async function redrawShot(index: number, override?: Partial<GenerationConfig>, promptOverride?: string) {
     const shot = shots[index];
-    if (lock.current || !shot || ['generating', 'waiting'].includes(shot.kind)) return;
+    if (lock.current || !shot || ['generating', 'waiting', 'submitting', 'unsubmitted', 'receiving'].includes(shot.kind)) return;
     if (!(promptOverride ?? shot.task.prompt).trim()) { pushToast('error', '请先填写并检查本镜提示词'); return; }
     lock.current = true; setSubmitting(true);
     try {
@@ -235,12 +243,17 @@ export function useSeriesStudio({ onSubmit, onSubmitBatch, onUpdate, results, jo
     } catch (error) { pushToast('error', error instanceof Error ? error.message : '单镜重绘失败'); }
     finally { lock.current = false; setSubmitting(false); }
   }
-  function beginEdit(index: number) { const settings = { ...config, ...overrides[sceneIds[index]] }; setEditing({ index, prompt: tasks[index].prompt, aspectRatio: settings.aspectRatio, quality: settings.quality, outputFormat: settings.outputFormat }); }
+  function beginEdit(index: number) {
+    if (lock.current || ['generating', 'submitting', 'unsubmitted', 'receiving'].includes(shots[index]?.kind)) return;
+    const settings = { ...config, ...overrides[sceneIds[index]] };
+    setEditing({ index, prompt: tasks[index].prompt, aspectRatio: settings.aspectRatio, quality: settings.quality, outputFormat: settings.outputFormat });
+  }
   async function saveEdit() {
     if (!editing || !editing.prompt.trim()) return;
     const { index, prompt, ...settings } = editing;
     const shot = shots[index];
     try {
+      if (['generating', 'submitting', 'unsubmitted', 'receiving'].includes(shot.kind)) throw new Error('本镜正在提交或处理, 请等待完成后再调整');
       const previousRevision = shot.job?.status === 'pending' ? await writeWorkspaceDraft('series', currentDraft) : undefined;
       if (shot.job?.status === 'pending') {
         const input = await getOutboxInput(shot.job.requestId);

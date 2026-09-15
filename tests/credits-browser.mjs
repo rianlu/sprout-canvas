@@ -128,6 +128,7 @@ try {
   await until(async () => (await api(a, '/api/jobs/me')).data.jobs.length === 2, 'accepted batch with lost response');
   await until(async () => await a.getByRole('button', { name: /开始绘制/ }).isEnabled(), 'first submission completed');
   await a.reload(); await a.locator('.studio-rail textarea').waitFor();
+  await until(async () => { const pending = await rows(a, 'outbox'); return pending.length === 2 && pending.every((row) => row.jobId); }, 'polling finds the accepted batch before retrying its lost POST response');
   await a.getByRole('button', { name: /开始绘制/ }).click();
   await until(() => batches.length === 2, 'resubmitted stable batch');
   assert.deepEqual(batches[0].jobs.map((job) => job.requestId), batches[1].jobs.map((job) => job.requestId));

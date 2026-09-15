@@ -12,6 +12,7 @@ import { useSeriesStudio, TEMPLATES, seriesAspects, MIN_BATCH_COUNT, MAX_BATCH_C
 import { useCredits } from '../lib/credits';
 import { CreditStatus } from '../components/ui/CreditStatus';
 import { CreditCost } from '../components/ui/CreditCost';
+import { deliveryMessage } from '../lib/queue-presentation';
 
 export interface SeriesStudioProps extends SeriesActions {
   onEditRecord: (record: ResultRecord) => void;
@@ -33,6 +34,7 @@ export function SeriesStudio(props: SeriesStudioProps) {
   const hasCompletePlan = filledPrompts === plannedTotal;
   const remainingCount = shots.filter((shot) => !shot.record).length;
   const planLocked = busy || submitting || activeJobs || canContinue;
+  const activityLabel = shots.some((shot) => shot.kind === 'submitting') ? '分镜正在提交' : shots.some((shot) => ['generating', 'waiting'].includes(shot.kind)) ? '图片正在按序生成' : '正在领取分镜作品';
   async function planStory() {
     if (await splitStory()) {
       requestAnimationFrame(() => storyboardRef.current?.scrollIntoView({ block: 'start', behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' }));
@@ -332,7 +334,7 @@ export function SeriesStudio(props: SeriesStudioProps) {
               <div className="flex flex-wrap items-center gap-space-xs">
                 <h2 className="font-headline-sm text-headline-sm text-on-surface font-semibold">{shotLabel}</h2>
                 <span className="px-2 py-0.5 rounded-full bg-surface-container-high text-on-surface-variant font-meta-sm text-meta-sm">
-                  {activeJobs ? '分镜生成中' : canContinue ? '剩余分镜待续交' : remainingCount === 0 ? `${plannedTotal} 幕已完成` : hasCompletePlan ? `${plannedTotal} 幕待确认` : `${filledPrompts}/${plannedTotal} 幕已填写`}
+                  {activeJobs ? '分镜处理中' : canContinue ? '剩余分镜待续交' : remainingCount === 0 ? `${plannedTotal} 幕已完成` : hasCompletePlan ? `${plannedTotal} 幕待确认` : `${filledPrompts}/${plannedTotal} 幕已填写`}
                 </span>
               </div>
               <div className="flex items-center gap-space-xs text-body-sm text-on-surface-variant font-meta-sm">
@@ -370,6 +372,12 @@ export function SeriesStudio(props: SeriesStudioProps) {
                 const running = shot.kind === 'generating';
                 const waiting = shot.kind === 'waiting';
                 const failed = shot.kind === 'failed';
+                const sending = shot.kind === 'submitting';
+                const unconfirmed = shot.kind === 'unsubmitted';
+                const receiving = shot.kind === 'receiving';
+                const transferring = sending || receiving;
+                const receipt = deliveryMessage(shot.job?.delivery);
+                const transferLabel = sending ? '正在提交画稿' : unconfirmed ? '提交待确认' : receipt.title;
                 const awaitingReview = shot.kind === 'planned' && Boolean(shot.task.prompt.trim());
                 const info = shot.record ? metadata[shot.record.id] : undefined;
                 return (
@@ -394,7 +402,7 @@ export function SeriesStudio(props: SeriesStudioProps) {
                             {shot.task.title}
                           </h3>
                           <span className={`font-meta-sm text-meta-sm ${running ? 'text-primary' : 'text-outline'}`}>
-                            {done
+                            {transferring || unconfirmed ? transferLabel : done
                               ? '分镜画面 · 已完成'
                               : running
                                 ? '按序渲染 · 构想生成'
@@ -410,11 +418,11 @@ export function SeriesStudio(props: SeriesStudioProps) {
                         className={`px-2 py-0.5 rounded-full font-meta-sm text-meta-sm flex items-center gap-1 shrink-0 ${done ? 'bg-primary-fixed/40 text-primary' : running ? 'bg-secondary-container text-on-secondary-container' : failed ? 'bg-error-container text-on-error-container' : 'bg-surface-container text-outline'}`}
                       >
                         <StitchIcon
-                          name={done ? 'check_circle' : running ? 'progress_activity' : failed ? 'error' : 'schedule'}
+                          name={done ? 'check_circle' : running || transferring ? 'progress_activity' : failed ? 'error' : 'schedule'}
                           size={13}
-                          className={running ? 'animate-spin' : ''}
+                          className={running || transferring ? 'motion-safe:animate-spin' : ''}
                         />
-                        {done
+                        {transferring || unconfirmed ? transferLabel : done
                           ? '已就绪'
                           : running
                             ? '构想生成中'
@@ -477,7 +485,7 @@ export function SeriesStudio(props: SeriesStudioProps) {
                           >
                             <StitchIcon
                               name={
-                                running
+                                running || transferring
                                   ? 'progress_activity'
                                   : failed
                                     ? 'error'
@@ -486,11 +494,11 @@ export function SeriesStudio(props: SeriesStudioProps) {
                                       : 'movie_edit'
                               }
                               size={running ? 30 : 20}
-                              className={running ? 'animate-spin' : failed ? 'text-error' : ''}
+                              className={running || transferring ? 'motion-safe:animate-spin' : failed ? 'text-error' : ''}
                             />
                           </div>
                           <span className="relative font-meta-sm text-meta-sm text-on-surface text-center">
-                            {running
+                            {sending ? '正在上传并等待确认' : receiving ? receipt.detail : unconfirmed ? '可继续提交, 已受理的任务不会重复生成' : running
                               ? '正在合成分镜画面与风格质感'
                               : waiting
                                 ? `队列第 ${shot.job?.yourPosition || 1} 位, 按序自动执行`
@@ -527,6 +535,12 @@ export function SeriesStudio(props: SeriesStudioProps) {
                               重新尝试<CreditCost points={shot.job?.interruptionReason === 'pending-restart' ? shot.job.credit?.points : undefined} unlimited={shot.job?.interruptionReason === 'pending-restart' ? shot.job.credit?.unlimited : undefined} />
                             </button>
                           )}
+                          {receiving && shot.job?.delivery?.phase === 'error' && (
+                            <button type="button" className="mt-2 px-3 py-1 rounded-lg bg-surface-container-high text-primary font-meta-sm text-meta-sm" onClick={() => { if (shot.job) void onRetry(shot.job.id).catch((error) => pushToast('error', error.message)); }}>重试领取</button>
+                          )}
+                          {unconfirmed && (
+                            <button type="button" className="mt-2 px-3 py-1 rounded-lg bg-surface-container-high text-primary font-meta-sm text-meta-sm inline-flex items-center gap-1.5" disabled={submitting || !shot.job?.canRetry} onClick={() => { if (shot.job) void onRetry(shot.job.id).catch((error) => pushToast('error', error.message)); }}>继续提交<CreditCost /></button>
+                          )}
                         </>
                       )}
                     </div>
@@ -545,7 +559,7 @@ export function SeriesStudio(props: SeriesStudioProps) {
                           rows={awaitingReview ? 6 : 3}
                           placeholder="输入本镜画面描述..."
                           value={shot.task.prompt}
-                          readOnly={busy || submitting || running || waiting || shot.job?.status === 'unsubmitted'}
+                          readOnly={busy || submitting || running || waiting || transferring || unconfirmed}
                           onChange={(event) => updateTask(index, event.target.value)}
                         />
                       </div>
@@ -565,6 +579,8 @@ export function SeriesStudio(props: SeriesStudioProps) {
                               调整并重绘<CreditCost />
                             </button>
                           </>
+                        ) : transferring || unconfirmed ? (
+                          <span className="text-on-surface-variant">{sending ? '等待提交确认' : receiving ? '图片已生成, 正在领取' : '请继续确认本次提交'}</span>
                         ) : running ? (
                           <>
                             <span className="flex items-center gap-1 text-primary">
@@ -615,7 +631,7 @@ export function SeriesStudio(props: SeriesStudioProps) {
             <div role="region" aria-label="分镜确认与生成" className="flex flex-col sm:flex-row sm:items-center justify-between gap-space-md p-space-md rounded-xl bg-surface-container-lowest border border-outline-variant/30">
               <div className="min-w-0">
                 <p role="status" className="font-body-md text-body-md font-medium text-on-surface">
-                  {busy ? '正在拆解分镜提示词...' : canContinue ? '已确认的分镜尚有未提交项' : activeJobs ? '图片正在按序生成' : remainingCount === 0 ? `已完成 ${plannedTotal} 张分镜图片` : hasCompletePlan ? `${plannedTotal} 幕分镜已准备好, 请检查后确认` : `请补全分镜提示词 (${filledPrompts}/${plannedTotal})`}
+                  {busy ? '正在拆解分镜提示词...' : canContinue ? '已确认的分镜尚有未提交项' : activeJobs ? activityLabel : remainingCount === 0 ? `已完成 ${plannedTotal} 张分镜图片` : hasCompletePlan ? `${plannedTotal} 幕分镜已准备好, 请检查后确认` : `请补全分镜提示词 (${filledPrompts}/${plannedTotal})`}
                 </p>
                 <p className="font-body-sm text-body-sm text-on-surface-variant mt-1">
                   {canContinue ? '继续提交剩余分镜, 已提交的任务不会重复生成.' : activeJobs ? '可在任务队列中查看进度.' : remainingCount === 0 ? '可下载整套图片, 或继续调整并重绘单镜.' : '可直接修改每幕提示词和本镜参数, 确认后才开始生成图片.'}
@@ -628,7 +644,7 @@ export function SeriesStudio(props: SeriesStudioProps) {
                 disabled={busy || submitting || (!canContinue && (activeJobs || !hasCompletePlan || remainingCount === 0))}
               >
                 <StitchIcon name="spa" size={20} />
-                <span>{submitting ? '提交中...' : canContinue ? '继续提交剩余分镜' : activeJobs ? '图片生成中...' : remainingCount === 0 ? '全部分镜已生成' : `确认并生成 ${remainingCount} 张图片`}</span>
+                <span>{submitting ? '提交中...' : canContinue ? '继续提交剩余分镜' : activeJobs ? '分镜处理中...' : remainingCount === 0 ? '全部分镜已生成' : `确认并生成 ${remainingCount} 张图片`}</span>
                 {(canContinue || !activeJobs) && submissionCount > 0 && <CreditCost count={submissionCount} />}
               </button>
             </div>

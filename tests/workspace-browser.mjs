@@ -186,7 +186,7 @@ try {
   const gate = new Promise((resolve) => { releaseResult = resolve; });
   await page.route('**/api/jobs/*/result', async (route) => { await gate; await route.continue(); });
   const releaseFirst = releaseImage; holdNextImage(); releaseFirst();
-  await page.getByRole('heading', { name: '正在保存作品', exact: true }).waitFor();
+  await page.getByRole('heading', { name: '正在下载原图', exact: true }).waitFor();
   assert.deepEqual(await cardKeys(page), positions, 'saving does not remove or reorder the slot');
   releaseResult(); releaseResult = undefined;
   await waitRecords(page, 9);

@@ -11,6 +11,19 @@ const job = (id, batchId, queuedAt, status = 'pending', fields = {}) => ({ id: `
 const record = (id, submittedAt, fields = {}) => ({ id, kind: 'single', createdAt: submittedAt + 100, submittedAt, requestId: `req-${id}`, jobId: `job-${id}`, ...fields });
 const keys = (entries) => entries.map((entry) => entry.key);
 
+test('提交, 等待确认和领取失败保持同一画稿位置, 不丢失正在上传的任务', () => {
+  const local = job('new', 'batch', 100, 'submitting', { id: 'local_req-new', localOnly: true });
+  const initial = selectStudioFeed([local], []);
+  assert.deepEqual(keys(initial), ['new']);
+  for (const status of ['unsubmitted', 'pending', 'running', 'succeeded']) {
+    const current = job('new', 'batch', 100, status, { delivery: status === 'succeeded' ? { phase: 'error', failedPhase: 'downloading' } : undefined });
+    assert.deepEqual(keys(selectStudioFeed([current], [])), keys(initial));
+  }
+  assert.deepEqual(keys(selectStudioFeed([job('new', 'batch', 100, 'succeeded')], [record('new', 100, { batchId: 'batch' })])), keys(initial));
+  const failed = job('failed', 'old', 50, 'failed');
+  assert.deepEqual(keys(selectStudioFeed([failed, { ...local, retryOf: failed.id }], [])), ['failed'], '失败任务的本地重试仍只占原格');
+});
+
 test('画卷最多四格, 保持当前四图批次和成功保存过程的位置', () => {
   const current = ['a', 'b', 'c', 'd'].map((id) => job(id, 'new', 1000));
   const older = Array.from({ length: 12 }, (_, index) => record(`old-${index}`, index));
