@@ -142,7 +142,7 @@ docker compose up -d --build
 COMPOSE_PROFILES=tunnel
 ```
 
-- 使用同一 Compose 项目启动两个服务. 隧道等待芽绘台健康后连接 `http://sprout-canvas:8787`, 使用 HTTP/2 连接 Cloudflare, 不额外映射主机端口, 不挂载项目配置或数据. 让 Docker 网络能够访问 Cloudflare 的出站 TCP 7844 端口及 HTTPS API.
+- 使用同一 Compose 项目启动两个服务. 隧道等待芽绘台健康后连接 `http://sprout-canvas:8787`, 默认自动选择连接协议, 优先使用 QUIC, 无法建立 QUIC 连接时尝试 HTTP/2. 不额外映射主机端口, 不挂载项目配置或数据. 让 Docker 网络能够访问 Cloudflare 的出站 UDP 7844 (QUIC), TCP 7844 (HTTP/2) 和 HTTPS API; 至少保持一种隧道协议可用.
 
 ```sh
 docker compose up -d
@@ -165,12 +165,22 @@ docker compose up -d
 - 停用临时公网入口时先执行 `docker compose stop cloudflared` 和 `docker compose rm cloudflared`, 再从 `.env` 的 `COMPOSE_PROFILES` 中移除 `tunnel`. 只移除已停止的隧道容器, 保留芽绘台和数据.
 - 将 Quick Tunnel 用于小范围临时测试, 不承诺固定地址或持续可用性. 需要固定网址时按 [Cloudflare 官方步骤](https://developers.cloudflare.com/cloudflare-one/networks/connectors/cloudflare-tunnel/get-started/create-remote-tunnel/) 配置域名与命名隧道.
 
-遇到代理导致的连接断开时:
+通过 `.env` 按需配置隧道出站参数. 临时入口与正式入口共用以下设置:
+
+| 环境变量 | 默认值 | 要求 |
+|---|---|---|
+| `TUNNEL_PROTOCOL` | `auto` | 保留自动选择, 仅在确认网络限制后指定 `quic` 或 `http2`. |
+| `TUNNEL_EDGE_IP_VERSION` | `auto` | 保留 IPv4/IPv6 自动选择, 仅在确认对应线路可用后指定 `4` 或 `6`. |
+| `TUNNEL_IPV6` | `false` | 需要 IPv6 出站时设为 `true`, 为隧道专用网络启用 IPv6; 它不会为 WiFi 或路由器提供 IPv6 连接. |
+
+排查连接失败或切换 WiFi 后的断开时:
 
 - 先用 `docker context show` 确认实际容器运行环境, 再检查其网络设置. OrbStack 默认自动跟随 macOS 代理; 本机终端能连接不代表容器连接也正常.
-- 仅在已确认 IPv6 直连可用时, 在 `.env` 追加 `TUNNEL_IPV6=true` 和 `TUNNEL_EDGE_IP_VERSION=6`, 为隧道专用的 `tunnel-egress` 网络启用 IPv6 并指定使用 IPv6 连接. 默认分别为 false 和 auto, 不要求普通部署具备 IPv6, 不改变现有应用网络.
+- 在 macOS 使用 `scutil --nwi` 检查当前网络是否具备 IPv6, 结合隧道日志区分连接超时与 TLS 握手中断. 不以浏览器能打开 HTTPS 网页判断隧道的 7844 端口可用.
+- 切换 WiFi 后检查已有的 `TUNNEL_EDGE_IP_VERSION=6` 或 `TUNNEL_PROTOCOL=http2` 等强制设置. 优先恢复 `auto`, 再验证实际连接; 不将某个 WiFi 下可用的 IPv6 线路视为所有网络都可用.
+- 仅在已确认宿主网络 IPv6 直连可用时设置 `TUNNEL_IPV6=true`, 为隧道专用的 `tunnel-egress` 网络启用 IPv6. 保留 `TUNNEL_EDGE_IP_VERSION=auto`, 不要求普通部署具备 IPv6, 不改变现有应用网络.
 - 使用 OrbStack 且已确认代理阻断隧道连接时, 按 [OrbStack 代理文档](https://docs.orbstack.dev/docker/network#proxies) 设置代理例外. 先运行 `orbctl config get network.proxy.exclude` 读取已有值, 再将 Cloudflare 隧道 IPv6 网段 `2606:4700:a0::/48,2606:4700:a8::/48` 追加到该设置, 保留原有例外. 只让这些隧道连接直连, 不关闭全部代理或 TLS 校验.
-- 执行 `docker compose up -d cloudflared`, 重新检查隧道健康状态和公网地址. 切换网络或代理后重复验证, 不以生成了临时地址作为连通依据.
+- 修改隧道参数后执行 `docker compose up -d --no-deps cloudflared`, 重新检查隧道健康状态和公网地址. 切换网络或代理后重复验证, 不以生成了临时地址作为连通依据.
 
 #### 3.2.2 正式公网入口
 
