@@ -32,7 +32,8 @@ import type { CreditCharge } from '../../../shared/credits-contract.mjs';
 import type { PromptHistory } from '../../lib/prompt-history';
 import { PromptActivityBorder } from '../ui/PromptActivityBorder';
 import type { QueueDelivery } from '../../types/queue';
-import { deliveryMessage } from '../../lib/queue-presentation';
+import { deliveryMessage, personalQueuePosition, type QueueTiming } from '../../lib/queue-presentation';
+import { QueueElapsed } from '../queue/QueueElapsed';
 
 /* ============ 单图创作 · 控制轨 (照搬 Stitch 单图稿 LEFT CONTROL PANEL, 类名原样) ============ */
 
@@ -601,7 +602,7 @@ export interface QueueJobView {
   id: string;
   status: 'queued' | 'running' | 'receiving' | 'failed' | 'submitting' | 'unsubmitted';
   prompt: string;
-  elapsedMs: number;
+  timing: QueueTiming;
   position: number;
   error: string;
   createdAt: number;
@@ -657,7 +658,7 @@ export function StitchCanvasStream(props: StitchCanvasStreamProps) {
             </div>
           </div>
         )}
-        {/* 生成中卡片 (呼吸纸纹, 真实时长, 无假百分比) */}
+        {/* 使用状态图标与真实时长表达任务状态, 不展示模拟进度 */}
         {entries.map((entry) => {
           if (entry.kind === 'job') {
             const job = entry.job;
@@ -711,9 +712,10 @@ export function StitchCanvasStream(props: StitchCanvasStreamProps) {
             const isSubmitting = job.status === 'submitting';
             const isUnsubmitted = job.status === 'unsubmitted';
             const receipt = deliveryMessage(job.delivery);
-            const active = isRunning || isSubmitting || isReceiving && job.delivery?.phase !== 'error';
+            const deliveryFailed = isReceiving && job.delivery?.phase === 'error';
+            const active = isRunning || isSubmitting || isReceiving && Boolean(job.delivery) && !deliveryFailed;
             const title = isReceiving ? receipt.title : isSubmitting ? '正在提交画稿' : isUnsubmitted ? '提交待确认' : isRunning ? '正在渲染' : '排队等候中';
-            const detail = isReceiving ? receipt.detail : isSubmitting ? '正在上传并等待确认' : isUnsubmitted ? '可继续提交, 已受理的任务不会重复生成' : isRunning ? `已等待 ${Math.max(1, Math.floor(job.elapsedMs / 1000))} 秒` : `第 ${job.position} 位 · 等待生成`;
+            const detail = isReceiving ? receipt.detail : isSubmitting ? '正在上传并等待确认' : isUnsubmitted ? '可继续提交, 已受理的任务不会重复生成' : isRunning ? <QueueElapsed job={job.timing} /> : personalQueuePosition(job.position);
             return (
               <article
                 key={entry.key}
@@ -721,10 +723,10 @@ export function StitchCanvasStream(props: StitchCanvasStreamProps) {
                 className="relative flex flex-col bg-surface-container-lowest rounded-xl p-space-md shadow-[0_8px_24px_rgba(85,95,75,0.06)] overflow-hidden"
               >
                 <div className="relative w-full aspect-square rounded-lg bg-surface-container-low overflow-hidden flex flex-col items-center justify-center p-space-lg">
-                  <div className={`absolute inset-0 bg-gradient-to-tr from-surface-container via-surface-container-low to-secondary-fixed-dim/20 ${active ? 'motion-safe:animate-pulse' : ''}`} />
+                  <div className="absolute inset-0 bg-gradient-to-tr from-surface-container via-surface-container-low to-secondary-fixed-dim/20" />
                   <div className="relative z-10 flex flex-col items-center gap-space-md text-center">
-                    <div className="w-16 h-16 rounded-full bg-surface-container-lowest/80 backdrop-blur-md shadow-md flex items-center justify-center text-primary">
-                      <StitchIcon name="filter_vintage" size={32} />
+                    <div className={`w-16 h-16 rounded-full bg-surface-container-lowest/80 backdrop-blur-md shadow-md flex items-center justify-center ${deliveryFailed ? 'text-error' : 'text-primary'}`}>
+                      <StitchIcon name={active ? 'progress_activity' : deliveryFailed ? 'error' : 'schedule'} size={32} className={active ? 'motion-safe:animate-spin' : ''} />
                     </div>
                     <div className="space-y-1">
                       <h3 className="font-headline-sm text-headline-sm text-on-surface">
@@ -734,18 +736,15 @@ export function StitchCanvasStream(props: StitchCanvasStreamProps) {
                         {job.prompt.slice(0, 40)}
                       </p>
                     </div>
-                    <div className="w-48 h-2 bg-surface-container rounded-full overflow-hidden">
-                      <div className={`h-full bg-primary rounded-full ${active ? 'w-1/3 motion-safe:animate-pulse' : 'w-0'}`} />
-                    </div>
                     <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-surface-bright text-on-surface-variant font-meta-sm text-meta-sm shadow-sm">
-                      <span className={`w-1.5 h-1.5 shrink-0 rounded-full bg-primary ${active ? 'motion-safe:animate-pulse' : ''}`} />
                       <span className="break-words">{detail}</span>
                     </div>
+                    {job.status === 'queued' && <div className="font-meta-sm text-meta-sm text-on-surface-variant"><QueueElapsed job={job.timing} /></div>}
                   </div>
                 </div>
                 <div className="flex items-center justify-between pt-space-md">
                   <span className="font-meta-sm text-meta-sm text-on-surface-variant truncate max-w-[240px]">
-                    {job.prompt.slice(0, 50)}
+                    {job.status === 'queued' ? '轮到后自动开始' : job.prompt.slice(0, 50)}
                   </span>
                   {isReceiving && job.delivery?.phase === 'error' ? (
                     <button type="button" className="font-meta-sm text-meta-sm text-primary hover:underline shrink-0" disabled={job.retrying} onClick={() => onRetryJob(job.id)}>重试领取</button>

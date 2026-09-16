@@ -380,8 +380,10 @@ export function getJobsForUser(userId, { cursor = '', limit = 30, requestIds = [
   page.length = Math.min(page.length, limit);
   const last = page.at(-1);
   const selected = new Map([...visible.filter(essential), ...page, ...own.filter((job) => requestIds.includes(job.requestId))].map((job) => [job.id, job]));
+  const serverNow = Date.now();
   return {
-    jobs: [...selected.values()].map((job) => publicJob(job, userId)),
+    jobs: [...selected.values()].map((job) => publicJob(job, userId, serverNow)),
+    serverNow,
     historyCursor: hasMore ? Buffer.from(JSON.stringify([last.queuedAt, last.id])).toString('base64url') : '',
     historyTotal: history.length,
     globalActive: activeJob ? 1 : 0,
@@ -421,7 +423,7 @@ function terminalLabel(status) {
   return status;
 }
 
-function publicJob(job, viewerUserId) {
+function publicJob(job, viewerUserId, serverNow = Date.now()) {
   const userQueue = pendingByUser.get(viewerUserId) || [];
   const supersededBy = retrySuccessor(job)?.id || '';
   const yourPosition = job.status === 'pending' && job.userId === viewerUserId
@@ -448,6 +450,7 @@ function publicJob(job, viewerUserId) {
     referenceJobId: job.referenceJobId || '',
     clientContext: job.clientContext || null,
     yourPosition,
+    serverNow,
     yourQueued: userQueue.length,
     globalActive: activeJob ? 1 : 0,
     globalQueued: countGlobalQueued(),
@@ -456,7 +459,7 @@ function publicJob(job, viewerUserId) {
     queuedAt: job.queuedAt,
     startedAt: job.startedAt || 0,
     finishedAt: job.finishedAt || 0,
-    elapsedMs: job.startedAt ? ((job.finishedAt || Date.now()) - job.startedAt) : 0,
+    elapsedMs: job.startedAt ? ((job.finishedAt || serverNow) - job.startedAt) : 0,
   };
 }
 
@@ -512,9 +515,9 @@ function removeJobLater(jobId, delay) {
 function pickNextJob() {
   const users = [...pendingByUser.keys()].filter((uid) => pendingByUser.get(uid).length).sort();
   if (!users.length) return null;
-  const startIdx = lastServedUserId
-    ? (users.indexOf(lastServedUserId) + 1 + users.length) % users.length
-    : 0;
+  // Keep the cursor's place even when that user's queue has just emptied.
+  const nextUser = lastServedUserId ? users.findIndex((uid) => uid > lastServedUserId) : 0;
+  const startIdx = nextUser < 0 ? 0 : nextUser;
   for (let i = 0; i < users.length; i += 1) {
     const userId = users[(startIdx + i) % users.length];
     const queue = pendingByUser.get(userId);

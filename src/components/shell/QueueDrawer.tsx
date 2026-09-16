@@ -1,16 +1,19 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { CircleAlert, CircleCheck, Info, LoaderCircle, RefreshCw, X } from '../ui/icons';
 import { StitchIcon } from '../ui/StitchIcon';
 import { useFocusTrap } from '../../hooks/useFocusTrap';
-import type { QueueJob } from '../../types/queue';
+import type { QueueActivity, QueueJob } from '../../types/queue';
 import { CreditStatus } from '../ui/CreditStatus';
 import { CreditCost } from '../ui/CreditCost';
-import { deliveryMessage, isQueueActive } from '../../lib/queue-presentation';
+import { deliveryMessage, isQueueActive, personalQueuePosition } from '../../lib/queue-presentation';
+import { QueueElapsed } from '../queue/QueueElapsed';
+import { QueueSummary } from '../queue/QueueSummary';
 
 export interface QueueDrawerProps {
   open: boolean;
   onClose: () => void;
   jobs: QueueJob[];
+  activity: QueueActivity;
   onCancelJob: (jobId: string) => Promise<void>;
   onRetryJob: (jobId: string) => Promise<unknown>;
   onPrioritizeJob: (jobId: string) => Promise<void>;
@@ -20,20 +23,14 @@ export interface QueueDrawerProps {
   loadingHistory: boolean;
 }
 
-function formatElapsed(elapsedMs: number): string {
-  const seconds = Math.max(0, Math.floor(elapsedMs / 1000));
-  if (seconds < 60) return `已渲染 ${seconds} 秒`;
-  return `已渲染 ${Math.floor(seconds / 60)} 分 ${seconds % 60} 秒`;
-}
-
 function jobTitle(job: QueueJob): string {
   const prompt = job.clientContext?.prompt;
   return prompt && prompt.length > 0 ? (prompt.length > 30 ? prompt.slice(0, 30) + '…' : prompt) : '生成任务';
 }
 
-function statusLabel(job: QueueJob): {
+function statusLabel(job: QueueJob, open: boolean): {
   title: string;
-  meta: string;
+  meta: ReactNode;
   icon: 'running' | 'queued' | 'failed' | 'succeeded';
 } {
   if (job.supersededBy) return { title: jobTitle(job), meta: '已重新提交', icon: 'failed' };
@@ -43,19 +40,19 @@ function statusLabel(job: QueueJob): {
   if (job.status === 'submitting') return { title: jobTitle(job), meta: '正在提交 · 等待确认', icon: 'running' };
   if (job.status === 'unsubmitted') return { title: jobTitle(job), meta: '提交待确认 · 可继续提交', icon: 'queued' };
   if (job.status === 'running')
-    return { title: jobTitle(job), meta: `${formatElapsed(job.elapsedMs)} · 渲染中`, icon: 'running' };
+    return { title: jobTitle(job), meta: <><QueueElapsed job={job} enabled={open} /> · 渲染中</>, icon: 'running' };
   if (job.status === 'succeeded') return job.acknowledgedAt && !job.delivery
     ? { title: jobTitle(job), meta: '已完成', icon: 'succeeded' }
-    : { title: jobTitle(job), meta: deliveryMessage(job.delivery).title, icon: job.delivery?.phase === 'error' ? 'queued' : 'running' };
+    : { title: jobTitle(job), meta: deliveryMessage(job.delivery).title, icon: job.delivery?.phase === 'error' ? 'failed' : job.delivery ? 'running' : 'queued' };
   if (job.status === 'canceled') return { title: jobTitle(job), meta: '已取消', icon: 'succeeded' };
-  return { title: jobTitle(job), meta: `排队中 · 第 ${job.yourPosition} 位`, icon: 'queued' };
+  return { title: jobTitle(job), meta: <>{personalQueuePosition(job.yourPosition)}<span className="block mt-1"><QueueElapsed job={job} enabled={open} /></span></>, icon: 'queued' };
 }
 
 /**
- * 右侧任务队列抽屉. DOM 照搬 Stitch 单图稿 #queue-drawer (类名原样).
- * 假进度百分比/剩余秒数按 PRD §7.1 剔除, 显示真实已等待时长与位次.
+ * 保持右侧任务抽屉布局, 使用状态图标, 真实耗时与个人顺序.
+ * 无实时进度时不显示比例条, 按 PRD §7.1 区分等待与实际处理状态.
  */
-export function QueueDrawer({ open, onClose, jobs, onCancelJob, onRetryJob, onPrioritizeJob, onArchive, onLoadMore, hasMore, loadingHistory }: QueueDrawerProps) {
+export function QueueDrawer({ open, onClose, jobs, activity, onCancelJob, onRetryJob, onPrioritizeJob, onArchive, onLoadMore, hasMore, loadingHistory }: QueueDrawerProps) {
   const dialogRef = useFocusTrap<HTMLDivElement>(open);
   const [error, setError] = useState('');
   const visibleJobs = [...jobs].sort((a, b) => {
@@ -66,8 +63,8 @@ export function QueueDrawer({ open, onClose, jobs, onCancelJob, onRetryJob, onPr
     if (b.status === 'pending') return 1;
     return b.queuedAt - a.queuedAt;
   });
-  const activeCount = jobs.filter(isQueueActive).length;
-  const runningLabel = activeCount > 0 ? `${activeCount} 进行中` : '空闲';
+  const activeCount = jobs.filter((job) => isQueueActive(job) || job.status === 'unsubmitted').length;
+  const runningLabel = activeCount > 0 ? `${activeCount} 项待完成` : '暂无待办';
 
   // Esc 关闭
   useEffect(() => {
@@ -96,7 +93,7 @@ export function QueueDrawer({ open, onClose, jobs, onCancelJob, onRetryJob, onPr
         <div className="p-space-lg flex items-center justify-between bg-surface-container-low/60">
           <div className="flex items-center gap-space-xs">
             <StitchIcon name="layers" className="text-primary" size={20} />
-            <span className="font-headline-sm text-headline-sm text-on-surface">绘绘任务</span>
+            <span className="font-headline-sm text-headline-sm text-on-surface">我的任务</span>
             <span className="px-2 py-0.5 rounded-full bg-primary-fixed text-on-primary-fixed font-meta-sm text-meta-sm">
               {runningLabel}
             </span>
@@ -113,6 +110,8 @@ export function QueueDrawer({ open, onClose, jobs, onCancelJob, onRetryJob, onPr
 
         {/* 任务列表 */}
         <div className="flex-1 overflow-y-auto p-space-lg space-y-space-md">
+          <QueueSummary activity={activity} />
+          <p className="font-meta-sm text-meta-sm text-on-surface-variant">以下仅展示我的任务. 置顶只调整自己的待生成顺序.</p>
           {error && (
             <p role="alert" className="text-error text-xs">
               {error}
@@ -124,7 +123,7 @@ export function QueueDrawer({ open, onClose, jobs, onCancelJob, onRetryJob, onPr
             </div>
           )}
           {visibleJobs.map((job) => {
-            const { title, meta, icon } = statusLabel(job);
+            const { title, meta, icon } = statusLabel(job, open);
             return (
               <div
                 key={job.id}
@@ -136,21 +135,15 @@ export function QueueDrawer({ open, onClose, jobs, onCancelJob, onRetryJob, onPr
                     <p className="font-meta-sm text-meta-sm text-on-surface-variant truncate">{meta}</p>
                     <CreditStatus credit={job.credit} pending={job.settlementPending} />
                   </div>
-                  {icon === 'running' && <LoaderCircle className="text-primary animate-spin" size={18} aria-hidden />}
+                  {icon === 'running' && <LoaderCircle className="text-primary motion-safe:animate-spin" size={18} aria-hidden />}
                   {icon === 'queued' && <StitchIcon name="schedule" className="text-on-surface-variant" size={18} />}
                   {icon === 'succeeded' && <CircleCheck className="text-primary" size={18} aria-hidden />}
                   {icon === 'failed' && <CircleAlert className="text-error" size={18} aria-hidden />}
                 </div>
-                {/* 呼吸进度条: running 时有 shimmer (无假百分比) */}
-                <div className="w-full h-1.5 bg-surface-container rounded-full overflow-hidden mb-space-xs">
-                  {icon === 'running' && <div className="h-full w-1/3 bg-primary rounded-full motion-safe:animate-pulse" />}
-                  {job.status === 'pending' && <div className="h-full w-0 bg-secondary-fixed rounded-full" />}
-                  {icon === 'succeeded' && <div className="h-full w-full bg-primary rounded-full" />}
-                </div>
                 {(job.delivery?.error || job.error) && <p className={`font-meta-sm text-meta-sm mb-space-xs break-words ${job.status === 'unsubmitted' ? 'text-on-surface-variant' : 'text-error'}`}>{job.delivery?.error || job.error}</p>}
-                <div className="flex justify-between items-center text-on-surface-variant">
+                <div className="flex flex-wrap gap-2 justify-between items-center text-on-surface-variant">
                   <span className="font-meta-sm text-meta-sm">
-                    {job.status === 'running' || job.status === 'pending' ? '单任务通道 · 按序渲染' : ''}
+                    {job.status === 'pending' ? '轮到后自动开始' : job.status === 'running' ? '正在绘制本张' : ''}
                   </span>
                   {job.status === 'pending' || job.status === 'unsubmitted' ? (
                     <div className="flex gap-3">

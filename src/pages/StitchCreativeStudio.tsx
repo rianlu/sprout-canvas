@@ -411,7 +411,7 @@ export function CreativeStudio({ onOpenStyles, onOpenGallery, onSubmitBatch, onC
         delivery: job.delivery,
         status: job.status === 'succeeded' ? 'receiving' : job.status === 'submitting' || job.status === 'unsubmitted' ? job.status : job.status === 'running' ? 'running' : job.status === 'pending' ? 'queued' : 'failed',
         prompt: job.clientContext?.prompt ?? '',
-        elapsedMs: job.elapsedMs,
+        timing: job,
         position: job.yourPosition,
         error: job.error,
         createdAt: job.queuedAt,

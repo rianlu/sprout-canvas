@@ -197,6 +197,7 @@ export function App() {
         open={queueOpen}
         onClose={() => setQueueOpen(false)}
         jobs={queue.jobs}
+        activity={queue.activity}
         onCancelJob={queue.cancel}
         onRetryJob={queue.retry}
         onPrioritizeJob={queue.prioritize}

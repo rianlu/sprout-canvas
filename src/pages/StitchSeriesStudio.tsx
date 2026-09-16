@@ -12,7 +12,8 @@ import { useSeriesStudio, TEMPLATES, seriesAspects, MIN_BATCH_COUNT, MAX_BATCH_C
 import { useCredits } from '../lib/credits';
 import { CreditStatus } from '../components/ui/CreditStatus';
 import { CreditCost } from '../components/ui/CreditCost';
-import { deliveryMessage } from '../lib/queue-presentation';
+import { deliveryMessage, personalQueuePosition } from '../lib/queue-presentation';
+import { QueueElapsed } from '../components/queue/QueueElapsed';
 
 export interface SeriesStudioProps extends SeriesActions {
   onEditRecord: (record: ResultRecord) => void;
@@ -34,7 +35,7 @@ export function SeriesStudio(props: SeriesStudioProps) {
   const hasCompletePlan = filledPrompts === plannedTotal;
   const remainingCount = shots.filter((shot) => !shot.record).length;
   const planLocked = busy || submitting || activeJobs || canContinue;
-  const activityLabel = shots.some((shot) => shot.kind === 'submitting') ? '分镜正在提交' : shots.some((shot) => ['generating', 'waiting'].includes(shot.kind)) ? '图片正在按序生成' : '正在领取分镜作品';
+  const activityLabel = shots.some((shot) => shot.kind === 'submitting') ? '分镜正在提交' : shots.some((shot) => shot.kind === 'generating') ? '分镜正在绘制' : shots.some((shot) => shot.kind === 'waiting') ? '分镜正在排队, 轮到后自动开始' : '正在领取分镜作品';
   async function planStory() {
     if (await splitStory()) {
       requestAnimationFrame(() => storyboardRef.current?.scrollIntoView({ block: 'start', behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' }));
@@ -69,7 +70,7 @@ export function SeriesStudio(props: SeriesStudioProps) {
               </div>
               <div className="flex items-center gap-space-xs text-on-surface-variant font-meta-sm text-meta-sm self-start sm:self-center">
                 <span className="flex items-center gap-1 bg-surface-container-low px-2.5 py-1 rounded-lg">
-                  <span className={`w-2 h-2 rounded-full ${busy ? 'bg-primary animate-pulse' : 'bg-primary'}`} />
+                  <span className={`w-2 h-2 rounded-full ${busy ? 'bg-primary motion-safe:animate-pulse' : 'bg-primary'}`} />
                   后续分镜参考首镜
                 </span>
               </div>
@@ -320,7 +321,7 @@ export function SeriesStudio(props: SeriesStudioProps) {
                   onClick={() => void planStory()}
                   disabled={planLocked || !brief.trim()}
                 >
-                  <StitchIcon name={busy ? 'progress_activity' : 'edit_note'} size={20} className={busy ? 'animate-spin' : ''} />
+                  <StitchIcon name={busy ? 'progress_activity' : 'edit_note'} size={20} className={busy ? 'motion-safe:animate-spin' : ''} />
                   <span>{busy ? '正在拆解分镜...' : filledPrompts ? '重新拆解分镜' : '智能拆解分镜'}</span>
                   <CreditCost kind="text" />
                 </button>
@@ -478,7 +479,7 @@ export function SeriesStudio(props: SeriesStudioProps) {
                       ) : (
                         <>
                           {running && (
-                            <div className="absolute inset-0 bg-gradient-to-tr from-primary/10 via-secondary-container/20 to-transparent animate-pulse" />
+                            <div className="absolute inset-0 bg-gradient-to-tr from-primary/10 via-secondary-container/20 to-transparent motion-safe:animate-pulse" />
                           )}
                           <div
                             className={`relative rounded-full flex items-center justify-center mb-2 ${running ? 'w-14 h-14 border-[3px] border-primary/20 text-primary' : 'w-10 h-10 bg-surface-container text-outline'}`}
@@ -501,14 +502,14 @@ export function SeriesStudio(props: SeriesStudioProps) {
                             {sending ? '正在上传并等待确认' : receiving ? receipt.detail : unconfirmed ? '可继续提交, 已受理的任务不会重复生成' : running
                               ? '正在合成分镜画面与风格质感'
                               : waiting
-                                ? `队列第 ${shot.job?.yourPosition || 1} 位, 按序自动执行`
+                                ? personalQueuePosition(shot.job?.yourPosition || 0)
                                 : failed
                                   ? shot.job?.error || '生成失败, 请重试'
                                   : awaitingReview ? '检查下方提示词, 确认后开始生成' : '填写画面提示词, 或由 AI 智能拆解'}
                           </span>
-                          {running && (
+                          {(running || waiting) && shot.job && (
                             <span className="relative font-meta-sm text-meta-sm text-outline mt-0.5">
-                              已渲染 {Math.floor((shot.job?.elapsedMs || 0) / 1000)} 秒 · 连贯渲染中
+                              <QueueElapsed job={shot.job} />
                             </span>
                           )}
                           {waiting && (
@@ -584,7 +585,7 @@ export function SeriesStudio(props: SeriesStudioProps) {
                         ) : running ? (
                           <>
                             <span className="flex items-center gap-1 text-primary">
-                              <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
+                              <span className="w-1.5 h-1.5 rounded-full bg-primary motion-safe:animate-pulse" />
                               画面笔触生成中...
                             </span>
                             <span className="text-outline" title="请求已发往上游, 无法撤回">上游执行中</span>
@@ -634,7 +635,7 @@ export function SeriesStudio(props: SeriesStudioProps) {
                   {busy ? '正在拆解分镜提示词...' : canContinue ? '已确认的分镜尚有未提交项' : activeJobs ? activityLabel : remainingCount === 0 ? `已完成 ${plannedTotal} 张分镜图片` : hasCompletePlan ? `${plannedTotal} 幕分镜已准备好, 请检查后确认` : `请补全分镜提示词 (${filledPrompts}/${plannedTotal})`}
                 </p>
                 <p className="font-body-sm text-body-sm text-on-surface-variant mt-1">
-                  {canContinue ? '继续提交剩余分镜, 已提交的任务不会重复生成.' : activeJobs ? '可在任务队列中查看进度.' : remainingCount === 0 ? '可下载整套图片, 或继续调整并重绘单镜.' : '可直接修改每幕提示词和本镜参数, 确认后才开始生成图片.'}
+                  {canContinue ? '继续提交剩余分镜, 已提交的任务不会重复生成.' : activeJobs ? '可在我的任务中查看排队和生成状态.' : remainingCount === 0 ? '可下载整套图片, 或继续调整并重绘单镜.' : '可直接修改每幕提示词和本镜参数, 确认后才开始生成图片.'}
                 </p>
               </div>
               <button

@@ -37,11 +37,21 @@ export interface QueueJob {
   globalQueued: number;
   averageMs: number;
   estimatedWaitMs: number;
+  serverNow: number;
+  /** Browser monotonic time when this server snapshot was received. */
+  receivedAt?: number;
   queuedAt: number;
   startedAt: number;
   finishedAt: number;
   elapsedMs: number;
 }
 
-export interface QueueListResponse { jobs: QueueJob[]; userId: string; credits: CreditBalance; prices: CreditPrices; globalActive: number; globalQueued: number; averageMs: number; historyCursor?: string; historyTotal?: number }
+export interface QueueActivity {
+  globalActive: number;
+  globalQueued: number;
+  serverNow: number;
+  connection: 'loading' | 'ready' | 'stale';
+}
+
+export interface QueueListResponse { jobs: QueueJob[]; userId: string; credits: CreditBalance; prices: CreditPrices; serverNow: number; globalActive: number; globalQueued: number; averageMs: number; historyCursor?: string; historyTotal?: number }
 export interface QueueResult { created?: number; data?: Array<{ b64_json?: string; url?: string; mime_type?: string; width?: number; height?: number; bytes?: number; revised_prompt?: string }> }

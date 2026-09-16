@@ -5,19 +5,18 @@ import { attachLocalReference, getOutboxInput, isJobConsumed, listOutbox, remove
 import { randomId } from '../lib/random/id';
 import { validateGenerationSubmission } from '../../shared/generation-contract.mjs';
 import type { ResultRecord } from '../types/generation';
-import type { QueueJob } from '../types/queue';
+import type { QueueActivity, QueueJob } from '../types/queue';
 import { bindCreditQuote, getCreditQuote } from '../lib/credits';
 import { needsNewCreditIdentity, recoverSubmissionBatch } from '../lib/queue-recovery';
 import { useQueueDelivery } from './useQueueDelivery';
 
 function localJob(input: QueueSubmitInput, savedAt: number, jobId?: string, submitting = false): QueueJob {
-  return { id: jobId || `local_${input.requestId}`, requestId: input.requestId, status: submitting ? 'submitting' : jobId ? 'interrupted' : 'unsubmitted', localOnly: true, outcomeUnknown: Boolean(jobId), clientContext: input.clientContext, error: submitting ? '' : jobId ? '服务端任务记录已过期, 可从本地配方重新生成' : '尚未确认提交, 可继续提交', canRetry: !submitting, retryOf: input.retryOf || '', providerId: '', providerName: '', yourPosition: 0, yourQueued: 0, globalActive: 0, globalQueued: 0, averageMs: 0, estimatedWaitMs: 0, queuedAt: savedAt, startedAt: 0, finishedAt: 0, elapsedMs: 0 };
+  return { id: jobId || `local_${input.requestId}`, requestId: input.requestId, status: submitting ? 'submitting' : jobId ? 'interrupted' : 'unsubmitted', localOnly: true, outcomeUnknown: Boolean(jobId), clientContext: input.clientContext, error: submitting ? '' : jobId ? '服务端任务记录已过期, 可从本地配方重新生成' : '尚未确认提交, 可继续提交', canRetry: !submitting, retryOf: input.retryOf || '', providerId: '', providerName: '', yourPosition: 0, yourQueued: 0, globalActive: 0, globalQueued: 0, averageMs: 0, estimatedWaitMs: 0, serverNow: 0, queuedAt: savedAt, startedAt: 0, finishedAt: 0, elapsedMs: 0 };
 }
 
 export function useQueue(onResult: (records: ResultRecord[], jobId: string) => Promise<unknown>, enabled = true, ownerId = '') {
   const [jobs, setJobs] = useState<QueueJob[]>([]);
-  const [globalActive, setGlobalActive] = useState(0);
-  const [globalQueued, setGlobalQueued] = useState(0);
+  const [activity, setActivity] = useState<QueueActivity>({ globalActive: 0, globalQueued: 0, serverNow: 0, connection: 'loading' });
   const [error, setError] = useState('');
   const [historyCursor, setHistoryCursor] = useState('');
   const [loadingHistory, setLoadingHistory] = useState(false);
@@ -36,12 +35,17 @@ export function useQueue(onResult: (records: ResultRecord[], jobId: string) => P
   const ownerRef = useRef(ownerId);
   ownerRef.current = ownerId;
   const delivery = useQueueDelivery(onResult, enabled, ownerId);
+  const syncActivity = useCallback((snapshot: Pick<QueueActivity, 'globalActive' | 'globalQueued' | 'serverNow'>) => {
+    setActivity((current) => snapshot.serverNow >= current.serverNow
+      ? { globalActive: snapshot.globalActive, globalQueued: snapshot.globalQueued, serverNow: snapshot.serverNow, connection: 'ready' }
+      : current);
+  }, []);
 
   useEffect(() => {
     scope.stopped = false;
     historyCache.current.clear(); historyExpanded.current = false;
     jobsRef.current = []; setJobs([]); setHistoryCursor(''); setError('');
-    setGlobalActive(0); setGlobalQueued(0); workRef.current = false;
+    setActivity({ globalActive: 0, globalQueued: 0, serverNow: 0, connection: 'loading' }); workRef.current = false;
     return () => { scope.stopped = true; if (polling.current?.scope === scope) polling.current.controller.abort(); };
   }, [scope]);
 
@@ -78,8 +82,7 @@ export function useQueue(onResult: (records: ResultRecord[], jobId: string) => P
       if (!isCurrent() || mutation.current !== version) return;
       setJobs(visible);
       jobsRef.current = visible;
-      setGlobalActive(data.globalActive || 0);
-      setGlobalQueued(data.globalQueued || 0);
+      syncActivity(data);
       workRef.current = visible.some((job) => ['running', 'pending', 'submitting'].includes(job.status) || job.status === 'succeeded' && !job.acknowledgedAt);
       const unlinked = serverJobs.filter((job) => outbox.some((row) => row.requestId === job.requestId && row.jobId !== job.id));
       if (unlinked.length) await markOutboxAccepted(unlinked, false);
@@ -96,9 +99,12 @@ export function useQueue(onResult: (records: ResultRecord[], jobId: string) => P
     polling.current = { scope, promise: operation, controller };
     try { await operation; }
     catch (cause) {
-      if (isCurrent() && !(cause instanceof ApiError && cause.status === 401)) setError(cause instanceof Error && cause.name === 'TimeoutError' ? '队列连接超时, 正在重新连接' : cause instanceof Error ? cause.message : '队列连接失败');
+      if (isCurrent() && !(cause instanceof ApiError && cause.status === 401)) {
+        setActivity((current) => ({ ...current, connection: current.serverNow ? 'stale' : 'loading' }));
+        setError(cause instanceof Error && cause.name === 'TimeoutError' ? '队列连接超时, 正在重新连接' : cause instanceof Error ? cause.message : '队列连接失败');
+      }
     } finally { if (polling.current?.promise === operation) polling.current = null; }
-  }, [scope, delivery.enqueue]);
+  }, [scope, delivery.enqueue, syncActivity]);
 
   useEffect(() => {
     if (!enabled) return;
@@ -142,6 +148,8 @@ export function useQueue(onResult: (records: ResultRecord[], jobId: string) => P
           const known = jobsRef.current.find((item) => item.id === job.id && !item.localOnly);
           return known && (!['pending', 'running'].includes(known.status) || known.startedAt > job.startedAt) ? known : job;
         });
+        const snapshot = latest.reduce((newest, job) => job.serverNow > newest.serverNow ? job : newest);
+        syncActivity(snapshot);
         jobsRef.current = [...latest, ...jobsRef.current.filter((job) => !requestIds.has(job.requestId)).map((job) => {
           const replacement = accepted.find((next) => next.retryOf === job.id);
           return replacement ? { ...job, supersededBy: replacement.id, canRetry: false } : job;
@@ -168,7 +176,7 @@ export function useQueue(onResult: (records: ResultRecord[], jobId: string) => P
       }
       void tick();
     }
-  }, [tick]);
+  }, [tick, syncActivity]);
 
   const submit = useCallback(async (value: QueueSubmitInput, onAccepted?: () => void) => {
     const quote = bindCreditQuote(value.creditQuote);
@@ -275,5 +283,5 @@ export function useQueue(onResult: (records: ResultRecord[], jobId: string) => P
   }, [historyCursor, loadingHistory, tick, ownerId]);
   const refresh = useCallback(() => { delivery.retry(); return tick(); }, [delivery.retry, tick]);
   const visibleJobs = jobs.map((job) => ({ ...job, delivery: delivery.states.get(job.id) }));
-  return { jobs: visibleJobs, globalActive, globalQueued, error: error || delivery.error, submit, submitBatch, cancel, retry, update, prioritize, archive, refresh, loadMore, hasMore: Boolean(historyCursor), loadingHistory };
+  return { jobs: visibleJobs, activity, error: error || delivery.error, submit, submitBatch, cancel, retry, update, prioritize, archive, refresh, loadMore, hasMore: Boolean(historyCursor), loadingHistory };
 }
