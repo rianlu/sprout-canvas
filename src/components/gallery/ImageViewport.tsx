@@ -5,9 +5,8 @@ interface ImageViewportProps {
   src?: string;
   alt: string;
   error?: string;
-  fullscreen: boolean;
-  onFullscreen: () => void;
-  onDownload: () => void;
+  onDownload?: () => void;
+  onCopy?: () => void;
 }
 
 type Point = { x: number; y: number };
@@ -16,7 +15,7 @@ type Size = { width: number; height: number };
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 
 /** Keep viewport controls outside the image transform; percentages refer to original pixels. */
-export function ImageViewport({ src, alt, error, fullscreen, onFullscreen, onDownload }: ImageViewportProps) {
+export function ImageViewport({ src, alt, error, onDownload, onCopy }: ImageViewportProps) {
   const viewportRef = useRef<HTMLDivElement>(null);
   const [viewport, setViewport] = useState<Size>({ width: 0, height: 0 });
   const [natural, setNatural] = useState<Size>({ width: 0, height: 0 });
@@ -75,9 +74,17 @@ export function ImageViewport({ src, alt, error, fullscreen, onFullscreen, onDow
     const wheel = (event: WheelEvent) => {
       event.preventDefault();
       const bounds = element.getBoundingClientRect();
-      const delta = event.deltaY * (event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? bounds.height : 1);
-      const current = viewRef.current.scale ?? geometry.current.fitScale;
-      zoomAt(current * Math.exp(-clamp(delta, -500, 500) * 0.002), { x: event.clientX - bounds.left - bounds.width / 2, y: event.clientY - bounds.top - bounds.height / 2 });
+      const unit = event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? bounds.height : 1;
+      const deltaX = event.deltaX * unit;
+      const deltaY = event.deltaY * unit;
+      if (event.ctrlKey || event.metaKey) {
+        const current = viewRef.current.scale ?? geometry.current.fitScale;
+        zoomAt(current * Math.exp(-clamp(deltaY, -500, 500) * 0.002), { x: event.clientX - bounds.left - bounds.width / 2, y: event.clientY - bounds.top - bounds.height / 2 });
+        return;
+      }
+      const current = viewRef.current;
+      const panX = event.shiftKey && !deltaX ? deltaY : deltaX;
+      updateView({ scale: current.scale, x: current.x - panX, y: current.y - deltaY });
     };
     // Keep native touch panning from consuming the first toolbar tap after a custom drag.
     const touchMove = (event: TouchEvent) => event.preventDefault();
@@ -87,7 +94,7 @@ export function ImageViewport({ src, alt, error, fullscreen, onFullscreen, onDow
       element.removeEventListener('wheel', wheel);
       element.removeEventListener('touchmove', touchMove);
     };
-  }, [ready, zoomAt]);
+  }, [ready, updateView, zoomAt]);
 
   const eventPoint = (event: PointerEvent<HTMLDivElement>): Point => {
     const bounds = event.currentTarget.getBoundingClientRect();
@@ -119,14 +126,14 @@ export function ImageViewport({ src, alt, error, fullscreen, onFullscreen, onDow
         <button type="button" className="viewer-tool-button px-2 gap-1" aria-label="适应窗口" title="适应窗口 (0)" aria-pressed={view.scale === null} disabled={!ready} onClick={resetView}><StitchIcon name="fit_screen" size={18} /><span className="hidden sm:inline">适应窗口</span></button>
         <button type="button" className="viewer-tool-button px-2" aria-label="原始大小" title="原始大小 (100%)" aria-pressed={view.scale === 1} disabled={!ready} onClick={() => updateView({ scale: 1, x: 0, y: 0 })}>100%</button>
         <span className="flex-1" />
-        <button type="button" className="viewer-tool-button" aria-label="下载当前图片" title="下载当前图片" onClick={onDownload}><StitchIcon name="download" size={20} /></button>
-        <button type="button" className="viewer-tool-button" aria-label={fullscreen ? '退出全屏' : '进入全屏'} title={fullscreen ? '退出全屏' : '进入全屏'} onClick={onFullscreen}><StitchIcon name={fullscreen ? 'fullscreen_exit' : 'fullscreen'} size={20} /></button>
+        {onCopy && <button type="button" className="viewer-tool-button" aria-label="复制原图" title="复制原图" disabled={!ready} onClick={onCopy}><StitchIcon name="content_copy" size={20} /></button>}
+        {onDownload && <button type="button" className="viewer-tool-button" aria-label="下载当前图片" title="下载当前图片" onClick={onDownload}><StitchIcon name="download" size={20} /></button>}
       </div>
       <div
         ref={viewportRef}
         role="region"
         aria-label="图片查看区"
-        aria-description="滚轮或双指缩放, 拖动查看细节. 双击切换放大与适应窗口; 加减键缩放, 0 适应窗口, Shift 加方向键移动图片."
+        aria-description="滚轮平移查看细节, Ctrl 或 Cmd 加滚轮缩放, 拖动平移, 双指缩放. 双击切换放大与适应窗口; 加减键缩放, 0 适应窗口, Shift 加方向键移动图片."
         tabIndex={0}
         className="gallery-image-viewport flex-1 min-h-0 relative overflow-hidden bg-surface-container-low outline-offset-[-3px]"
         style={{ touchAction: 'none', cursor: !ready ? 'default' : dragging && canPan ? 'grabbing' : canPan ? 'grab' : 'zoom-in' }}

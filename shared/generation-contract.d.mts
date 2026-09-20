@@ -21,6 +21,7 @@ export interface GenerationRecipe extends Omit<GenerationRequest, 'references' |
   version: 1; model: string; providerId: string; providerName: string; generationMode: string;
   styleId: string; styleName: string; tone: string;
   references: Omit<GenerationReference, 'dataUrl'>[]; hasMask: boolean; referenceJobId?: string;
+  referenceImage?: Omit<GenerationReference, 'dataUrl'>;
 }
 export const GENERATION_DEFAULTS: Readonly<Pick<GenerationRequest, 'size' | 'quality' | 'outputFormat' | 'background' | 'outputCompression'>>;
 export const IMAGE_SIZES: readonly string[];

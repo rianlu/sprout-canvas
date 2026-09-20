@@ -174,7 +174,7 @@ try {
   assert.equal(await board.getByLabel('全站生图状态').count(), 0);
   await everySecond(board.locator('[data-timer-stage="pending"]').first(), 'series queue clock');
   await closeQueue(b);
-  await board.getByRole('heading', { name: /分镜矩阵看板/ }).scrollIntoViewIfNeeded();
+  await board.getByRole('heading', { name: '分镜看板', exact: true }).scrollIntoViewIfNeeded();
   await screenshot(b, 'series-queued-desktop');
   await openQueue(b);
   assert.match(await summary(b).innerText(), /等待数包含你的任务/);

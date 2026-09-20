@@ -299,7 +299,7 @@ try {
   assert.equal(app.calls.length, beforeRecovery);
   assert.equal((await rows(recovery, 'outbox'))[0].requestId, legacyInput.requestId);
   assert.equal(await recovery.locator('.studio-rail textarea').inputValue(), '旧版参考图草稿, 确认后再使用新额度');
-  assert.ok(await recovery.getByRole('img', { name: '参考源图' }).isVisible());
+  assert.ok(await recovery.getByRole('img', { name: '参考图 1', exact: true }).isVisible());
   await recovery.unroute('**/api/jobs/batch');
   const recoveryHold = new Promise((resolve) => { releaseImage = resolve; });
   app.controls.respond = async (call, response) => { if (call.path.includes('/images/')) await recoveryHold; return respond(call, response); };

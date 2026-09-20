@@ -2,15 +2,13 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Brush,
   CircleCheck,
+  Copy,
   Download,
   Eraser,
   Layers,
   Leaf,
   Lightbulb,
-  Maximize2,
-  Plus,
   RefreshCw,
-  Scissors,
   Sparkles,
   Undo2,
   Wand2,
@@ -34,6 +32,8 @@ import { PromptActivityBorder } from '../ui/PromptActivityBorder';
 import type { QueueDelivery } from '../../types/queue';
 import { deliveryMessage, personalQueuePosition, type QueueTiming } from '../../lib/queue-presentation';
 import { QueueElapsed } from '../queue/QueueElapsed';
+import { ReferenceImageSlots } from '../image/ReferenceImageSlots';
+import { ReferenceImagePreview } from '../image/ReferenceImagePreview';
 
 /* ============ 单图创作 · 控制轨 (照搬 Stitch 单图稿 LEFT CONTROL PANEL, 类名原样) ============ */
 
@@ -46,18 +46,15 @@ export interface StitchStudioRailProps {
   polishing: boolean;
   promptHistory: PromptHistory | null;
   onTogglePolish: () => void;
-  canAddReference: boolean;
   imageBusy: boolean;
-  onAddRef: (file: File) => void;
   selectedTemplate: StudioStyleTemplate | null;
   onUnpinStyle: () => void;
   refImage: RefImage | null;
   referenceImages: RefImage[];
   maxReferences: number;
   onUploadRefs: (files: File[], replaceId?: string) => void;
-  onOpenMaskEditor: (referenceId?: string) => void;
-  choosingOriginal: boolean;
-  onChoosingOriginalChange: (value: boolean) => void;
+  onOpenMaskEditor: () => void;
+  onSwitchToEdit: () => void;
   onSwitchToReference: () => void;
   sourceRecord: ResultRecord | null;
   maskStrokes: number;
@@ -185,33 +182,24 @@ export function StitchStudioRail(props: StitchStudioRailProps) {
   } = props;
   const fileRef = useRef<HTMLInputElement>(null);
   const replacementId = useRef<string | undefined>(undefined);
-  const [dragging, setDragging] = useState(false);
-  const choosingOriginal = props.choosingOriginal;
-  const setChoosingOriginal = props.onChoosingOriginalChange;
+  const [originalPreview, setOriginalPreview] = useState(false);
   const isEdit = config.mode === 'edit';
   const referenceCount = props.referenceImages.length;
+  const tooManyReferences = !isEdit && referenceCount > props.maxReferences;
   const imagesDisabled = props.imageBusy || submitting;
-  useEffect(() => { if (isEdit || referenceCount < 2) setChoosingOriginal(false); }, [isEdit, referenceCount, setChoosingOriginal]);
+  useEffect(() => { if (!isEdit) setOriginalPreview(false); }, [isEdit]);
   function chooseFiles(referenceId?: string) {
     if (!fileRef.current) return;
     replacementId.current = referenceId;
     fileRef.current.multiple = !referenceId;
     fileRef.current.click();
   }
-  function chooseEditOriginal() {
-    if (!isEdit && referenceCount > 1) setChoosingOriginal(true);
-    else onOpenMaskEditor();
-  }
   const outputFormats = props.imageCapabilities?.formats ?? [];
   const sourceRecipe = props.sourceRecord?.recipe;
+  const referenceSlots = <ReferenceImageSlots references={props.referenceImages} maxReferences={props.maxReferences} disabled={imagesDisabled} busy={props.imageBusy} onAdd={() => chooseFiles()} onUpload={(files) => props.onUploadRefs(files)} onReplace={chooseFiles} onRemove={props.onRemoveRef} />;
 
   return (
-    <section className="w-full lg:w-[440px] shrink-0 bg-surface-container-lowest/80 backdrop-blur-xl rounded-xl p-space-lg shadow-[0_12px_36px_rgba(85,95,75,0.06)] flex flex-col gap-space-lg" onPaste={(event) => {
-      const image = Array.from(event.clipboardData.items).find((item) => item.kind === 'file' && item.type.startsWith('image/'))?.getAsFile();
-      if (!image) return;
-      event.preventDefault();
-      if (props.canAddReference) props.onAddRef(image);
-    }}>
+    <section className="w-full lg:w-[440px] shrink-0 bg-surface-container-lowest/80 backdrop-blur-xl rounded-xl p-space-lg shadow-[0_12px_36px_rgba(85,95,75,0.06)] flex flex-col gap-space-lg">
       {/* 灵感提示词 */}
       <div className="flex flex-col gap-space-xs">
         <div className="flex flex-wrap items-center justify-between gap-2">
@@ -270,86 +258,46 @@ export function StitchStudioRail(props: StitchStudioRailProps) {
         : <button type="button" onClick={props.onOpenStyles} disabled={submitting || polishing} className="flex items-center justify-between w-full p-3 rounded-xl border border-outline-variant/30 bg-surface-container-low hover:bg-surface-container text-primary font-body-sm text-body-sm disabled:opacity-50"><span className="flex items-center gap-2"><StitchIcon name="palette" size={18} />从风格库挑选提示词模板</span><StitchIcon name="north_east" size={16} /></button>)}
 
       {/* 基底垫图与局部重绘 */}
-      <div aria-label="参考图片" className={`studio-reference-area bg-surface-container-low rounded-xl p-space-md flex flex-col gap-space-sm ${dragging && props.canAddReference ? 'outline outline-2 outline-primary' : ''}`} onDragOver={(event) => {
+      <div aria-label="参考图片" className="studio-reference-area bg-surface-container-low rounded-xl p-space-md flex flex-col gap-space-sm" onDragOver={(event) => {
         if (!event.dataTransfer.types.includes('Files')) return;
-        event.preventDefault(); event.dataTransfer.dropEffect = props.canAddReference ? 'copy' : 'none';
-        if (props.canAddReference) setDragging(true);
-      }} onDragLeave={(event) => {
-        if (!(event.relatedTarget instanceof Node) || !event.currentTarget.contains(event.relatedTarget)) setDragging(false);
+        event.preventDefault();
+        event.dataTransfer.dropEffect = imagesDisabled || isEdit ? 'none' : 'copy';
       }} onDrop={(event) => {
         if (!event.dataTransfer.types.includes('Files')) return;
-        event.preventDefault(); setDragging(false);
-        const image = Array.from(event.dataTransfer.files).find((file) => file.type.startsWith('image/'));
-        if (image && props.canAddReference) props.onAddRef(image);
+        event.preventDefault();
+        const files = Array.from(event.dataTransfer.files).filter((file) => file.type.startsWith('image/'));
+        if (files.length && !imagesDisabled && !isEdit) props.onUploadRefs(files);
       }}>
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-space-xs">
             <Leaf className="text-primary" size={18} aria-hidden />
-            <span className="font-body-md text-body-md font-medium text-on-surface">{isEdit ? '局部重绘原图' : '基底垫图与局部重绘'}</span>
+            <span className="font-body-md text-body-md font-medium text-on-surface">基底垫图与局部重绘</span>
           </div>
-          {refImage && (
-            <div className="flex items-center gap-2"><span className="px-2 py-0.5 rounded-full bg-primary-fixed text-on-primary-fixed font-meta-sm text-meta-sm">{isEdit ? '1 张编辑原图' : `${referenceCount} / ${props.maxReferences} 张`}</span><button type="button" aria-label={referenceCount > 1 ? '清空参考图' : '移除参考图'} title="清空参考图和蒙版" disabled={imagesDisabled} onClick={() => props.onRemoveRef()} className="text-outline hover:text-error disabled:opacity-50"><X size={15} /></button></div>
-          )}
+          <div className="flex items-center gap-2"><span className="px-2 py-0.5 rounded-full bg-primary-fixed text-on-primary-fixed font-meta-sm text-meta-sm">{isEdit ? '1 张编辑原图' : `${referenceCount} / ${props.maxReferences} 张`}</span>{refImage && <button type="button" aria-label={referenceCount > 1 ? '清空参考图' : '移除参考图'} title="清空参考图和蒙版" disabled={imagesDisabled} onClick={() => props.onRemoveRef()} className="text-outline hover:text-error disabled:opacity-50"><X size={15} /></button>}</div>
         </div>
         {refImage ? (
           <>
             <div className="grid grid-cols-2 gap-1 rounded-lg bg-surface-container p-1" role="group" aria-label="图片使用方式">
-              <button type="button" aria-pressed={!isEdit && !choosingOriginal} disabled={imagesDisabled} title="切换后清除蒙版, 可调整画幅与风格" onClick={() => { setChoosingOriginal(false); props.onSwitchToReference(); }} className={`rounded-md px-2 py-1.5 font-meta-sm text-meta-sm disabled:opacity-50 ${!isEdit && !choosingOriginal ? 'bg-surface-container-lowest text-primary shadow-sm' : 'text-on-surface-variant'}`}>参考图生成</button>
-              <button type="button" aria-pressed={isEdit || choosingOriginal} disabled={polishing || imagesDisabled} onClick={chooseEditOriginal} className={`rounded-md px-2 py-1.5 font-meta-sm text-meta-sm disabled:opacity-50 ${isEdit || choosingOriginal ? 'bg-surface-container-lowest text-primary shadow-sm' : 'text-on-surface-variant'}`}>局部重绘</button>
+              <button type="button" aria-pressed={!isEdit} disabled={imagesDisabled} title="切换后清除蒙版, 可调整画幅与风格" onClick={props.onSwitchToReference} className={`rounded-md px-2 py-1.5 font-meta-sm text-meta-sm disabled:opacity-50 ${!isEdit ? 'bg-surface-container-lowest text-primary shadow-sm' : 'text-on-surface-variant'}`}>参考图生成</button>
+              <button type="button" aria-pressed={isEdit} disabled={polishing || imagesDisabled} onClick={props.onSwitchToEdit} className={`rounded-md px-2 py-1.5 font-meta-sm text-meta-sm disabled:opacity-50 ${isEdit ? 'bg-surface-container-lowest text-primary shadow-sm' : 'text-on-surface-variant'}`}>局部重绘</button>
             </div>
-            <p className="font-meta-sm text-meta-sm text-on-surface-variant">{isEdit ? '涂抹指定区域, 沿用原图参数和画风.' : choosingOriginal ? '选择一张需要修改的原图, 其余图片会保留, 不参与本次局部重绘.' : referenceCount > 1 ? '按图 1, 图 2 的顺序参考, 可在提示词中说明各张图片的用途.' : '参考原图重新创作, 可自由调整画幅与风格.'}</p>
-            {!isEdit && referenceCount > 1 ? <div className="grid grid-cols-2 gap-2" aria-label="已载入参考图">
-              {props.referenceImages.map((reference, index) => <article key={reference.id} className={`min-w-0 rounded-lg bg-surface-container-lowest overflow-hidden border ${choosingOriginal ? 'border-primary/40' : 'border-outline-variant/20'}`}>
-                <div className="relative aspect-[4/3] bg-surface-container">
-                  <img src={reference.dataUrl} alt={`参考图 ${index + 1}`} className="w-full h-full object-contain" />
-                  <span className="absolute top-1.5 left-1.5 px-1.5 py-0.5 rounded bg-surface-bright/95 text-on-surface font-meta-sm text-[10px]">图 {index + 1}</span>
-                  {!choosingOriginal && <button type="button" aria-label={`移除参考图 ${index + 1}`} disabled={imagesDisabled} className="absolute top-1.5 right-1.5 p-1 rounded bg-surface-bright/95 text-on-surface-variant hover:text-error disabled:opacity-50" onClick={() => props.onRemoveRef(reference.id)}><X size={13} /></button>}
-                </div>
-                <div className="p-2">
-                  <p className="truncate font-meta-sm text-meta-sm text-on-surface" title={reference.name}>{reference.name}</p>
-                  {choosingOriginal
-                    ? <button type="button" aria-label={`局部重绘参考图 ${index + 1}`} disabled={polishing || imagesDisabled} onClick={() => { setChoosingOriginal(false); onOpenMaskEditor(reference.id); }} className="mt-2 w-full flex items-center justify-center gap-1 rounded-md bg-primary text-on-primary py-1.5 font-meta-sm text-meta-sm disabled:opacity-50"><Brush size={13} />编辑这张</button>
-                    : <button type="button" aria-label={`更换参考图 ${index + 1}`} disabled={imagesDisabled} onClick={() => chooseFiles(reference.id)} className="mt-1 flex items-center gap-1 text-primary font-meta-sm text-meta-sm hover:underline disabled:opacity-50"><RefreshCw size={12} />更换图片</button>}
-                </div>
-              </article>)}
-            </div> : <div className="flex items-center gap-space-md p-space-xs bg-surface-container-lowest rounded-lg shadow-sm">
-              <div className="w-16 h-16 rounded-md overflow-hidden shrink-0 relative bg-surface-container">
-                <img className="w-full h-full object-cover" src={refImage.dataUrl} alt="参考源图" />
-                <span className="absolute bottom-0 inset-x-0 bg-inverse-surface/60 text-inverse-on-surface font-meta-sm text-[9px] text-center py-0.5">
-                  参考源图
-                </span>
-              </div>
-              <div className="flex-1 min-w-0 flex flex-col justify-between h-16 py-0.5">
-                <div className="truncate">
-                  <p className="font-body-sm text-body-sm font-medium text-on-surface truncate">{refImage.name}</p>
-                  <p className="font-meta-sm text-meta-sm text-on-surface-variant">{isEdit ? '编辑原图 · 保持构图与画风' : '参考画面 · 重新生成'}</p>
-                </div>
-                <div className="flex items-center gap-space-xs">
-                  <button
-                    type="button"
-                    className="px-2 py-0.5 rounded bg-surface-container text-on-surface font-meta-sm text-meta-sm hover:bg-surface-container-high transition-colors"
-                    title={isEdit ? '更换图片后重新选择编辑方式' : undefined}
-                    disabled={imagesDisabled}
-                    onClick={() => chooseFiles(refImage.id)}
-                  >
-                    更换图片
-                  </button>
-                  {isEdit && <button
-                    type="button"
-                    className="px-2 py-0.5 rounded bg-secondary-container text-on-secondary-container font-meta-sm text-meta-sm hover:bg-secondary-fixed transition-colors flex items-center gap-1"
-                    onClick={() => onOpenMaskEditor()}
-                    disabled={polishing || imagesDisabled}
-                  >
-                    <Brush size={13} aria-hidden />
-                    <span>{maskStrokes > 0 ? '编辑蒙版' : '绘制蒙版'}</span>
-                  </button>}
+            <p className="font-meta-sm text-meta-sm text-on-surface-variant">{isEdit ? '涂抹指定区域, 沿用原图参数和画风.' : referenceCount > 1 ? '按图 1, 图 2 的顺序参考, 可在提示词中说明各张图片的用途.' : '参考原图重新创作, 可自由调整画幅与风格.'}</p>
+            {tooManyReferences && <p role="status" className="rounded-lg bg-secondary-container/50 px-3 py-2 font-meta-sm text-meta-sm text-on-secondary-container">配方已载入 {referenceCount} 张参考图, 单图创作最多使用 {props.maxReferences} 张. 请移除多余图片并检查文案后再绘制.</p>}
+            {!isEdit ? referenceSlots : <div className="flex items-start gap-3 rounded-lg bg-surface-container-lowest p-2 shadow-sm">
+              <button type="button" aria-label="查看局部重绘原图" title="点击查看大图" onClick={() => setOriginalPreview(true)} className="h-16 w-16 shrink-0 overflow-hidden rounded-lg bg-surface-container">
+                <img className="h-full w-full object-contain" src={refImage.dataUrl} alt="局部重绘原图" />
+              </button>
+              <div className="min-w-0 flex-1 space-y-2">
+                <div><p className="truncate font-body-sm text-body-sm font-medium text-on-surface" title={refImage.name}>{refImage.name}</p><p className="font-meta-sm text-[11px] text-on-surface-variant">仅编辑这一张图片</p></div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <button type="button" disabled={imagesDisabled} title="更换图片后回到参考图生成, 并清除当前蒙版" onClick={() => chooseFiles(refImage.id)} className="inline-flex h-8 items-center gap-1 px-2.5 rounded-lg bg-surface-container text-on-surface font-meta-sm text-meta-sm hover:bg-surface-container-high transition-colors disabled:opacity-50"><RefreshCw size={14} aria-hidden />更换图片</button>
+                  <button type="button" disabled={polishing || imagesDisabled} onClick={onOpenMaskEditor} className="inline-flex h-8 items-center gap-1 px-2.5 rounded-lg bg-secondary-container text-on-secondary-container font-meta-sm text-meta-sm hover:bg-secondary-fixed transition-colors disabled:opacity-50"><Brush size={14} aria-hidden /><span>{maskStrokes > 0 ? '编辑蒙版' : '绘制蒙版'}</span></button>
                 </div>
               </div>
             </div>}
-            {isEdit && referenceCount > 1 && <p className="font-meta-sm text-[11px] text-secondary">另 {referenceCount - 1} 张参考图已保留, 切回参考图生成可继续使用.</p>}
-            {!isEdit && !choosingOriginal && <button type="button" onClick={() => chooseFiles()} disabled={imagesDisabled || referenceCount >= props.maxReferences} className="w-full flex items-center justify-center gap-1.5 rounded-lg border border-dashed border-outline-variant/60 py-2 text-primary font-meta-sm text-meta-sm hover:bg-surface-container-lowest disabled:opacity-50 disabled:cursor-not-allowed"><Plus size={15} />{props.imageBusy ? '正在载入图片...' : referenceCount >= props.maxReferences ? `已达 ${props.maxReferences} 张上限` : `添加参考图 (${referenceCount}/${props.maxReferences})`}</button>}
+            {isEdit && referenceCount > 1 && <p className="font-meta-sm text-[11px] text-secondary">其余 {referenceCount - 1} 张图片已保留, 切回参考图生成可继续使用.</p>}
             {maskStrokes > 0 && (
-              <div className="flex items-center justify-between px-space-sm py-2 rounded-lg bg-primary/10 text-on-surface">
+              <div className="flex items-center justify-between gap-2 px-space-sm py-2 rounded-lg bg-primary/10 text-on-surface">
                 <div className="flex items-center gap-2 min-w-0">
                   <Brush className="text-primary shrink-0" size={18} aria-hidden />
                   <span className="font-meta-sm text-meta-sm truncate">
@@ -367,20 +315,7 @@ export function StitchStudioRail(props: StitchStudioRailProps) {
               </div>
             )}
           </>
-        ) : (
-          /* 空态: 拖拽上传区 (稿内隐藏状态; 结构照常用) */
-          <button
-            type="button"
-            disabled={imagesDisabled}
-            className="w-full flex flex-col items-center justify-center gap-1 py-space-md rounded-lg border-2 border-dashed border-outline-variant/50 hover:border-primary/50 hover:bg-surface-container-lowest/50 transition-colors text-on-surface-variant"
-            onClick={() => chooseFiles()}
-          >
-            <Plus size={20} aria-hidden className="text-primary" />
-            <span className="font-body-sm text-body-sm">{props.imageBusy ? '正在载入图片...' : '上传参考图'}</span>
-            <span className="font-meta-sm text-[10px] text-outline">可多选, 最多 {props.maxReferences} 张 · 单张不超过 12 MiB</span>
-            <span className="font-meta-sm text-[10px] text-outline">支持拖拽或粘贴图片 · ⌘/Ctrl + V</span>
-          </button>
-        )}
+        ) : referenceSlots}
         <input
           ref={fileRef}
           type="file"
@@ -398,6 +333,7 @@ export function StitchStudioRail(props: StitchStudioRailProps) {
             event.target.multiple = true;
           }}
         />
+        {isEdit && refImage && originalPreview && <ReferenceImagePreview references={[refImage]} selectedId={refImage.id} onSelect={() => {}} onClose={() => setOriginalPreview(false)} />}
       </div>
 
       {/* 生图参数规范 */}
@@ -562,7 +498,7 @@ export function StitchStudioRail(props: StitchStudioRailProps) {
         <button
           type="button"
           className="w-full py-3.5 px-space-lg rounded-xl bg-primary hover:bg-primary-container text-on-primary font-headline-sm text-headline-sm flex items-center justify-center gap-space-sm shadow-[0_4px_16px_rgba(65,91,47,0.28)] hover:-translate-y-0.5 transition-all disabled:opacity-60 disabled:hover:translate-y-0"
-          disabled={submitting || polishing || props.imageBusy || choosingOriginal || !props.imageCapabilities || prompt.trim().length === 0 || (isEdit && maskStrokes === 0)}
+          disabled={submitting || polishing || props.imageBusy || tooManyReferences || !props.imageCapabilities || prompt.trim().length === 0 || (isEdit && maskStrokes === 0)}
           onClick={onSubmit}
         >
           <Leaf size={20} aria-hidden />
@@ -570,7 +506,6 @@ export function StitchStudioRail(props: StitchStudioRailProps) {
           <CreditCost count={isEdit ? 1 : config.imageCount} />
         </button>
         {isEdit && maskStrokes === 0 && <p role="status" className="mt-2 font-meta-sm text-meta-sm text-on-surface-variant">请先涂抹并保存需要修改的区域.</p>}
-        {choosingOriginal && <p role="status" className="mt-2 font-meta-sm text-meta-sm text-on-surface-variant">请先选择要局部重绘的原图.</p>}
       </div>
     </section>
   );
@@ -584,13 +519,12 @@ export interface StitchCanvasStreamProps {
   entries: CanvasEntry[];
   onOpenGallery: () => void;
   onDownload: (record: ResultRecord) => void;
-  onUseAsRef: (record: ResultRecord) => void;
+  onCopy: (record: ResultRecord) => void | Promise<void>;
   onOpenMask: (record: ResultRecord) => void;
   onFullscreen: (record: ResultRecord) => void;
   onCancelJob: (jobId: string) => void;
   onRetryJob: (jobId: string) => void;
   onEditPrompt: (prompt: string) => void;
-  onOpenSplit: (record: ResultRecord) => void;
 }
 
 export interface QueueJobView {
@@ -623,12 +557,11 @@ export function StitchCanvasStream(props: StitchCanvasStreamProps) {
     entries,
     onOpenGallery,
     onDownload,
-    onUseAsRef,
+    onCopy,
     onOpenMask,
     onFullscreen,
     onCancelJob,
     onRetryJob,
-    onOpenSplit,
   } = props;
   const results = useMemo(() => entries.flatMap((entry) => entry.kind === 'result' ? [entry.record] : []), [entries]);
   const metadata = useImageMetadata(results);
@@ -765,47 +698,47 @@ export function StitchCanvasStream(props: StitchCanvasStreamProps) {
               className="group relative flex flex-col bg-surface-container-lowest rounded-xl p-space-md shadow-[0_8px_24px_rgba(85,95,75,0.06)] hover:shadow-[0_16px_40px_rgba(85,95,75,0.12)] transition-all"
             >
               <div className="relative w-full aspect-square rounded-lg overflow-hidden bg-surface-container">
-                <RecordImage
-                  className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-[1.02]"
-                  record={record}
-                  alt={record.prompt.slice(0, 60)}
-                />
-                {/* 悬浮动作条 */}
-                <div className="absolute top-space-sm right-space-sm flex items-center gap-1 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity duration-200 bg-surface-bright/90 backdrop-blur-md p-1 rounded-lg shadow-md">
+                <button
+                  type="button"
+                  className="absolute inset-0 cursor-zoom-in"
+                  aria-label={`查看作品详情: ${record.prompt.slice(0, 24) || '未命名作品'}`}
+                  title="查看作品详情"
+                  onClick={() => onFullscreen(record)}
+                >
+                  <RecordImage
+                    className="pointer-events-none h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.02]"
+                    record={record}
+                    alt=""
+                  />
+                </button>
+                <div className="absolute top-space-sm right-space-sm z-10 flex items-center gap-1 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity duration-200 bg-surface-bright/90 backdrop-blur-md p-1 rounded-lg shadow-md">
                   <button
                     type="button"
                     className="w-8 h-8 rounded-md hover:bg-surface-container flex items-center justify-center text-on-surface transition-colors"
                     title="下载无损图"
-                    onClick={() => onDownload(record)}
+                    onClick={(event) => { event.stopPropagation(); onDownload(record); }}
                   >
                     <Download size={18} aria-hidden />
                   </button>
                   <button
                     type="button"
                     className="w-8 h-8 rounded-md hover:bg-surface-container flex items-center justify-center text-on-surface transition-colors"
-                    title="设为新参考"
-                    onClick={() => onUseAsRef(record)}
+                    title="复制原图"
+                    aria-label="复制原图"
+                    onClick={(event) => { event.stopPropagation(); void onCopy(record); }}
                   >
-                    <Plus size={18} aria-hidden />
+                    <Copy size={18} aria-hidden />
                   </button>
                   <button
                     type="button"
                     className="w-8 h-8 rounded-md hover:bg-surface-container flex items-center justify-center text-on-surface transition-colors"
                     title="局部涂抹修改"
-                    onClick={() => onOpenMask(record)}
+                    onClick={(event) => { event.stopPropagation(); onOpenMask(record); }}
                   >
                     <Brush size={18} aria-hidden />
                   </button>
-                  <button
-                    type="button"
-                    className="w-8 h-8 rounded-md hover:bg-surface-container flex items-center justify-center text-on-surface transition-colors"
-                    title="全屏查看"
-                    onClick={() => onFullscreen(record)}
-                  >
-                    <Maximize2 size={18} aria-hidden />
-                  </button>
                 </div>
-                <div className="absolute top-space-sm left-space-sm">
+                <div className="pointer-events-none absolute top-space-sm left-space-sm z-10">
                   <span className="px-2 py-0.5 rounded bg-surface-bright/90 backdrop-blur-md font-meta-sm text-meta-sm text-primary font-medium shadow-sm">
                     作品 #{record.id.slice(-3)}
                   </span>
@@ -830,12 +763,6 @@ export function StitchCanvasStream(props: StitchCanvasStreamProps) {
                   <span className="px-2 py-0.5 rounded bg-secondary-container text-on-secondary-container">
                     {imageFileExtension(record.dataUrl, record.outputFormat).toUpperCase()}
                   </span>
-                  <details className="relative ml-auto">
-                    <summary className="cursor-pointer rounded px-2 py-0.5 hover:bg-surface-container-low">工具</summary>
-                    <div className="absolute bottom-full right-0 mb-1 rounded-lg bg-surface-bright p-1 shadow-lg z-10">
-                      <button type="button" className="flex items-center gap-2 whitespace-nowrap px-3 py-2 rounded-md hover:bg-surface-container" onClick={(event) => { event.currentTarget.closest('details')?.removeAttribute('open'); onOpenSplit(record); }}><Scissors size={16} aria-hidden />切图拆分</button>
-                    </div>
-                  </details>
                 </div>
               </div>
             </article>

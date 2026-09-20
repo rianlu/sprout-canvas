@@ -40,6 +40,28 @@ export async function downloadRecord(record: ResultRecord) {
   window.setTimeout(() => URL.revokeObjectURL(url), 10000);
 }
 
+async function pngBlob(blob: Blob) {
+  if (blob.type === 'image/png') return blob;
+  const bitmap = await createImageBitmap(blob);
+  const canvas = document.createElement('canvas');
+  canvas.width = bitmap.width;
+  canvas.height = bitmap.height;
+  const context = canvas.getContext('2d');
+  if (!context) throw new Error('无法转换图片格式');
+  context.drawImage(bitmap, 0, 0);
+  bitmap.close();
+  const png = await new Promise<Blob>((resolve, reject) => {
+    canvas.toBlob((value) => { if (value) resolve(value); else reject(new Error('无法转换图片格式')); }, 'image/png');
+  });
+  return png;
+}
+
+export async function copyRecordImage(record: ResultRecord) {
+  if (typeof ClipboardItem === 'undefined' || !navigator.clipboard?.write) throw new Error('当前浏览器不支持复制图片, 请改用下载');
+  const png = await pngBlob(await getRecordBlob(record));
+  await navigator.clipboard.write([new ClipboardItem({ 'image/png': png })]);
+}
+
 export async function downloadRecords(records: ResultRecord[], name = 'sprout-artworks') {
   const entries = [];
   for (const [index, record] of records.entries()) entries.push({ name: `scene-${String(index + 1).padStart(2, '0')}-${record.id}.${imageFileExtension(record.dataUrl, record.outputFormat)}`, data: new Uint8Array(await (await getRecordBlob(record)).arrayBuffer()) });

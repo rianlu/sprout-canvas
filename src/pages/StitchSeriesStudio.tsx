@@ -1,5 +1,5 @@
 import { useRef } from 'react';
-import { BookOpenText, Brush, Download, Minus, Plus, RefreshCw, Sparkles, Trash2, ZoomIn } from '../components/ui/icons';
+import { BookOpenText, Download, Minus, Plus, RefreshCw, Sparkles, Trash2, ZoomIn } from '../components/ui/icons';
 import type { ResultRecord } from '../types/generation';
 import type { QueueJob } from '../types/queue';
 import { resolveSize } from '../lib/api/generation';
@@ -7,8 +7,10 @@ import { StitchIcon } from '../components/ui/StitchIcon';
 import { StitchGalleryViewer } from '../components/gallery/StitchGalleryViewer';
 import { ToastStack } from '../components/shell/QueueDrawer';
 import { SceneEditor } from '../components/series/SceneEditor';
+import { SeriesReferences } from '../components/series/SeriesReferences';
 import { RecordImage } from '../components/gallery/RecordImage';
-import { useSeriesStudio, TEMPLATES, seriesAspects, MIN_BATCH_COUNT, MAX_BATCH_COUNT, type SeriesActions } from '../hooks/useSeriesStudio';
+import { useSeriesStudio, seriesAspects, MIN_BATCH_COUNT, MAX_BATCH_COUNT, type SeriesActions } from '../hooks/useSeriesStudio';
+import { MAX_SERIES_BRIEF_LENGTH, MAX_SCENE_PROMPT_LENGTH } from '../../shared/series-planning.mjs';
 import { useCredits } from '../lib/credits';
 import { CreditStatus } from '../components/ui/CreditStatus';
 import { CreditCost } from '../components/ui/CreditCost';
@@ -27,14 +29,18 @@ export interface SeriesStudioProps extends SeriesActions {
 export function SeriesStudio(props: SeriesStudioProps) {
   const { prices } = useCredits();
   const { onEditRecord, onUseRecipe, onRetry, onCancel, onPrioritize } = props;
-  const { ready, template, setTemplate, brief, setBrief, count, setCount, config, setConfig, busy, submitting, toasts, pushToast, seriesId, seriesResults, allSeriesResults, activeJobs, canContinue, submissionCount, metadata, view, setView, preview, setPreview, shots, shotIds, splitStory, submitBatch, exportSeries, updateTask, removeShot, resetSeries, redrawShot, reference, setReference, uploadReference, editing, setEditing, beginEdit, saveEdit } = useSeriesStudio(props);
+  const { ready, brief, setBrief, count, setCount, config, setConfig, busy, submitting, referenceBusy, toasts, pushToast, seriesId, seriesResults, allSeriesResults, activeJobs, canContinue, submissionCount, metadata, view, setView, preview, setPreview, shots, shotIds, splitStory, submitBatch, exportSeries, updateTask, removeShot, resetSeries, redrawShot, references, maxReferences, removeReference, uploadReferences, editing, setEditing, beginEdit, saveEdit } = useSeriesStudio(props);
   const storyboardRef = useRef<HTMLElement>(null);
-  const shotLabel = '分镜矩阵看板 (Storyboard Sequence)';
+  const shotLabel = '分镜看板';
   const plannedTotal = shots.length;
   const filledPrompts = shots.filter((shot) => shot.task.prompt.trim()).length;
   const hasCompletePlan = filledPrompts === plannedTotal;
-  const remainingCount = shots.filter((shot) => !shot.record).length;
-  const planLocked = busy || submitting || activeJobs || canContinue;
+  const remainingCount = shots.filter((shot) => shot.kind === 'planned').length;
+  const failedCount = shots.filter((shot) => shot.kind === 'failed').length;
+  const receiptErrorCount = shots.filter((shot) => shot.job?.status === 'succeeded' && shot.job.delivery?.phase === 'error').length;
+  const missingFirst = shots[0]?.kind === 'failed' && !shots[0]?.record;
+  const planLocked = busy || submitting || referenceBusy || activeJobs || canContinue;
+  const formats = props.imageCapabilities?.formats || ['png', 'jpeg', 'webp'];
   const activityLabel = shots.some((shot) => shot.kind === 'submitting') ? '分镜正在提交' : shots.some((shot) => shot.kind === 'generating') ? '分镜正在绘制' : shots.some((shot) => shot.kind === 'waiting') ? '分镜正在排队, 轮到后自动开始' : '正在领取分镜作品';
   async function planStory() {
     if (await splitStory()) {
@@ -57,14 +63,14 @@ export function SeriesStudio(props: SeriesStudioProps) {
                 <div>
                   <div className="flex flex-wrap items-center gap-space-xs">
                     <h1 className="font-headline-sm text-headline-sm text-on-surface font-semibold tracking-tight">
-                      故事脚本与系列设定工作台
+                      系列创作与生成设置
                     </h1>
                     <span className="px-2.5 py-0.5 rounded-full bg-primary-fixed text-on-primary-fixed font-meta-sm text-meta-sm font-medium">
                       先拆解, 再确认生成
                     </span>
                   </div>
                   <p className="font-body-sm text-body-sm text-on-surface-variant mt-0.5">
-                    填写故事梗概, AI 拆解分镜提示词, 逐镜检查和修改后再确认生成图片
+                    写下创作需求或分镜剧本, AI 按内容策划, 检查修改后再确认生成
                   </p>
                 </div>
               </div>
@@ -86,7 +92,7 @@ export function SeriesStudio(props: SeriesStudioProps) {
                     htmlFor="series-story-prompt"
                   >
                     <Sparkles size={18} className="text-primary" aria-hidden />
-                    系列故事梗概 / 分段分镜剧本
+                    创作需求 / 故事梗概 / 分镜剧本
                   </label>
                   <div className="flex items-center gap-2">
                     <button
@@ -111,12 +117,12 @@ export function SeriesStudio(props: SeriesStudioProps) {
                     </button>
                   </div>
                 </div>
-                <div className="relative flex-1">
+                <div className="relative flex-1 min-h-52">
                   <textarea
-                    className="w-full h-36 lg:h-40 p-space-sm bg-surface-container-lowest rounded-xl border border-outline-variant/40 focus:border-primary focus:ring-2 focus:ring-primary/20 text-on-surface font-body-md text-body-md leading-relaxed resize-none transition-all placeholder:text-outline/60"
+                    className="w-full h-52 lg:h-full p-space-sm bg-surface-container-lowest rounded-xl border border-outline-variant/40 focus:border-primary focus:ring-2 focus:ring-primary/20 text-on-surface font-body-md text-body-md leading-relaxed resize-none transition-all placeholder:text-outline/60"
                     id="series-story-prompt"
-                    maxLength={1000}
-                    placeholder="请输入故事梗概或分段分镜剧本, 将角色外貌, 服饰或商品特征写在其中. 例如: 戴红围巾, 圆耳朵的小棕熊在秋日森林中展开四幕旅程..."
+                    maxLength={MAX_SERIES_BRIEF_LENGTH}
+                    placeholder="描述想做的一组图片, 写明主题, 用途, 主体和画风要求. 也可以直接粘贴完整分镜剧本. 有参考图时, 可说明图 1, 图 2 各自的用途."
                     value={brief}
                     disabled={planLocked}
                     onChange={(event) => setBrief(event.target.value)}
@@ -132,110 +138,43 @@ export function SeriesStudio(props: SeriesStudioProps) {
                   <div className="flex items-center gap-2 font-meta-sm text-meta-sm">
                     <span className="flex items-center gap-1 text-primary">
                       <Sparkles size={15} aria-hidden />
-                      分段解析引擎: AI 分镜拆解
+                      AI 拆解分镜
                     </span>
                     <span className="text-outline">·</span>
                     <span>支持逐镜编辑画面提示词</span>
                   </div>
-                  <span className="font-meta-sm text-meta-sm text-outline">{brief.length} / 1000 字</span>
+                  <span className="font-meta-sm text-meta-sm text-outline">{brief.length} / {MAX_SERIES_BRIEF_LENGTH} 字</span>
                 </div>
               </div>
 
               {/* 右: 系统参数 */}
               <div className="lg:col-span-5 flex flex-col justify-between gap-space-md bg-surface-container-low/40 rounded-xl p-space-md border border-outline-variant/25">
-                {/* 场景模版 */}
                 <div className="flex flex-col gap-1.5">
-                  <div className="flex items-center justify-between">
-                    <span className="font-body-sm text-body-sm font-medium text-on-surface flex items-center gap-1">
-                      <BookOpenText size={16} className="text-primary" aria-hidden />
-                      应用场景模版
-                    </span>
-                    <span className="font-meta-sm text-meta-sm text-on-surface-variant">自动适配构图叙事逻辑</span>
-                  </div>
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
-                    {TEMPLATES.map((tpl) => {
-                      const active = template === tpl.id;
-                      return (
-                        <button
-                          key={tpl.id}
-                          type="button"
-                          title={tpl.tip}
-                          className={
-                            active
-                              ? 'px-2.5 py-1.5 rounded-lg bg-primary text-on-primary font-medium text-body-sm text-center shadow-xs flex items-center justify-center gap-1'
-                              : 'px-2.5 py-1.5 rounded-lg bg-surface-container-lowest hover:bg-surface-container text-on-surface-variant hover:text-on-surface text-body-sm text-center border border-outline-variant/30 transition-colors'
-                          }
-                          disabled={planLocked}
-                          onClick={() => setTemplate(tpl.id)}
-                        >
-                          {tpl.label}
-                        </button>
-                      );
-                    })}
+                  <span className="font-body-sm text-body-sm font-medium text-on-surface flex items-center gap-1">
+                    <Plus size={16} className="text-primary" aria-hidden />
+                    分镜数量
+                  </span>
+                  <div className="flex items-center justify-between bg-surface-container-lowest rounded-xl border border-outline-variant/30 px-3 py-1.5">
+                    <span className="font-meta-sm text-meta-sm text-on-surface-variant">画面数量</span>
+                    <div className="flex items-center gap-1">
+                      <button type="button" className="w-7 h-7 rounded flex items-center justify-center hover:bg-surface-container text-on-surface disabled:opacity-40" title="减少镜头" onClick={() => setCount((c) => c - 1)} disabled={planLocked || count <= MIN_BATCH_COUNT}><Minus size={14} /></button>
+                      <span className="font-meta-md text-meta-md font-semibold text-on-surface px-2">{count}</span>
+                      <button type="button" className="w-7 h-7 rounded flex items-center justify-center hover:bg-surface-container text-on-surface disabled:opacity-40" title="增加镜头" onClick={() => setCount((c) => c + 1)} disabled={planLocked || count >= MAX_BATCH_COUNT}><Plus size={14} /></button>
+                    </div>
+                    <span className="font-meta-sm text-meta-sm text-outline">{MIN_BATCH_COUNT}-{MAX_BATCH_COUNT} 幕</span>
                   </div>
                 </div>
 
-                {/* 幕数 + 风格锁定 */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-space-sm">
-                  <div className="flex flex-col gap-1.5">
-                    <span className="font-body-sm text-body-sm font-medium text-on-surface flex items-center gap-1">
-                      <Plus size={16} className="text-primary" aria-hidden />
-                      镜头画幅数量
-                    </span>
-                    <div className="flex items-center justify-between bg-surface-container-lowest rounded-xl border border-outline-variant/30 px-3 py-1.5">
-                      <span className="font-meta-sm text-meta-sm text-on-surface-variant">连贯画幅</span>
-                      <div className="flex items-center gap-1">
-                        <button
-                          type="button"
-                          className="w-6 h-6 rounded flex items-center justify-center hover:bg-surface-container text-on-surface transition-colors"
-                          title="减少镜头"
-                          onClick={() => setCount((c) => Math.max(MIN_BATCH_COUNT, c - 1))}
-                          disabled={planLocked || count <= MIN_BATCH_COUNT}
-                        >
-                          <Minus size={14} aria-hidden />
-                        </button>
-                        <span className="font-meta-md text-meta-md font-semibold text-on-surface px-2">{count}</span>
-                        <button
-                          type="button"
-                          className="w-6 h-6 rounded flex items-center justify-center hover:bg-surface-container text-on-surface transition-colors"
-                          title="增加镜头"
-                          onClick={() => setCount((c) => Math.min(MAX_BATCH_COUNT, c + 1))}
-                          disabled={planLocked || count >= MAX_BATCH_COUNT}
-                        >
-                          <Plus size={14} aria-hidden />
-                        </button>
-                      </div>
-                      <span className="font-meta-sm text-meta-sm text-outline">
-                        步进 ({MIN_BATCH_COUNT}~{MAX_BATCH_COUNT})
-                      </span>
-                    </div>
-                  </div>
-                  <div className="flex flex-col gap-1.5">
-                    <span className="font-body-sm text-body-sm font-medium text-on-surface flex items-center gap-1">
-                      <Brush size={16} className="text-primary" aria-hidden />
-                      系列参考图
-                    </span>
-                    <p className="font-meta-sm text-meta-sm text-on-surface-variant">主体与画风要求写入故事梗概, 可添加图片辅助参考.</p>
-                    <div className="flex flex-wrap items-center gap-1.5 font-meta-sm text-meta-sm text-on-surface-variant">
-                      {reference && <img src={reference.dataUrl} alt="系列主体参考" className="w-7 h-7 rounded-lg object-cover flex-shrink-0" />}
-                      <label className="flex items-center gap-1 px-1 py-1 rounded-lg cursor-pointer hover:text-primary focus-within:ring-2 focus-within:ring-primary/20">
-                        <StitchIcon name="add_photo_alternate" size={16} />
-                        {reference ? '更换参考图' : '添加参考图 (可选)'}
-                        <input type="file" accept="image/png,image/jpeg,image/webp" aria-label="上传系列参考图" disabled={busy || submitting} className="sr-only" onChange={(event) => { const file = event.target.files?.[0]; if (file) void uploadReference(file); event.target.value = ''; }} />
-                      </label>
-                      {reference && <button type="button" aria-label="移除系列参考图" disabled={busy || submitting} className="w-7 h-7 rounded-lg flex items-center justify-center hover:bg-surface-container hover:text-on-surface" onClick={() => setReference(null)}><StitchIcon name="close" size={16} /></button>}
-                    </div>
-                  </div>
-                </div>
+                <SeriesReferences references={references} maxReferences={maxReferences} disabled={planLocked} busy={referenceBusy} onUpload={uploadReferences} onRemove={removeReference} />
 
                 {/* 统一画幅 */}
                 <div className="flex flex-col gap-1.5">
                   <div className="flex items-center justify-between">
                     <span className="font-body-sm text-body-sm font-medium text-on-surface flex items-center gap-1">
                       <BookOpenText size={16} className="text-primary" aria-hidden />
-                      连贯性统一画幅
+                      默认画幅
                     </span>
-                    <span className="font-meta-sm text-meta-sm text-outline">全部镜头统一尺寸</span>
+                    <span className="font-meta-sm text-meta-sm text-outline">可逐镜单独调整</span>
                   </div>
                   <div className="grid grid-cols-4 gap-1.5">
                     {seriesAspects(props.imageCapabilities?.customSizes, config.aspectRatio).map((aspect) => {
@@ -245,7 +184,7 @@ export function SeriesStudio(props: SeriesStudioProps) {
                           key={aspect.id}
                           type="button"
                           aria-pressed={active}
-                          disabled={busy || submitting}
+                          disabled={planLocked}
                           className={
                             active
                               ? 'flex flex-col items-center justify-center py-1 px-1 rounded-lg bg-secondary-container text-on-secondary-container border border-primary/30 text-center'
@@ -277,24 +216,24 @@ export function SeriesStudio(props: SeriesStudioProps) {
 
             {/* 底部动作栏 */}
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-space-sm pt-space-xs border-t border-outline-variant/20">
-              <div className="flex items-center gap-space-xs text-on-surface-variant font-meta-sm text-meta-sm">
+              <div className="flex flex-wrap items-center gap-space-xs text-on-surface-variant font-meta-sm text-meta-sm">
                 <span className="flex items-center gap-1">
                   <StitchIcon name="verified" size={16} className="text-primary" />
-                  渲染精度:{' '}
+                  默认质量:{' '}
                   <strong className="text-on-surface font-medium">
-                    <select aria-label="系列生成质量" disabled={busy || submitting} className="bg-transparent" value={config.quality} onChange={(event) => setConfig((current) => ({ ...current, quality: event.target.value as typeof current.quality }))}><option value="low">快速</option><option value="medium">标准</option><option value="high">精细</option><option value="auto">自动</option></select>
+                    <select aria-label="系列生成质量" disabled={planLocked} className="bg-transparent disabled:opacity-60" value={config.quality} onChange={(event) => setConfig((current) => ({ ...current, quality: event.target.value as typeof current.quality }))}><option value="low">快速</option><option value="medium">标准</option><option value="high">精细</option><option value="auto">自动</option></select>
                   </strong>
                 </span>
                 <span className="text-outline">·</span>
                 <span>
                   输出格式:{' '}
                   <strong className="text-on-surface font-medium">
-                    <select aria-label="系列输出格式" disabled={busy || submitting} className="bg-transparent" value={config.outputFormat} onChange={(event) => setConfig((current) => ({ ...current, outputFormat: event.target.value as typeof current.outputFormat }))}>{(props.imageCapabilities?.formats || ['png', 'jpeg', 'webp']).map((format) => <option key={format} value={format}>{format.toUpperCase()}</option>)}</select>
+                    {formats.length === 1 ? <span aria-label="系列输出格式">{formats[0].toUpperCase()}</span> : <select aria-label="系列输出格式" disabled={planLocked} className="bg-transparent disabled:opacity-60" value={config.outputFormat} onChange={(event) => setConfig((current) => ({ ...current, outputFormat: event.target.value as typeof current.outputFormat }))}>{formats.map((format) => <option key={format} value={format}>{format.toUpperCase()}</option>)}</select>}
                   </strong>
                 </span>
               </div>
               <div className="flex flex-wrap items-center gap-space-xs">
-                <button
+                {seriesResults.length > 0 && <button
                   type="button"
                   className="flex items-center gap-1 px-space-md py-2.5 rounded-xl bg-surface-container-low hover:bg-surface-container text-on-surface font-body-sm text-body-sm transition-colors border border-outline-variant/30 disabled:opacity-50"
                   onClick={() => {
@@ -305,8 +244,8 @@ export function SeriesStudio(props: SeriesStudioProps) {
                   <StitchIcon name="replay" size={18} />
                   <span>批量重新绘制</span>
                   <CreditCost count={plannedTotal} />
-                </button>
-                <button
+                </button>}
+                {seriesResults.length > 0 && <button
                   type="button"
                   className="flex items-center gap-1 px-space-md py-2.5 rounded-xl bg-surface-container-low hover:bg-surface-container text-on-surface font-body-sm text-body-sm transition-colors border border-outline-variant/30 disabled:opacity-50"
                   onClick={() => void exportSeries()}
@@ -314,7 +253,7 @@ export function SeriesStudio(props: SeriesStudioProps) {
                 >
                   <StitchIcon name="file_download" size={18} />
                   <span>打包导出全部分镜</span>
-                </button>
+                </button>}
                 <button
                   type="button"
                   className="flex items-center gap-2 px-space-lg py-2.5 rounded-xl bg-primary hover:bg-primary-container text-on-primary font-medium text-body-md shadow-[0_2px_10px_rgba(65,91,47,0.25)] transition-all disabled:opacity-60"
@@ -327,6 +266,7 @@ export function SeriesStudio(props: SeriesStudioProps) {
                 </button>
               </div>
             </div>
+            {(activeJobs || canContinue) && <p className="font-meta-sm text-meta-sm text-on-surface-variant">本批次已确认. 排队中的分镜可在下方卡片中调整, 生成设置不会随默认值变化.</p>}
           </section>
 
           {/* Section 2: 分镜矩阵看板 */}
@@ -335,7 +275,7 @@ export function SeriesStudio(props: SeriesStudioProps) {
               <div className="flex flex-wrap items-center gap-space-xs">
                 <h2 className="font-headline-sm text-headline-sm text-on-surface font-semibold">{shotLabel}</h2>
                 <span className="px-2 py-0.5 rounded-full bg-surface-container-high text-on-surface-variant font-meta-sm text-meta-sm">
-                  {activeJobs ? '分镜处理中' : canContinue ? '剩余分镜待续交' : remainingCount === 0 ? `${plannedTotal} 幕已完成` : hasCompletePlan ? `${plannedTotal} 幕待确认` : `${filledPrompts}/${plannedTotal} 幕已填写`}
+                  {receiptErrorCount ? `${receiptErrorCount} 幕领取待重试` : activeJobs ? '分镜处理中' : canContinue ? '剩余分镜待续交' : failedCount ? `${failedCount} 幕生成异常` : remainingCount === 0 ? `${plannedTotal} 幕已完成` : hasCompletePlan ? `${remainingCount} 幕待确认` : `${filledPrompts}/${plannedTotal} 幕已填写`}
                 </span>
               </div>
               <div className="flex items-center gap-space-xs text-body-sm text-on-surface-variant font-meta-sm">
@@ -377,6 +317,8 @@ export function SeriesStudio(props: SeriesStudioProps) {
                 const unconfirmed = shot.kind === 'unsubmitted';
                 const receiving = shot.kind === 'receiving';
                 const transferring = sending || receiving;
+                const receiptError = shot.job?.status === 'succeeded' && shot.job.delivery?.phase === 'error';
+                const working = running || sending || receiving && Boolean(shot.job?.delivery) && !receiptError;
                 const receipt = deliveryMessage(shot.job?.delivery);
                 const transferLabel = sending ? '正在提交画稿' : unconfirmed ? '提交待确认' : receipt.title;
                 const awaitingReview = shot.kind === 'planned' && Boolean(shot.task.prompt.trim());
@@ -387,7 +329,7 @@ export function SeriesStudio(props: SeriesStudioProps) {
                     className={`stitch-shot-card flex flex-col rounded-2xl group overflow-hidden min-w-0 ${view === 'timeline' ? 'shrink-0 w-80' : ''} ${running ? 'bg-surface-container-lowest border-2 border-primary/40 shadow-[0_2px_16px_rgba(85,95,75,0.06)]' : done ? 'bg-surface-container-lowest border border-outline-variant/30 shadow-[0_2px_16px_rgba(85,95,75,0.06)] hover:shadow-md' : failed ? 'bg-surface-container-lowest border border-error/30' : 'bg-surface-container-lowest/80 border border-dashed border-outline-variant/50 shadow-[0_2px_12px_rgba(85,95,75,0.03)]'}`}
                   >
                     <div
-                      className={`p-space-md border-b border-outline-variant/15 flex items-center justify-between gap-2 ${running ? 'bg-primary/5' : ''}`}
+                      className={`p-space-md border-b border-outline-variant/15 flex flex-wrap items-center justify-between gap-2 ${running ? 'bg-primary/5' : ''}`}
                     >
                       <div className="flex items-center gap-2 min-w-0">
                         <span
@@ -402,28 +344,17 @@ export function SeriesStudio(props: SeriesStudioProps) {
                           >
                             {shot.task.title}
                           </h3>
-                          <span className={`font-meta-sm text-meta-sm ${running ? 'text-primary' : 'text-outline'}`}>
-                            {transferring || unconfirmed ? transferLabel : done
-                              ? '分镜画面 · 已完成'
-                              : running
-                                ? '按序渲染 · 构想生成'
-                                : waiting
-                                  ? '分镜画面 · 等待执行'
-                                  : failed
-                                    ? '分镜画面 · 生成异常'
-                                    : awaitingReview ? '分镜提示词 · 待确认' : '分镜提示词 · 待填写'}
-                          </span>
                         </div>
                       </div>
                       <span
-                        className={`px-2 py-0.5 rounded-full font-meta-sm text-meta-sm flex items-center gap-1 shrink-0 ${done ? 'bg-primary-fixed/40 text-primary' : running ? 'bg-secondary-container text-on-secondary-container' : failed ? 'bg-error-container text-on-error-container' : 'bg-surface-container text-outline'}`}
+                        className={`ml-auto px-2 py-0.5 rounded-full font-meta-sm text-meta-sm flex items-center gap-1 shrink-0 ${receiptError ? 'bg-error-container text-on-error-container' : done ? 'bg-primary-fixed/40 text-primary' : running ? 'bg-secondary-container text-on-secondary-container' : failed ? 'bg-error-container text-on-error-container' : 'bg-surface-container text-outline'}`}
                       >
                         <StitchIcon
-                          name={done ? 'check_circle' : running || transferring ? 'progress_activity' : failed ? 'error' : 'schedule'}
+                          name={receiptError ? 'error' : done ? 'check_circle' : working ? 'progress_activity' : failed ? 'error' : 'schedule'}
                           size={13}
-                          className={running || transferring ? 'motion-safe:animate-spin' : ''}
+                          className={working ? 'motion-safe:animate-spin' : ''}
                         />
-                        {transferring || unconfirmed ? transferLabel : done
+                        {receiptError ? receipt.title : transferring || unconfirmed ? transferLabel : done
                           ? '已就绪'
                           : running
                             ? '构想生成中'
@@ -435,13 +366,13 @@ export function SeriesStudio(props: SeriesStudioProps) {
                       </span>
                     </div>
                     <div
-                      className={`w-full ${awaitingReview ? 'min-h-24' : 'aspect-video'} relative overflow-hidden ${done ? 'bg-surface-container-low' : 'bg-surface-container-low/50 flex flex-col items-center justify-center p-space-md'}`}
+                      className={`w-full relative ${done ? 'aspect-video overflow-hidden bg-surface-container-low' : `${shot.kind === 'planned' ? 'min-h-24' : 'min-h-36'} bg-surface-container-low/50 flex flex-col items-center justify-center p-space-md`}`}
                     >
                       {done && shot.record ? (
                         <>
                           <RecordImage
                             alt={shot.task.title}
-                            className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                            className="w-full h-full object-contain"
                             record={shot.record}
                           />
                           <div className="absolute bottom-2 left-2 px-2 py-0.5 rounded bg-inverse-surface/75 text-inverse-on-surface font-meta-sm text-[10px]">
@@ -486,19 +417,19 @@ export function SeriesStudio(props: SeriesStudioProps) {
                           >
                             <StitchIcon
                               name={
-                                running || transferring
+                                working
                                   ? 'progress_activity'
-                                  : failed
+                                  : failed || receiptError
                                     ? 'error'
-                                    : waiting
+                                    : waiting || receiving
                                       ? 'hourglass_top'
                                       : 'movie_edit'
                               }
                               size={running ? 30 : 20}
-                              className={running || transferring ? 'motion-safe:animate-spin' : failed ? 'text-error' : ''}
+                              className={working ? 'motion-safe:animate-spin' : failed || receiptError ? 'text-error' : ''}
                             />
                           </div>
-                          <span className="relative font-meta-sm text-meta-sm text-on-surface text-center">
+                          <span className="relative font-meta-sm text-meta-sm text-on-surface text-center break-words max-w-full">
                             {sending ? '正在上传并等待确认' : receiving ? receipt.detail : unconfirmed ? '可继续提交, 已受理的任务不会重复生成' : running
                               ? '正在合成分镜画面与风格质感'
                               : waiting
@@ -536,6 +467,7 @@ export function SeriesStudio(props: SeriesStudioProps) {
                               重新尝试<CreditCost points={shot.job?.interruptionReason === 'pending-restart' ? shot.job.credit?.points : undefined} unlimited={shot.job?.interruptionReason === 'pending-restart' ? shot.job.credit?.unlimited : undefined} />
                             </button>
                           )}
+                          {failed && shot.record && <button type="button" className="mt-2 font-meta-sm text-meta-sm text-primary hover:underline" onClick={() => setPreview(shot.record!)}>查看上一版图片</button>}
                           {receiving && shot.job?.delivery?.phase === 'error' && (
                             <button type="button" className="mt-2 px-3 py-1 rounded-lg bg-surface-container-high text-primary font-meta-sm text-meta-sm" onClick={() => { if (shot.job) void onRetry(shot.job.id).catch((error) => pushToast('error', error.message)); }}>重试领取</button>
                           )}
@@ -552,20 +484,23 @@ export function SeriesStudio(props: SeriesStudioProps) {
                           className="block font-meta-sm text-meta-sm text-outline mb-1"
                           htmlFor={`scene-prompt-${index}`}
                         >
-                          分镜画面提示词 (Prompt)
+                          分镜画面提示词
                         </label>
                         <textarea
                           id={`scene-prompt-${index}`}
+                          maxLength={MAX_SCENE_PROMPT_LENGTH}
                           className="w-full bg-surface-container-low/60 rounded-lg p-2 font-body-sm text-body-sm text-on-surface border border-outline-variant/30 focus:border-primary focus:bg-surface-container-lowest transition-colors resize-y leading-relaxed"
                           rows={awaitingReview ? 6 : 3}
                           placeholder="输入本镜画面描述..."
                           value={shot.task.prompt}
-                          readOnly={busy || submitting || running || waiting || transferring || unconfirmed}
+                          readOnly={busy || submitting || running || waiting || transferring || unconfirmed || failed}
                           onChange={(event) => updateTask(index, event.target.value)}
                         />
                       </div>
                       <div className="flex items-center justify-between gap-2 pt-space-xs border-t border-outline-variant/20 font-meta-sm text-meta-sm text-on-surface-variant">
-                        {done ? (
+                        {receiptError && done ? (
+                          <button type="button" className="text-primary hover:underline" onClick={() => { if (shot.job) void onRetry(shot.job.id).catch((error) => pushToast('error', error.message)); }}>重试领取</button>
+                        ) : done ? (
                           <>
                             <span className="flex items-center gap-1 min-w-0">
                               <StitchIcon name="palette" size={14} className="text-primary" />
@@ -581,31 +516,31 @@ export function SeriesStudio(props: SeriesStudioProps) {
                             </button>
                           </>
                         ) : transferring || unconfirmed ? (
-                          <span className="text-on-surface-variant">{sending ? '等待提交确认' : receiving ? '图片已生成, 正在领取' : '请继续确认本次提交'}</span>
+                          <span className="text-on-surface-variant">{sending ? '等待提交确认' : receiving ? '图片已生成, 等待领取完成' : '请继续确认本次提交'}</span>
                         ) : running ? (
                           <>
                             <span className="flex items-center gap-1 text-primary">
                               <span className="w-1.5 h-1.5 rounded-full bg-primary motion-safe:animate-pulse" />
                               画面笔触生成中...
                             </span>
-                            <span className="text-outline" title="请求已发往上游, 无法撤回">上游执行中</span>
+                            <span className="text-outline" title="已经开始生成, 请等待本镜完成">暂不可修改</span>
                           </>
                         ) : (
                           <>
                             <button
                               type="button"
-                              disabled={shot.job?.status === 'unsubmitted' || busy || submitting}
+                              disabled={shot.job?.status === 'unsubmitted' || busy || submitting || failed && !shot.job?.canRetry}
                               title={waiting ? '修改尚未执行的分镜' : '设置本镜画幅, 质量和格式'}
                               onClick={() => beginEdit(index)}
                               className="flex items-center gap-1 hover:text-primary disabled:opacity-50"
                             >
                               <StitchIcon name="tune" size={14} />
-                              调节本镜参数
+                              {failed ? '调整并重试' : '调节本镜参数'}
                             </button>
                             <button
                               type="button"
                               disabled={
-                                busy || submitting || running || (!waiting && (canContinue || count <= MIN_BATCH_COUNT))
+                                busy || submitting || running || (!waiting && (activeJobs || canContinue || count <= MIN_BATCH_COUNT))
                               }
                               className="text-outline hover:text-error flex items-center gap-1 disabled:opacity-40"
                               onClick={() => {
@@ -632,27 +567,27 @@ export function SeriesStudio(props: SeriesStudioProps) {
             <div role="region" aria-label="分镜确认与生成" className="flex flex-col sm:flex-row sm:items-center justify-between gap-space-md p-space-md rounded-xl bg-surface-container-lowest border border-outline-variant/30">
               <div className="min-w-0">
                 <p role="status" className="font-body-md text-body-md font-medium text-on-surface">
-                  {busy ? '正在拆解分镜提示词...' : canContinue ? '已确认的分镜尚有未提交项' : activeJobs ? activityLabel : remainingCount === 0 ? `已完成 ${plannedTotal} 张分镜图片` : hasCompletePlan ? `${plannedTotal} 幕分镜已准备好, 请检查后确认` : `请补全分镜提示词 (${filledPrompts}/${plannedTotal})`}
+                  {busy ? '正在拆解分镜提示词...' : canContinue ? '已确认的分镜尚有未提交项' : receiptErrorCount ? `${receiptErrorCount} 幕作品领取待重试` : activeJobs ? activityLabel : failedCount ? `${failedCount} 幕生成异常, 请在对应卡片中处理` : remainingCount === 0 ? `已完成 ${plannedTotal} 张分镜图片` : hasCompletePlan ? `${remainingCount} 幕分镜已准备好, 请检查后确认` : `请补全分镜提示词 (${filledPrompts}/${plannedTotal})`}
                 </p>
                 <p className="font-body-sm text-body-sm text-on-surface-variant mt-1">
-                  {canContinue ? '继续提交剩余分镜, 已提交的任务不会重复生成.' : activeJobs ? '可在我的任务中查看排队和生成状态.' : remainingCount === 0 ? '可下载整套图片, 或继续调整并重绘单镜.' : '可直接修改每幕提示词和本镜参数, 确认后才开始生成图片.'}
+                  {canContinue ? '继续提交剩余分镜, 已提交的任务不会重复生成.' : receiptErrorCount ? '图片已经生成. 重试只领取原结果, 不重复生图或扣点.' : activeJobs ? '可在我的任务中查看排队和生成状态.' : failedCount ? '可重试原任务, 或调整提示词后重新生成. 已保存的旧版本仍保留在展馆.' : remainingCount === 0 ? '可下载整套图片, 或继续调整并重绘单镜.' : '可直接修改每幕提示词和本镜参数, 确认后才开始生成图片.'}
                 </p>
               </div>
               <button
                 type="button"
                 className="flex items-center justify-center gap-2 shrink-0 px-space-lg py-3 rounded-xl bg-primary hover:bg-primary-container text-on-primary font-medium text-body-md shadow-[0_2px_10px_rgba(65,91,47,0.25)] transition-colors disabled:opacity-50"
                 onClick={() => void submitBatch()}
-                disabled={busy || submitting || (!canContinue && (activeJobs || !hasCompletePlan || remainingCount === 0))}
+                disabled={busy || submitting || referenceBusy || (!canContinue && (activeJobs || !hasCompletePlan || remainingCount === 0 || missingFirst))}
               >
                 <StitchIcon name="spa" size={20} />
-                <span>{submitting ? '提交中...' : canContinue ? '继续提交剩余分镜' : activeJobs ? '分镜处理中...' : remainingCount === 0 ? '全部分镜已生成' : `确认并生成 ${remainingCount} 张图片`}</span>
+                <span>{submitting ? '提交中...' : canContinue ? '继续提交剩余分镜' : receiptErrorCount ? '分镜领取待重试' : activeJobs ? '分镜处理中...' : missingFirst || failedCount && !remainingCount ? '请先处理异常分镜' : remainingCount === 0 ? '全部分镜已生成' : `确认并生成 ${remainingCount} 张图片`}</span>
                 {(canContinue || !activeJobs) && submissionCount > 0 && <CreditCost count={submissionCount} />}
               </button>
             </div>
           </section>
         </div>
       </div>
-      {editing && <SceneEditor estimatedPoints={shots[editing.index]?.record && shots[editing.index]?.job?.status !== 'pending' ? prices?.image : 0} value={editing} onChange={setEditing} onClose={() => setEditing(null)} onSave={saveEdit} imageCapabilities={props.imageCapabilities} actionLabel={shots[editing.index]?.job?.status === 'pending' ? '更新排队任务' : shots[editing.index]?.record ? '保存并重绘本镜' : '保存本镜设置'} />}
+      {editing && <SceneEditor estimatedPoints={(shots[editing.index]?.record || shots[editing.index]?.kind === 'failed') && shots[editing.index]?.job?.status !== 'pending' ? prices?.image : 0} value={editing} onChange={setEditing} onClose={() => setEditing(null)} onSave={saveEdit} imageCapabilities={props.imageCapabilities} actionLabel={shots[editing.index]?.job?.status === 'pending' ? '更新排队任务' : shots[editing.index]?.kind === 'failed' ? '保存并重新生成' : shots[editing.index]?.record ? '保存并重绘本镜' : '保存本镜设置'} />}
       {preview && (
         <StitchGalleryViewer
           cards={[{ kind: 'series', seriesId, masterPrompt: brief, records: seriesResults, versions: allSeriesResults, latestAt: Math.max(...seriesResults.map((record) => record.createdAt)) }]}

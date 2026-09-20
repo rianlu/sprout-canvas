@@ -14,7 +14,7 @@ import { useQueue } from '../hooks/useQueue';
 import { getServerConfig } from '../lib/api/config';
 import { writeDraft } from '../lib/storage/drafts';
 import type { QueueSubmitInput } from '../lib/api/queue';
-import type { GenerationConfig, ResultRecord } from '../types/generation';
+import type { GenerationConfig, RefImage, ResultRecord } from '../types/generation';
 import type { ServerConfig } from '../types/provider';
 import { getRecordDataUrl, writeWorkspaceDraft } from '../lib/storage/gallery-db';
 import { recipeDraft, sourceImageDraft, styleTemplateSnapshot, type StudioDraft } from '../lib/image/recipe';
@@ -74,6 +74,16 @@ export function App() {
   );
 
   const submitBatch = useCallback((inputs: QueueSubmitInput[]) => queue.submitBatch(inputs, () => setQueueOpen(true)), [queue.submitBatch]);
+  const useSliceAsRef = useCallback(async (ref: RefImage) => {
+    await writeWorkspaceDraft('studio-transfer', {
+      config: { mode: 'reference', prompt: '', imageCount: 1, refImages: [ref] },
+      refImage: ref, sourceRecord: null, mask: null, maskDataUrl: '', styleId: '', styleName: '', styleTemplate: null, tone: 'none', promptHistory: null,
+    });
+    writeDraft('studio_style', '');
+    writeDraft('studio_prompt', '');
+    setStudioRevision((value) => value + 1);
+    setPage('studio');
+  }, [setPage]);
   const useAsReference = useCallback(async (record: ResultRecord, edit = false) => {
     try {
       const draft = await sourceImageDraft(record, edit);
@@ -122,11 +132,12 @@ export function App() {
       };
       const reference = { id: first.id, recordId: first.id, name: '原系列主体参考', dataUrl: await getRecordDataUrl(first), size: first.bytes || 0 };
       const overrides = Object.fromEntries(card.records.map((record, index) => [sceneIds[index], record.recipe ? { ...sizePreset(record.recipe.size), quality: record.recipe.quality, outputFormat: record.recipe.outputFormat, background: record.recipe.background, outputCompression: record.recipe.outputCompression } : {}]));
-      await writeWorkspaceDraft('series', { version: 1, seriesId, reference, sceneIds, shotIds: [], overrides, config, stagedIds: [] });
+      const tasks = JSON.stringify(card.records.map((record, index) => ({ title: `分镜 ${index + 1}`, prompt: record.prompt })));
+      await writeWorkspaceDraft('series', { version: 1, seriesId, references: [reference], sceneIds, shotIds: [], overrides, config, stagedIds: [], brief: card.masterPrompt, taskText: tasks, count: card.records.length });
       const drafts = {
         batch_transfer: '', batch_brief: card.masterPrompt,
-        batch_tasks: card.records.map((record, index) => `分镜 ${index + 1}: ${record.prompt.replaceAll('\n', ' ')}`).join('\n'),
-        batch_count: String(card.records.length), batch_template: first.template || 'picture-book',
+        batch_tasks: tasks,
+        batch_count: String(card.records.length), batch_template: '',
         batch_style: '', batch_quality: config.quality, batch_output_format: config.outputFormat,
         batch_aspect_ratio: config.aspectRatio, batch_series_id: seriesId, batch_scene_ids: JSON.stringify(sceneIds), batch_shot_ids: '',
       };
@@ -190,6 +201,7 @@ export function App() {
           onUseSeries={(card) => void deriveSeries(card)}
           onUseAsRef={(record) => void useAsReference(record)}
           onEditRecord={(record) => void useAsReference(record, true)}
+          onUseSliceAsRef={(ref) => void useSliceAsRef(ref)}
         />
       )}
 

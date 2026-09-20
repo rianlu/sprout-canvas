@@ -184,11 +184,11 @@ export function MaskEditor({ image, open, onClose, onApply, initialMask, initial
   useEffect(() => {
     if (!open) return undefined;
     function onKey(event: KeyboardEvent) {
-      if (event.key === 'Escape') onClose();
+      if (event.key === 'Escape' && !saving) onClose();
     }
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
-  }, [open, onClose]);
+  }, [open, onClose, saving]);
 
   if (!open) return null;
 
@@ -199,7 +199,7 @@ export function MaskEditor({ image, open, onClose, onApply, initialMask, initial
       role="dialog"
       aria-modal="true"
       aria-label="局部重绘工作区"
-      onClick={onClose}
+      onClick={saving ? undefined : onClose}
     >
       <div
         ref={dialogRef}
@@ -223,6 +223,7 @@ export function MaskEditor({ image, open, onClose, onApply, initialMask, initial
             type="button"
             className="w-8 h-8 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface flex items-center justify-center transition-colors"
             onClick={onClose}
+            disabled={saving}
             aria-label="关闭"
           >
             <X size={18} aria-hidden="true" />
@@ -330,6 +331,7 @@ export function MaskEditor({ image, open, onClose, onApply, initialMask, initial
               type="button"
               className="px-space-md py-2 rounded-xl bg-surface-container hover:bg-surface-container-high text-on-surface font-body-sm text-body-sm"
               onClick={onClose}
+              disabled={saving}
             >
               取消
             </button>

@@ -237,11 +237,25 @@ export function useQueue(onResult: (records: ResultRecord[], jobId: string) => P
       if (retryInput) return submit(retryInput);
     }
     const next = { ...input, creditQuote: quote, requestId: randomId(), providerId: input.request.mask ? input.providerId : undefined, retryOf: source.localOnly || changedOwner ? undefined : jobId, clientContext: { ...input.clientContext, placeholderId: randomId(), parentId: input.clientContext.placeholderId, version: (input.clientContext.version || 1) + 1 } };
+    if (next.referenceJobId && input.clientContext.kind === 'series') {
+      const original = jobsRef.current.find((job) => job.id === next.referenceJobId || job.requestId === next.referenceJobId);
+      if (original && ['failed', 'canceled', 'interrupted'].includes(original.status)) {
+        const replacement = jobsRef.current.filter((job) => job.id !== original.id && job.clientContext?.seriesId === original.clientContext?.seriesId && job.clientContext?.sceneId === original.clientContext?.sceneId)
+          .sort((a, b) => (b.clientContext?.version || 1) - (a.clientContext?.version || 1) || b.queuedAt - a.queuedAt)[0];
+        if (!replacement || !['pending', 'running', 'succeeded', 'expired'].includes(replacement.status)) throw new Error('请先重试首镜, 再重试后续分镜');
+        next.referenceJobId = replacement.id;
+        delete next.referenceImage;
+      }
+    }
     if ((source.localOnly || changedOwner) && next.referenceJobId) {
       const restored = await attachLocalReference(next);
       if (!restored.referenceImage) throw new Error('原参考任务已过期, 请从本地作品重新选择参考图');
-      next.request = { ...next.request, references: [restored.referenceImage, ...next.request.references].slice(0, 4) };
-      delete next.referenceJobId; delete next.referenceImage;
+      if (next.clientContext.kind === 'series') next.referenceImage = restored.referenceImage;
+      else {
+        next.request = { ...next.request, references: [...next.request.references, restored.referenceImage] };
+        delete next.referenceImage;
+      }
+      delete next.referenceJobId;
     }
     const job = await submit(next);
     await replaceWorkspaceRequest(source.requestId, job.requestId);

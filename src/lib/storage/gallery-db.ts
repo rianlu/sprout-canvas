@@ -9,6 +9,9 @@ const DB_NAME = 'img-gen-gallery';
 const DB_VERSION = 4;
 const LEGACY_KEY = 'sprout_canvas_gallery_v1';
 type Metadata = Omit<ResultRecord, 'dataUrl'> & { legacyDataUrl?: string };
+function recordReferences(record: Pick<ResultRecord, 'recipe'>) {
+  return [...(record.recipe?.references || []), ...(record.recipe?.referenceImage ? [record.recipe.referenceImage] : [])];
+}
 export type Outbox = { requestId: string; input: GenerationSubmission; jobId?: string; submissionConfirmed?: boolean; savedAt: number; error?: string; retryRequestId?: string };
 let connection: Promise<IDBDatabase> | undefined;
 let migration: Promise<void> | undefined;
@@ -38,12 +41,12 @@ function emptyWorkspaceContent(key: string, data: unknown) {
     ...value, config: { ...(value.config as object), mode: 'text', prompt: '', refImages: [] },
     refImage: null, sourceRecord: null, mask: null, maskDataUrl: '', styleId: 'default', styleName: '', styleTemplate: null, promptHistory: null,
   };
-  return { ...value, brief: '', taskText: '', reference: null, seriesId: '', sceneIds: [], shotIds: [], stagedIds: [], overrides: {} };
+  return { ...value, brief: '', taskText: '', references: [], reference: null, seriesId: '', sceneIds: [], shotIds: [], stagedIds: [], overrides: {} };
 }
 
 function clearLegacyWorkspaceContent(key: string) {
   const keys = key === 'studio' ? ['studio_prompt', 'studio_ref_image', 'studio_open_mask', 'studio_style']
-    : ['batch_brief', 'batch_tasks', 'batch_series_id', 'batch_scene_ids', 'batch_shot_ids', 'batch_transfer'];
+    : ['batch_brief', 'batch_tasks', 'batch_template', 'batch_series_id', 'batch_scene_ids', 'batch_shot_ids', 'batch_transfer'];
   for (const name of keys) writeDraft(name, '');
 }
 
@@ -261,7 +264,7 @@ export async function saveGalleryRecords(records: ResultRecord[], jobId?: string
     const thumb = await thumbnail(blob);
     const { dataUrl: _image, previewOnly: _preview, ...meta } = record;
     const refs: Array<{ id: string; blob: Blob }> = [];
-    for (const ref of record.recipe?.references || []) {
+    for (const ref of recordReferences(record)) {
       const refBlob = await getArtifact(`ref-${ref.id}`) || (ref.recordId ? await getArtifact(ref.recordId) : undefined);
       if (refBlob) refs.push({ id: `ref-${ref.id}`, blob: refBlob });
     }
@@ -274,6 +277,16 @@ export async function saveGalleryRecords(records: ResultRecord[], jobId?: string
       tx.objectStore('artifacts').put(item.blob, item.meta.id);
       tx.objectStore('thumbnails').put(item.preview, item.meta.id);
       item.refs.forEach((ref) => tx.objectStore('artifacts').put(ref.blob, ref.id));
+    }
+    // A later scene can finish downloading before its continuity image. Fill that snapshot
+    // when the original arrives, so deleting the original cannot invalidate another recipe.
+    if (prepared.some((item) => item.meta.kind === 'series')) {
+      const saved = new Map(prepared.map((item) => [item.meta.id, item.blob]));
+      const metadata: Metadata[] = await request(tx.objectStore('records').getAll());
+      for (const ref of metadata.flatMap(recordReferences)) {
+        const blob = ref.recordId && saved.get(ref.recordId);
+        if (blob) tx.objectStore('artifacts').put(blob, `ref-${ref.id}`);
+      }
     }
     if (jobId) tx.objectStore('consumed').put({ savedAt: Date.now() }, jobId);
     return prepared.map((item) => ({ ...item.meta, dataUrl: '', previewOnly: true }));
@@ -403,7 +416,7 @@ async function collectReferencesInTransaction(tx: IDBTransaction) {
   const records: Metadata[] = await request(tx.objectStore('records').getAll());
   const outbox: Outbox[] = await request(tx.objectStore('outbox').getAll());
   const keys = await request(tx.objectStore('artifacts').getAllKeys());
-  const used = new Set(records.flatMap((record) => [record.id, ...(record.recipe?.references.map((ref) => `ref-${ref.id}`) || []), ...(record.requestId && record.recipe?.hasMask ? [`mask-${record.requestId}`] : [])]));
+  const used = new Set(records.flatMap((record) => [record.id, ...recordReferences(record).map((ref) => `ref-${ref.id}`), ...(record.requestId && record.recipe?.hasMask ? [`mask-${record.requestId}`] : [])]));
   for (const row of outbox) {
     row.input.request.references.forEach((ref) => used.add(`ref-${ref.id}`));
     if (row.input.referenceImage) used.add(`ref-${row.input.referenceImage.id}`);

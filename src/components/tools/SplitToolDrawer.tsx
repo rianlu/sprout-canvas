@@ -62,11 +62,12 @@ interface SplitToolDrawerProps {
   open: boolean;
   onClose: () => void;
   galleryRecords: ResultRecord[];
+  initialRecord?: ResultRecord | null;
   /** 切片「作为参考图送到创作台」 */
   onUseAsReference: (ref: RefImage) => void;
 }
 
-export function SplitToolDrawer({ open, onClose, galleryRecords, onUseAsReference }: SplitToolDrawerProps) {
+export function SplitToolDrawer({ open, onClose, galleryRecords, initialRecord, onUseAsReference }: SplitToolDrawerProps) {
   const [rows, setRows] = useState(3);
   const [cols, setCols] = useState(3);
   const [format, setFormat] = useState<SplitFormat>('png');
@@ -83,8 +84,11 @@ export function SplitToolDrawer({ open, onClose, galleryRecords, onUseAsReferenc
   const renderIdRef = useRef(0);
   const dialogRef = useFocusTrap<HTMLDivElement>(open);
   useEffect(() => {
-    if (!open) { renderIdRef.current++; splitLock.current = false; setBusy(false); setLoadingSource(false); }
-  }, [open]);
+    if (!open) { renderIdRef.current++; splitLock.current = false; setBusy(false); setLoadingSource(false); return; }
+    if (!initialRecord) return;
+    const record = initialRecord;
+    void loadSource(gallerySourceName(record, 0), () => getRecordDataUrl(record));
+  }, [open, initialRecord]);
   useEffect(() => () => { renderIdRef.current++; }, []);
 
   useEffect(() => {

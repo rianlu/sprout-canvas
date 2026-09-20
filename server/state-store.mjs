@@ -10,7 +10,8 @@ const JOB_FIELDS = ['id', 'userId', 'requestId', 'requestHash', 'status', 'clien
 
 export function submissionHash(input) {
   // A verified copy of a previous result is transport data, not a new generation intent.
-  const { referenceImage: _snapshot, creditQuote: _quote, ...intent } = input;
+  const { referenceImage, creditQuote: _quote, ...intent } = input;
+  if (referenceImage && !input.referenceJobId) intent.referenceImage = referenceImage;
   return createHash('sha256').update(JSON.stringify(intent)).digest('hex');
 }
 

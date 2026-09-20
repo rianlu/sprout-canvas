@@ -185,9 +185,10 @@ try {
 
   hold();
   const beforeText = app.calls.length;
+  const beforeTextRequests = textRequests.length;
   await page.locator('.studio-rail textarea').fill('关闭浏览器后按原请求领取润色文字');
   await page.getByRole('button', { name: /^润色扩写/ }).click();
-  await until(() => app.calls.length === beforeText + 1, 'text in flight');
+  await until(() => app.calls.length === beforeText + 1 && textRequests.length === beforeTextRequests + 1, 'text request observed and in flight');
   const originalTextId = textRequests.at(-1).requestId; await accounting(1);
   await context.close(); context = null; release(); release = undefined;
   await until(async () => (await api('/api/text/' + originalTextId)).data.credit?.state === 'charged', 'detached text completion');

@@ -39,11 +39,23 @@ test('画卷最多四格, 保持当前四图批次和成功保存过程的位置
   assert.equal(merged.filter((entry) => entry.key === 'a').length, 1, '保存与队列状态交叠时不重复占位');
 });
 
-test('小批次以最近作品补位, 较早任务留在队列, 所有源记录完整保留', () => {
+test('小批次以最近作品补位, 较早未完成任务保留, 旧失败留在队列', () => {
   const jobs = [job('active', 'current', 100), job('older-failure', 'previous', 80, 'failed'), job('queued', 'earlier', 50)];
   const records = [1, 2, 3, 4, 5].map((time) => record(`saved-${time}`, time));
-  assert.deepEqual(keys(selectStudioFeed(jobs, records)), ['active', 'saved-5', 'saved-4', 'saved-3']);
+  assert.deepEqual(keys(selectStudioFeed(jobs, records)), ['active', 'queued', 'saved-5', 'saved-4']);
   assert.equal(jobs.length, 3); assert.equal(records.length, 5);
+});
+
+test('连续提交时上一张未完成任务不被后一批覆盖', () => {
+  const first = job('first', 'batch-1', 100, 'running');
+  const second = job('second', 'batch-2', 200, 'pending');
+  assert.deepEqual(keys(selectStudioFeed([first, second], [])), ['second', 'first']);
+  const saved = [1, 2, 3, 4].map((time) => record(`saved-${time}`, time));
+  assert.deepEqual(keys(selectStudioFeed([first, second], saved)), ['second', 'first', 'saved-4', 'saved-3']);
+  const receiving = job('first', 'batch-1', 100, 'succeeded');
+  assert.deepEqual(keys(selectStudioFeed([receiving, second], [])), ['second', 'first'], '上一张领取中仍留在画卷');
+  const full = ['a', 'b', 'c', 'd'].map((id) => job(id, 'batch-3', 300));
+  assert.deepEqual(keys(selectStudioFeed([first, ...full], saved)), ['a', 'b', 'c', 'd'], '当前四图批次占满时较早任务留在队列');
 });
 
 test('迟到的旧批次结果不挤走当前批次, 清理任务历史后排序仍一致', () => {

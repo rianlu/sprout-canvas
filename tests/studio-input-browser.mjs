@@ -238,13 +238,15 @@ try {
   const beforeImages = app.calls.length;
   await fill(page, '这段文字在粘贴图片后继续保留');
   await clipboardImage(page, imageA); await paste(page);
-  const reference = page.getByRole('img', { name: '参考源图', exact: true }); await reference.waitFor();
+  const references = page.locator('.studio-reference-area img');
+  const reference = references.first(); await reference.waitFor();
   await until(async () => Boolean((await stored(page)).data.refImage), 'pasted reference saved');
   const firstImage = await reference.getAttribute('src');
   const size = await reference.evaluate((image) => [image.naturalWidth, image.naturalHeight]);
   assert.deepEqual(size, [640, 360]);
   assert.equal(await input(page).inputValue(), '这段文字在粘贴图片后继续保留');
   await clipboardImage(page, imageB); await paste(page);
+  await until(async () => await references.count() === 2, 'paste appends a second reference');
   assert.equal(await reference.getAttribute('src'), firstImage);
   await input(page).fill('');
   const clipboardText = '普通文字粘贴仍然正常, 250 ml, {品牌名称}';
@@ -253,6 +255,7 @@ try {
   await screenshot(page, 'pasted-reference');
   assert.equal(await page.locator('.studio-reference-area').getByRole('button', { name: /^(局部涂抹修改|绘制蒙版|编辑蒙版)$/ }).count(), 0);
   await page.getByRole('button', { name: '局部重绘', exact: true }).click();
+  await page.getByRole('button', { name: '绘制蒙版', exact: true }).click();
   const mask = page.getByRole('dialog', { name: '局部重绘工作区', exact: true }); await mask.waitFor();
   const canvas = mask.getByLabel('蒙版画布, 按住拖动涂抹');
   await until(async () => (await canvas.boundingBox())?.width > 0, 'mask canvas ready');
@@ -271,10 +274,11 @@ try {
   assert.equal(app.calls.length, beforeImages, 'paste and mask editing never generate images or text');
   assert.deepEqual(dialogs, []);
   await screenshot(page, 'masked-paste-protected');
-  checks.push('真实剪贴板载入空参考区, 普通文字正常粘贴, 已有图片与编辑蒙版均不被覆盖且无弹窗或生成');
+  checks.push('真实剪贴板顺序追加参考图, 普通文字正常粘贴, 已有图片与编辑蒙版均不被覆盖且无弹窗或生成');
 
+  await page.getByRole('button', { name: '参考图生成', exact: true }).click();
   const replacement = page.waitForEvent('filechooser');
-  await page.getByRole('button', { name: '更换图片', exact: true }).click();
+  await page.getByRole('button', { name: '更换参考图 1', exact: true }).click();
   await (await replacement).setFiles({ name: '手动替换.png', mimeType: 'image/png', buffer: imageB });
   await until(async () => (await reference.getAttribute('src')) !== firstImage, 'explicit image replacement');
   assert.equal((await stored(page)).data.mask, null);
@@ -296,14 +300,15 @@ try {
   await dropImage(imageB); await reference.waitFor();
   await until(async () => (await stored(page)).data.refImage?.name === '拖拽参考.png', 'dropped image saved');
   const dropped = await reference.getAttribute('src'); await dropImage(imageA);
+  await until(async () => await references.count() === 2, 'drop appends a second reference');
   assert.equal(await reference.getAttribute('src'), dropped);
   await newCreation(page);
   await page.locator('.studio-rail input[type=file]').setInputFiles({ name: '不支持.svg', mimeType: 'image/svg+xml', buffer: Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"/>') });
   await page.getByRole('alert').filter({ hasText: '请选择 PNG, JPEG 或 WebP 图片' }).waitFor();
   assert.equal(await reference.count(), 0);
-  assert.equal(await page.getByRole('button', { name: /上传参考图/ }).isEnabled(), true);
+  assert.equal(await page.getByRole('button', { name: '添加参考图 1', exact: true }).isEnabled(), true);
   assert.equal(app.calls.length, beforeImages);
-  checks.push('手动更换仍可用, 连续粘贴只载入第一张, 拖拽仅接收空区, 格式错误可恢复');
+  checks.push('手动更换仍可用, 图片读取期间拦截重复输入, 拖拽顺序追加且保留已有图片, 格式错误可恢复');
 
   await fill(page, '生成后清理这份润色历史'); textOutput = '绘制一只安静看书的小熊, 柔和自然的水彩风格.';
   await polish(page).click(); await savedPrompt(page, textOutput); await undo(page).waitFor();

@@ -5,6 +5,7 @@ export const GENERATION_DEFAULTS = Object.freeze({
 });
 
 export const IMAGE_SIZES = Object.freeze(['auto', '1024x1024', '1536x1024', '1024x1536']);
+// Retain historical metadata when replaying accepted requests; new series do not select a template.
 export const SERIES_TEMPLATES = Object.freeze(['picture-book', 'ecommerce', 'video-board', 'brand-ip']);
 export const MAX_PROMPT_LENGTH = 24000;
 export const MAX_REFERENCE_IMAGES = 4;
@@ -85,7 +86,7 @@ export function validateGenerationSubmission(value) {
   if (!Number.isInteger(normalized.outputCompression) || normalized.outputCompression < 0 || normalized.outputCompression > 100) throw requestError('压缩质量必须为 0 到 100 的整数');
   if (normalized.background === 'transparent' && normalized.outputFormat === 'jpeg') throw requestError('透明背景请选择 PNG 或 WebP');
   if (request.mask) {
-    if (input.referenceJobId) throw requestError('蒙版重绘请直接选择本地原图');
+    if (input.referenceJobId || input.referenceImage) throw requestError('蒙版重绘请直接选择本地原图');
     if (!normalized.references.length) throw requestError('局部重绘需要参考图');
     if (normalized.references.length !== 1) throw requestError('局部重绘只能使用一张原图, 请先选择要编辑的图片');
     normalized.mask = image(request.mask, '蒙版');
@@ -97,7 +98,7 @@ export function validateGenerationSubmission(value) {
     kind: choice(context.kind, ['single', 'series'], 'single', '作品类型'),
     placeholderId: id(context.placeholderId, '作品 ID', true),
     prompt: text(context.prompt, '原始提示词', MAX_PROMPT_LENGTH, true),
-    mode: normalized.mask ? 'edit' : normalized.references.length || input.referenceJobId ? 'reference' : 'text',
+    mode: normalized.mask ? 'edit' : normalized.references.length || input.referenceJobId || input.referenceImage ? 'reference' : 'text',
   };
   for (const key of ['seriesId', 'sceneId', 'parentId', 'styleId', 'batchId']) if (context[key]) clientContext[key] = id(context[key], key);
   for (const [key, max] of [['masterPrompt', MAX_PROMPT_LENGTH], ['styleName', 200], ['tone', 80]]) if (context[key]) clientContext[key] = text(context[key], key, max);
@@ -108,9 +109,9 @@ export function validateGenerationSubmission(value) {
       clientContext[key] = context[key];
     }
   }
-  if (clientContext.kind === 'series' && (!clientContext.seriesId || !clientContext.sceneId || !clientContext.template)) throw requestError('系列任务需要系列, 分镜和模板信息');
-  if (input.referenceImage && !input.referenceJobId) throw requestError('恢复参考图片需要对应的参考任务');
-  if (input.referenceJobId && normalized.references.length >= MAX_REFERENCE_IMAGES) throw requestError(`首镜参考和上传参考图合计最多 ${MAX_REFERENCE_IMAGES} 张`);
+  if (clientContext.kind === 'series' && (!clientContext.seriesId || !clientContext.sceneId)) throw requestError('系列任务需要系列和分镜信息');
+  if (input.referenceImage && !input.referenceJobId && clientContext.kind !== 'series') throw requestError('单图的恢复参考图片需要对应的参考任务');
+  if (clientContext.kind !== 'series' && input.referenceJobId && normalized.references.length >= MAX_REFERENCE_IMAGES) throw requestError(`首镜参考和上传参考图合计最多 ${MAX_REFERENCE_IMAGES} 张`);
   return {
     requestId: id(input.requestId, '请求 ID', true), request: normalized, clientContext,
     ...(input.creditQuote ? { creditQuote: validateCreditQuote(input.creditQuote) } : {}),
@@ -129,6 +130,7 @@ export function generationRecipe(input, provider = {}) {
     styleId: input.clientContext.styleId || '', styleName: input.clientContext.styleName || '', tone: input.clientContext.tone || '',
     references: references.map(({ dataUrl: _image, ...ref }) => ref), hasMask: Boolean(mask),
     ...(input.referenceJobId ? { referenceJobId: input.referenceJobId } : {}),
+    ...(input.referenceImage ? { referenceImage: { id: input.referenceImage.id, name: input.referenceImage.name, ...(input.referenceImage.recordId ? { recordId: input.referenceImage.recordId } : {}) } } : {}),
   };
 }
 
@@ -136,6 +138,7 @@ export function toImagesPayload(input) {
   const r = input.request;
   const payload = { prompt: r.prompt, n: 1, size: r.size, quality: r.quality, output_format: r.outputFormat, background: r.background };
   if (r.outputFormat === 'jpeg' || r.outputFormat === 'webp') payload.output_compression = r.outputCompression;
-  if (r.references.length) payload.ref_images = r.references.map((ref, index) => ({ name: ref.name, image_url: ref.dataUrl, ...(index === 0 && r.mask ? { mask_url: r.mask } : {}) }));
+  const references = input.referenceImage ? [...r.references, input.referenceImage] : r.references;
+  if (references.length) payload.ref_images = references.map((ref, index) => ({ name: ref.name, image_url: ref.dataUrl, ...(index === 0 && r.mask ? { mask_url: r.mask } : {}) }));
   return payload;
 }

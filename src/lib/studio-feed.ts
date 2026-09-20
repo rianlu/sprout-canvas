@@ -5,7 +5,7 @@ export type StudioFeedEntry = { key: string; batchId: string; submittedAt: numbe
   { kind: 'job'; job: QueueJob } | { kind: 'result'; record: ResultRecord }
 );
 
-/** Keep the latest batch together while jobs settle, then fill with recent saved works. */
+/** Keep the latest batch together, keep other in-flight jobs visible, then fill with recent saved works. */
 export function selectStudioFeed(jobs: QueueJob[], records: ResultRecord[], editingSceneId?: string): StudioFeedEntry[] {
   const matchingJobs = jobs.filter((job) => (job.clientContext?.kind ?? 'single') === 'single' || Boolean(editingSceneId && job.clientContext?.sceneId === editingSceneId));
   const byJob = new Map(matchingJobs.map((job) => [job.id, job]));
@@ -40,9 +40,14 @@ export function selectStudioFeed(jobs: QueueJob[], records: ResultRecord[], edit
     (requests.has(request) ? extra : primary).push(entry);
     requests.add(request);
   }
+  const active = entries.filter((entry) => {
+    if (entry.batchId === latest || entry.kind !== 'job') return false;
+    const status = entry.job.status;
+    return ['pending', 'running', 'unsubmitted', 'submitting', 'interrupted'].includes(status) || (status === 'succeeded' && !entry.job.acknowledgedAt);
+  }).sort((a, b) => b.submittedAt - a.submittedAt || a.key.localeCompare(b.key));
   const recent = entries.filter((entry) => entry.batchId !== latest && entry.kind === 'result').sort((a, b) => {
     const time = (entry: StudioFeedEntry) => entry.kind === 'result' ? entry.record.createdAt : entry.submittedAt;
     return time(b) - time(a) || a.key.localeCompare(b.key);
   });
-  return [...primary, ...extra, ...recent].slice(0, 4);
+  return [...primary, ...extra, ...active, ...recent].slice(0, 4);
 }

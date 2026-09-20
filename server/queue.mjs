@@ -204,7 +204,7 @@ export function updatePendingGeneration(jobId, userId, input, provider, session)
   if (session) stateStore.credits.checkQuote(session, input.creditQuote, false);
   validateSubmissionImages(input);
   if (input.requestId !== job.requestId || input.clientContext.placeholderId !== job.clientContext.placeholderId || input.referenceJobId !== job.submission?.referenceJobId || input.providerId !== job.submission?.providerId || input.retryOf !== job.submission?.retryOf) throw requestError('编辑不能更换任务身份, 通道或参考链', 409);
-  if (input.referenceImage) validateReferenceSnapshot(imageJobs.get(job.referenceJobId), input.referenceImage);
+  if (input.referenceImage && job.referenceJobId) validateReferenceSnapshot(imageJobs.get(job.referenceJobId), input.referenceImage);
   const cfg = provider || { id: job.providerId, name: job.providerName, imageModel: job.recipe.model, generationMode: job.recipe.generationMode };
   if (!providerSupportsRequest(cfg, job.upstreamPath, job.contentType, Buffer.from(JSON.stringify(toImagesPayload(input))))) throw requestError('当前通道不支持这些生成参数');
   const extra = Buffer.byteLength(JSON.stringify(input)) - requestBytes(job);
@@ -560,7 +560,10 @@ async function processImageJob(job) {
       if (first?.b64_json) reference = { id: source.clientContext.placeholderId, recordId: source.clientContext.placeholderId, name: '系列主体参考', dataUrl: `data:${first.mime_type};base64,${first.b64_json}` };
       if (!reference) throw new Error('参考分镜临时图片已释放, 请在保存原图的浏览器继续提交');
       validateReferenceSnapshot(source, reference);
-      job.submission = { ...job.submission, request: { ...job.submission.request, references: [reference, ...job.submission.request.references].slice(0, 4) } };
+      // Keep the four user references in order and append the continuity image separately.
+      job.submission = { ...job.submission, referenceImage: reference };
+      const { dataUrl: _image, ...metadata } = reference;
+      job.recipe = { ...job.recipe, referenceImage: metadata };
     }
     const initialConfig = await readLocalConfig(job.providerId);
     const providers = providersForJob(job, initialConfig);

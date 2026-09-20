@@ -6,6 +6,7 @@ import {
   cardRecords,
   cardTimestamp,
   cardTitle,
+  copyRecordImage,
   downloadRecord,
   downloadRecords,
   supportsFileSharing,
@@ -28,10 +29,11 @@ interface ViewerProps {
   onEditRecord?: (record: ResultRecord) => void;
   onUseRecipe?: (record: ResultRecord) => void;
   onUseSeries?: (card: SeriesCard) => void;
+  onSplit?: (record: ResultRecord) => void;
   onNotify: (type: 'info' | 'success' | 'error', message: string) => void;
 }
 
-export function StitchGalleryViewer({ cards, initialIndex, initialSceneIndex = 0, onClose, onUseAsRef, onEditRecord, onUseSeries, onUseRecipe, onNotify }: ViewerProps) {
+export function StitchGalleryViewer({ cards, initialIndex, initialSceneIndex = 0, onClose, onUseAsRef, onEditRecord, onUseSeries, onUseRecipe, onSplit, onNotify }: ViewerProps) {
   const [cardIndex, setCardIndex] = useState(initialIndex);
   const [sceneIndex, setSceneIndex] = useState(initialSceneIndex);
   const [versionId, setVersionId] = useState('');
@@ -40,7 +42,7 @@ export function StitchGalleryViewer({ cards, initialIndex, initialSceneIndex = 0
   );
   const [layout, setLayout] = useState<'carousel' | 'waterfall'>('carousel');
   const [detailsOpen, setDetailsOpen] = useState(() => window.matchMedia('(min-width: 1024px)').matches);
-  const [fullscreen, setFullscreen] = useState(false);
+
   const dialogRef = useFocusTrap<HTMLDivElement>(true);
   const stripRef = useRef<HTMLDivElement>(null);
   const card = cards[cardIndex] ?? cards[0];
@@ -93,22 +95,8 @@ export function StitchGalleryViewer({ cards, initialIndex, initialSceneIndex = 0
   }, []);
 
   useEffect(() => {
-    const changed = () => setFullscreen(document.fullscreenElement === dialogRef.current);
-    document.addEventListener('fullscreenchange', changed);
-    return () => document.removeEventListener('fullscreenchange', changed);
-  }, [dialogRef]);
-
-  const toggleFullscreen = async () => {
-    try {
-      if (document.fullscreenElement) await document.exitFullscreen();
-      else if (dialogRef.current?.requestFullscreen) await dialogRef.current.requestFullscreen();
-      else onNotify('info', '当前浏览器无法进入全屏');
-    } catch { onNotify('info', '当前浏览器无法进入全屏'); }
-  };
-
-  useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape' && !fullscreen && !document.fullscreenElement) onClose();
+      if (event.key === 'Escape') onClose();
       if (event.target instanceof HTMLElement && event.target.matches('input, textarea, select')) return;
       if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
         event.preventDefault();
@@ -119,7 +107,7 @@ export function StitchGalleryViewer({ cards, initialIndex, initialSceneIndex = 0
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [changeCard, changeScene, onClose, showSeries, fullscreen]);
+  }, [changeCard, changeScene, onClose, showSeries]);
 
   useEffect(() => {
     stripRef.current
@@ -266,7 +254,7 @@ export function StitchGalleryViewer({ cards, initialIndex, initialSceneIndex = 0
                     ><StitchIcon name={icon} size={16} />{label}</button>
                   ))}
                 </div>}
-                {layout === 'waterfall' && <button type="button" className="viewer-tool-button" aria-label={fullscreen ? '退出全屏' : '进入全屏'} onClick={() => void toggleFullscreen()}><StitchIcon name={fullscreen ? 'fullscreen_exit' : 'fullscreen'} size={20} /></button>}
+
               </div>
             )}
             {layout === 'carousel' ? (
@@ -275,9 +263,7 @@ export function StitchGalleryViewer({ cards, initialIndex, initialSceneIndex = 0
                 src={original.url || record.dataUrl || undefined}
                 alt={record.prompt || '生成的画作'}
                 error={original.error}
-                fullscreen={fullscreen}
-                onFullscreen={() => void toggleFullscreen()}
-                onDownload={() => void downloadRecord(record).catch(() => onNotify('error', '下载失败, 请检查本地原图'))}
+                onCopy={() => void copyRecordImage(record).then(() => onNotify('success', '已复制原图')).catch((error) => onNotify('error', error instanceof Error ? error.message : '复制失败, 请改用下载'))}
               />
             ) : (
               <div className="flex-1 min-h-0 overflow-y-auto bg-surface-container-low p-4 md:p-space-lg" aria-label="连贯拼版">
@@ -300,7 +286,7 @@ export function StitchGalleryViewer({ cards, initialIndex, initialSceneIndex = 0
             {layout === 'carousel' && (
               <div className="flex items-center justify-between gap-3 px-3 py-2 bg-surface-container-lowest border-t border-outline-variant/30 font-meta-sm text-meta-sm text-on-surface-variant shrink-0">
                 <span className="truncate">{imageInfo ? `${imageInfo.size} · ${imageInfo.ratio}` : '读取画幅中'} · {format} 原图{series ? ` · 第 ${sceneIndex + 1} / ${records.length} 幕` : ''}</span>
-                <span className="hidden sm:inline shrink-0">滚轮缩放 · 拖动查看</span>
+                <span className="hidden sm:inline shrink-0">滚轮查看细节 · Ctrl 滚轮缩放</span>
               </div>
             )}
             {showSeries && (
@@ -420,7 +406,7 @@ export function StitchGalleryViewer({ cards, initialIndex, initialSceneIndex = 0
                 <div className="space-y-1.5">
                   <span className="font-meta-sm text-meta-sm text-on-surface-variant">参考素材</span>
                   <p className="p-2 rounded-lg bg-surface-container font-body-sm text-body-sm">
-                    {record.recipe.references.length ? record.recipe.references.map((ref) => ref.name).join(', ') : '文字创作'}
+                    {record.recipe.references.length || record.recipe.referenceImage ? [...record.recipe.references.map((ref) => ref.name), ...(record.recipe.referenceImage ? ['分镜衔接参考'] : [])].join(', ') : '文字创作'}
                     {record.recipe.hasMask ? ' · 局部编辑蒙版' : ''}
                   </p>
                 </div>
@@ -452,6 +438,9 @@ export function StitchGalleryViewer({ cards, initialIndex, initialSceneIndex = 0
               {onEditRecord && (
                 <button type="button" className="w-full py-2 rounded-xl bg-secondary-container text-on-secondary-container font-body-sm text-body-sm hover:bg-secondary-fixed flex items-center justify-center gap-2" onClick={() => { onEditRecord(record); onClose(); }}><StitchIcon name="brush" size={18} />{showSeries ? '局部重绘当前分镜' : '局部重绘此图'}</button>
               )}
+              {onSplit && (
+                <button type="button" className="w-full py-2 rounded-xl bg-surface-container text-on-surface font-body-sm text-body-sm hover:bg-surface-container-high flex items-center justify-center gap-2" onClick={() => onSplit(record)}><StitchIcon name="content_cut" size={18} />切图拆分</button>
+              )}
               <button
                 type="button"
                 className="w-full py-2.5 px-space-md rounded-xl bg-primary text-on-primary hover:bg-primary-container font-body-sm text-body-sm font-medium flex items-center justify-center gap-2 shadow-sm"
@@ -464,24 +453,24 @@ export function StitchGalleryViewer({ cards, initialIndex, initialSceneIndex = 0
                 <StitchIcon name="brush" size={18} />
                 <span>{showSeries && onUseSeries ? '基于此系列继续衍生分镜' : '用作参考图再创作'}</span>
               </button>
-              <div className="flex items-center gap-space-xs">
+              {showSeries && (
                 <button
                   type="button"
-                  className="flex-1 py-2 px-space-sm rounded-xl bg-surface-container hover:bg-surface-container-high font-body-sm text-body-sm flex items-center justify-center gap-1.5"
+                  className="w-full py-2 px-space-sm rounded-xl bg-surface-container hover:bg-surface-container-high font-body-sm text-body-sm flex items-center justify-center gap-1.5"
                   onClick={() => void downloadRecord(record).catch(() => onNotify('error', '下载失败, 请检查本地原图'))}
                 >
                   <StitchIcon name="file_download" size={16} />
-                  单张下载
+                  下载当前分镜
                 </button>
-                {supportsFileSharing() && <button
-                  type="button"
-                  className="flex-1 py-2 px-space-sm rounded-xl bg-surface-container hover:bg-surface-container-high font-body-sm text-body-sm flex items-center justify-center gap-1.5"
-                  onClick={() => void shareRecords(showSeries ? records : [record]).catch((error) => { if (error?.name !== 'AbortError') onNotify('error', error instanceof Error ? error.message : '分享失败'); })}
-                >
-                  <StitchIcon name="share" size={16} />
-                  分享文件
-                </button>}
-              </div>
+              )}
+              {supportsFileSharing() && <button
+                type="button"
+                className="w-full py-2 px-space-sm rounded-xl bg-surface-container hover:bg-surface-container-high font-body-sm text-body-sm flex items-center justify-center gap-1.5"
+                onClick={() => void shareRecords(showSeries ? records : [record]).catch((error) => { if (error?.name !== 'AbortError') onNotify('error', error instanceof Error ? error.message : '分享失败'); })}
+              >
+                <StitchIcon name="share" size={16} />
+                分享文件
+              </button>}
             </div>
           </aside>}
         </div>

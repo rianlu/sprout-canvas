@@ -84,7 +84,7 @@ async function waitEmptyWorkspace(page, key = 'studio') {
     const draft = await workspaceDraft(page, key);
     return draft && (key === 'studio'
       ? draft.config.prompt === '' && draft.config.mode === 'text' && !draft.refImage && !draft.mask && !draft.maskDataUrl && !draft.sourceRecord && !draft.config.refImages.length
-      : draft.brief === '' && draft.taskText === '' && !draft.reference && !draft.seriesId && !draft.sceneIds.length && !draft.shotIds.length && !draft.stagedIds.length) && draft;
+      : draft.brief === '' && draft.taskText === '' && !draft.references?.length && !draft.reference && !draft.seriesId && !draft.sceneIds.length && !draft.shotIds.length && !draft.stagedIds.length) && draft;
   }, `${key} completed content cleared, preferences retained`);
 }
 async function jobs(page) { return page.evaluate(async () => (await (await fetch('/api/jobs/me')).json()).jobs); }
@@ -228,12 +228,17 @@ try {
   }
   const beforeWheel = await imageGeometry(page);
   const anchor = { x: point.x + 70, y: point.y + 35 };
-  const sourcePoint = { x: (anchor.x - beforeWheel.image.x) / beforeWheel.image.width, y: (anchor.y - beforeWheel.image.y) / beforeWheel.image.height };
   await page.mouse.move(anchor.x, anchor.y);
+  await page.mouse.wheel(0, 80);
+  const afterPan = await until(async () => { const info = await imageGeometry(page); return Math.abs(info.image.y - beforeWheel.image.y + 80) < 2 && info; }, 'wheel pans the zoomed image');
+  assert.ok(Math.abs(afterPan.image.width - beforeWheel.image.width) < 1, 'plain wheel does not zoom');
+  await page.keyboard.down('Control');
   await page.mouse.wheel(0, -100);
-  const afterWheel = await until(async () => { const info = await imageGeometry(page); return info.image.width > beforeWheel.image.width * 1.1 && info; }, 'wheel zoom');
-  assert.ok(Math.abs(afterWheel.image.x + sourcePoint.x * afterWheel.image.width - anchor.x) < 1, 'wheel zoom preserves the point under the cursor');
-  assert.ok(Math.abs(afterWheel.image.y + sourcePoint.y * afterWheel.image.height - anchor.y) < 1);
+  await page.keyboard.up('Control');
+  const afterWheel = await until(async () => { const info = await imageGeometry(page); return info.image.width > afterPan.image.width * 1.1 && info; }, 'ctrl wheel zoom');
+  const ctrlAnchor = { x: (anchor.x - afterPan.image.x) / afterPan.image.width, y: (anchor.y - afterPan.image.y) / afterPan.image.height };
+  assert.ok(Math.abs(afterWheel.image.x + ctrlAnchor.x * afterWheel.image.width - anchor.x) < 2, 'ctrl wheel zoom preserves the point under the cursor');
+  assert.ok(Math.abs(afterWheel.image.y + ctrlAnchor.y * afterWheel.image.height - anchor.y) < 2);
   await viewer.getByRole('button', { name: '原始大小', exact: true }).click();
   const nativeView = await imageGeometry(page);
   assert.ok(Math.abs(nativeView.image.width - nativeView.natural.width) < 1);
@@ -247,15 +252,9 @@ try {
   await viewer.getByRole('button', { name: '收起详情', exact: true }).click();
   const expandedView = await fittedImage(page);
   assert.ok(expandedView.viewport.width > initialView.viewport.width + 300);
-  await viewer.getByRole('button', { name: '进入全屏', exact: true }).click();
-  await page.waitForFunction(() => document.fullscreenElement?.classList.contains('stitch-viewer-dialog'));
-  await fittedImage(page);
-  assert.ok(await viewer.getByRole('button', { name: '下载当前图片', exact: true }).isVisible());
+  assert.ok(await viewer.getByRole('button', { name: '下载原图', exact: true }).isVisible());
+  assert.equal(await viewer.getByRole('button', { name: '下载当前图片', exact: true }).count(), 0);
   await readableViewerIcons(page);
-  await page.screenshot({ path: path.join(target, 'viewer-fullscreen.png') });
-  await viewer.getByRole('button', { name: '退出全屏', exact: true }).click();
-  await page.waitForFunction(() => !document.fullscreenElement);
-  await fittedImage(page);
   for (const theme of ['light', 'dark']) {
     await page.setViewportSize({ width: 390, height: 844 });
     await page.evaluate((theme) => document.documentElement.classList.toggle('dark', theme === 'dark'), theme);
@@ -276,9 +275,9 @@ try {
   await viewer.getByRole('complementary', { name: '作品详情', exact: true }).waitFor();
   await fittedImage(page);
   await zoomIn.click();
-  checks.push('大图适应窗口与原始大小, 连续放大到 800% 按钮位置尺寸不变, 拖动和鼠标锚点缩放, 双击, 全屏退出, 手机详情收起与深浅主题');
+  checks.push('大图适应窗口与原始大小, 连续放大到 800% 按钮位置尺寸不变, 拖动和滚轮平移, Ctrl 滚轮锚点缩放, 双击, 手机详情收起与深浅主题');
   const downloadEvent = page.waitForEvent('download');
-  await viewer.getByRole('button', { name: '下载当前图片', exact: true }).click();
+  await viewer.getByRole('button', { name: '下载原图', exact: true }).click();
   const download = await downloadEvent;
   assert.match(download.suggestedFilename(), /\.jpg$/);
   const downloadPath = path.join(target, download.suggestedFilename());
@@ -294,6 +293,7 @@ try {
   // Save a real brush mask, navigate away and reload without losing it.
   await page.locator('.studio-rail input[type=file]').setInputFiles({ name: 'reference.png', mimeType: 'image/png', buffer: png(640, 360) });
   await page.locator('.studio-rail').getByRole('button', { name: '局部重绘', exact: true }).click();
+  await page.getByRole('button', { name: '绘制蒙版', exact: true }).click();
   const maskDialog = page.getByRole('dialog', { name: /局部重绘/ });
   await maskDialog.waitFor();
   await drawMask(page, maskDialog);
@@ -328,14 +328,17 @@ try {
   const seriesBrief = '戴红围巾, 圆耳朵的小棕熊在秋日森林中展开四幕旅程';
   await page.locator('#series-story-prompt').fill(seriesBrief);
   await page.getByLabel('上传系列参考图').setInputFiles({ name: 'series-reference.png', mimeType: 'image/png', buffer: png(640, 360) });
-  await page.getByRole('img', { name: '系列主体参考', exact: true }).waitFor();
+  await page.getByRole('img', { name: '系列参考图 1', exact: true }).waitFor();
   await page.waitForFunction((brief) => localStorage.getItem('sprout_canvas_draft_batch_brief') === brief, seriesBrief);
   await page.evaluate(async () => {
     const db = await new Promise((resolve, reject) => { const open = indexedDB.open('img-gen-gallery'); open.onsuccess = () => resolve(open.result); open.onerror = () => reject(open.error); });
     const tx = db.transaction('drafts', 'readwrite');
     const store = tx.objectStore('drafts');
     const query = store.get('series');
-    query.onsuccess = () => store.put({ ...query.result, data: { ...query.result.data, characterBrief: '紫色机器人旧主体' } }, 'series');
+    query.onsuccess = () => {
+      const { references, ...legacy } = query.result.data;
+      store.put({ ...query.result, data: { ...legacy, reference: references[0], template: 'ecommerce', characterBrief: '紫色机器人旧主体' } }, 'series');
+    };
     await new Promise((resolve, reject) => { tx.oncomplete = resolve; tx.onabort = () => reject(tx.error); });
     db.close();
   });
@@ -343,10 +346,10 @@ try {
   await page.locator('#series-story-prompt').waitFor();
   assert.equal(await page.getByLabel('系列主体设定').count(), 0);
   assert.equal(await page.locator('#series-story-prompt').inputValue(), seriesBrief);
-  await page.getByRole('img', { name: '系列主体参考', exact: true }).waitFor();
+  await page.getByRole('img', { name: '系列参考图 1', exact: true }).waitFor();
   await screenshot(page, 'series-reference-desktop');
-  await page.getByLabel('移除系列参考图').click();
-  await page.getByRole('img', { name: '系列主体参考', exact: true }).waitFor({ state: 'hidden' });
+  await page.getByLabel('移除系列参考图 1', { exact: true }).click();
+  await page.getByRole('img', { name: '系列参考图 1', exact: true }).waitFor({ state: 'hidden' });
   let submissions = 0;
   await page.route('**/api/jobs/batch', async (route) => {
     if (route.request().method() === 'POST' && ++submissions === 1) return route.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ error: '测试: 提交暂时不可用' }) });
@@ -434,7 +437,7 @@ try {
   const scenes = (await rows(page)).filter((record) => record.kind === 'series');
   assert.equal(new Set(scenes.map((record) => record.sceneId)).size, 4);
   assert.equal(new Set(scenes.map((record) => record.seriesId)).size, 1);
-  assert.ok(scenes.filter((record) => record.sceneIndex > 0).every((record) => record.recipe.references.length));
+  assert.ok(scenes.filter((record) => record.sceneIndex > 0).every((record) => record.recipe.referenceImage));
   const splitCall = app.calls.filter((call) => call.path.endsWith('/chat/completions')).at(-1);
   assert.ok(splitCall.json.messages[1].content.includes(seriesBrief));
   assert.doesNotMatch(JSON.stringify(splitCall.json), /紫色机器人旧主体/);
@@ -490,7 +493,7 @@ try {
   assert.equal((await rows(page)).length, 8, 'ending the series draft keeps every saved scene version');
   checks.push('待确认和部分完成的系列草稿继续恢复, 全镜及单镜重绘完成后结束草稿, 刷新开启新策划且保留所有作品版本');
   await nav(page, '展馆');
-  await page.getByLabel('作品来源', { exact: true }).selectOption('picture-book');
+  await page.getByLabel('作品来源', { exact: true }).selectOption('storyboard-stream');
   assert.equal(await page.locator('.gallery-card').count(), 1);
   const zipEvent = page.waitForEvent('download');
   await page.getByTitle('打包全套', { exact: true }).click();
@@ -508,7 +511,7 @@ try {
     assert.equal(crc32(bytes), zipBytes.readUInt32LE(centralOffset + 16));
     centralOffset += 46 + zipBytes.readUInt16LE(centralOffset + 28) + zipBytes.readUInt16LE(centralOffset + 30) + zipBytes.readUInt16LE(centralOffset + 32);
   }
-  checks.push('梗概统一输入, 清理旧主体字段, 可选参考图, 四幕拆解与首镜参考链, 失败刷新续交, 单镜三版本, 本镜参数, 模板过滤和四镜 ZIP');
+  checks.push('梗概统一输入, 清理旧主体字段与模板选择, 可选参考图, 四幕拆解与首镜参考链, 失败刷新续交, 单镜三版本, 本镜参数, 来源过滤和四镜 ZIP');
 
   await nav(page, '风格库');
   await page.getByRole('button', { name: /全部 36/ }).waitFor();
@@ -687,14 +690,18 @@ try {
   releaseImage(); holdImage = undefined;
   await waitRecords(op, 4);
   await closeQueue(op);
-  await op.locator('summary').first().click();
-  await op.getByRole('button', { name: '切图拆分', exact: true }).click();
+  await op.getByRole('button', { name: /^查看作品详情/ }).first().click();
+  const inspect = op.getByRole('dialog', { name: '作品检视', exact: true });
+  await inspect.waitFor();
+  const inspectDetails = inspect.getByRole('button', { name: '查看详情', exact: true });
+  if (await inspectDetails.count()) await inspectDetails.click();
+  await inspect.getByRole('button', { name: '切图拆分', exact: true }).click();
   await op.getByRole('dialog', { name: /切图/ }).waitFor();
   await op.keyboard.press('Escape');
-  checks.push('4 张独立任务, 用户内队列置顶, 二级切图工具入口');
+  checks.push('4 张独立任务, 用户内队列置顶, 作品详情切图入口');
 
   await nav(op, '系列策划');
-  await op.getByRole('button', { name: '电商长图', exact: true }).click();
+  assert.equal(await op.getByText('应用场景模板', { exact: true }).count(), 0);
   const commerceBrief = '森林主题陶瓷杯, 展示商品外形, 材质和使用场景';
   await op.locator('#series-story-prompt').fill(commerceBrief);
   assert.equal(await op.getByTitle('在风格库选择基底风格').count(), 0);
@@ -735,22 +742,22 @@ try {
   const originalSeriesId = opRecords.find((record) => record.kind === 'series').seriesId;
   await op.getByLabel('系列生成质量').selectOption('low');
   await op.getByLabel('系列输出格式').selectOption('webp');
-  await op.getByRole('button', { name: '品牌 IP 延展', exact: true }).click();
+  assert.equal(await op.getByRole('button', { name: '品牌 IP 延展', exact: true }).count(), 0);
   await nav(op, '展馆');
-  await op.getByLabel('作品来源').selectOption('ecommerce');
+  await op.getByLabel('作品来源').selectOption('storyboard-stream');
   await op.getByRole('button', { name: /检视系列:/ }).first().click();
   await op.getByRole('button', { name: '基于此系列继续衍生分镜', exact: true }).click();
   await op.locator('#series-story-prompt').waitFor();
   assert.equal(await op.getByLabel('系列生成质量').inputValue(), 'high');
   assert.equal(await op.getByLabel('系列输出格式').inputValue(), 'png');
   assert.equal(await op.getByTitle('在风格库选择基底风格').count(), 0);
-  assert.equal(await op.locator('img[alt="系列主体参考"]').count(), 1);
+  assert.equal(await op.locator('img[alt="系列参考图 1"]').count(), 1);
   const derived = await op.evaluate(() => ({ id: localStorage.getItem('sprout_canvas_draft_batch_series_id'), scenes: JSON.parse(localStorage.getItem('sprout_canvas_draft_batch_scene_ids')), template: localStorage.getItem('sprout_canvas_draft_batch_template') }));
   assert.notEqual(derived.id, originalSeriesId);
   assert.ok(derived.scenes.every((id) => !originalSceneIds.includes(id)));
-  assert.equal(derived.template, 'ecommerce');
+  assert.ok(!derived.template);
   assert.equal(await op.getByTitle(/^重新绘制本镜/).count(), 0);
-  checks.push('系列待执行编辑与置顶实际生效, 衍生系列复用模板/参数/原图并生成独立身份');
+  checks.push('系列待执行编辑与置顶实际生效, 衍生系列复用参数/原图并生成独立身份');
 
   await op.reload();
   await op.getByRole('button', { name: '使用帮助与创作守则', exact: true }).click();
@@ -763,7 +770,7 @@ try {
     Object.defineProperty(navigator, 'share', { configurable: true, value: async ({ files }) => { window.__sharedFiles = files.map((file) => ({ name: file.name, size: file.size, type: file.type })); } });
   });
   await nav(op, '展馆');
-  await op.getByLabel('作品来源').selectOption('ecommerce');
+  await op.getByLabel('作品来源').selectOption('storyboard-stream');
   await op.getByRole('button', { name: /检视系列:/ }).first().click();
   await op.getByRole('button', { name: '分享文件', exact: true }).click();
   await op.waitForFunction(() => window.__sharedFiles?.length === 4);
@@ -1044,7 +1051,14 @@ try {
     await closeQueue(cp);
   }
   assert.equal(imageCount, controlsStart + 3);
-  await cp.getByTitle('设为新参考', { exact: true }).first().click();
+  const copied = cp.locator('.studio-feed article').filter({ has: cp.getByTitle('复制原图', { exact: true }) }).first();
+  await copied.getByTitle('复制原图', { exact: true }).waitFor();
+  await copied.getByRole('button', { name: /^查看作品详情/ }).click();
+  const copiedViewer = cp.getByRole('dialog', { name: '作品检视', exact: true });
+  await copiedViewer.waitFor();
+  const copiedDetails = copiedViewer.getByRole('button', { name: '查看详情', exact: true });
+  if (await copiedDetails.count()) await copiedDetails.click();
+  await copiedViewer.getByRole('button', { name: '用作参考图再创作', exact: true }).click();
   await until(async () => (await toneControls.getByRole('button', { name: /^不额外调整/ }).getAttribute('aria-pressed')) === 'true', 'reference image loaded and additional tone cleared');
   assert.equal(await toneControls.getByRole('button').count(), 3);
   assert.equal(await toneControls.getByRole('button', { name: /^不额外调整/ }).getAttribute('aria-pressed'), 'true');
@@ -1251,7 +1265,7 @@ try {
   const nextDraftPrompt = '生成期间修改的新文案必须保留';
   await dp.getByLabel('画面提示词', { exact: true }).fill(nextDraftPrompt);
   const nextDraftFile = dp.waitForEvent('filechooser');
-  await dp.getByRole('button', { name: '更换图片', exact: true }).click();
+  await dp.getByRole('button', { name: '更换参考图 1', exact: true }).click();
   await (await nextDraftFile).setFiles({ ...referenceFile, name: 'next-draft.png', buffer: png(360, 640) });
   await until(async () => (await workspaceDraft(dp))?.refImage?.name === 'next-draft.png', 'new draft saved while the previous one is running');
   releaseImage(); releaseImage = undefined; holdImage = undefined;
@@ -1262,6 +1276,7 @@ try {
   assert.equal(await dp.getByLabel('画面提示词', { exact: true }).inputValue(), nextDraftPrompt);
   assert.equal((await workspaceDraft(dp)).refImage.name, 'next-draft.png');
   await dp.locator('.studio-rail').getByRole('button', { name: '局部重绘', exact: true }).click();
+  await dp.getByRole('button', { name: '绘制蒙版', exact: true }).click();
   const newDraftMask = dp.getByRole('dialog', { name: /局部重绘工作区/ });
   await drawMask(dp, newDraftMask);
   await newDraftMask.getByLabel('局部重绘提示词').fill('保留尚未提交的局部修改');
@@ -1287,12 +1302,12 @@ try {
   await dp.getByRole('button', { name: '新建系列', exact: true }).click();
   await dp.locator('#series-story-prompt').fill('独立的新系列草稿');
   await dp.getByLabel('上传系列参考图').setInputFiles(referenceFile);
-  await until(async () => (await workspaceDraft(dp, 'series'))?.reference?.name === referenceFile.name, 'new series reference saved');
+  await until(async () => (await workspaceDraft(dp, 'series'))?.references?.[0]?.name === referenceFile.name, 'new series reference saved');
   releaseImage(); releaseImage = undefined; holdImage = undefined;
   await waitRecords(dp, 11);
   await until(async () => (await jobs(dp)).filter((job) => job.status === 'succeeded').every((job) => job.acknowledgedAt), 'old series saved without ending the new draft');
   await dp.reload();
-  await dp.getByRole('img', { name: '系列主体参考', exact: true }).waitFor();
+  await dp.getByRole('img', { name: '系列参考图 1', exact: true }).waitFor();
   assert.equal(await dp.locator('#series-story-prompt').inputValue(), '独立的新系列草稿');
   assert.equal((await workspaceDraft(dp, 'series')).seriesId, '');
   await draftFlow.context.close();

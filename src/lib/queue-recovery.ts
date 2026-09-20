@@ -29,8 +29,12 @@ export async function recoverSubmissionBatch(previous: GenerationSubmission[], q
       if (anchor) { next.referenceJobId = anchor; delete next.referenceImage; }
       else {
         if (!input.referenceImage) throw new Error('本地没有原首镜图片, 请先保存首镜, 或重新选择参考图后再提交');
-        next.request = { ...input.request, references: [input.referenceImage, ...input.request.references].slice(0, 4) };
-        delete next.referenceJobId; delete next.referenceImage;
+        if (next.clientContext.kind === 'series') next.referenceImage = input.referenceImage;
+        else {
+          next.request = { ...input.request, references: [...input.request.references, input.referenceImage] };
+          delete next.referenceImage;
+        }
+        delete next.referenceJobId;
       }
     }
     return validateGenerationSubmission(next);

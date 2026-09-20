@@ -14,7 +14,7 @@ import { MaskEditor } from '../components/editor/MaskEditor';
 import { SplitToolDrawer } from '../components/tools/SplitToolDrawer';
 import { randomId } from '../lib/random/id';
 import { readDraft, writeDraft } from '../lib/storage/drafts';
-import { downloadRecord } from '../lib/image/gallery';
+import { copyRecordImage, downloadRecord } from '../lib/image/gallery';
 import { readWorkspaceDraft, writeWorkspaceDraft, registerWorkspaceSubmission, unconfirmedWorkspaceBatch } from '../lib/storage/gallery-db';
 import { recoverSubmissionBatch } from '../lib/queue-recovery';
 import { imageEditConfig, sourceImageDraft, studioReferenceImages, styleTemplateSnapshot, type StudioDraft, type StudioStyleTemplate } from '../lib/image/recipe';
@@ -72,7 +72,6 @@ export function CreativeStudio({ onOpenStyles, onOpenGallery, onSubmitBatch, onC
   const [catalogTemplate, setCatalogTemplate] = useState<StudioStyleTemplate | null>(null);
   const [mask, setMask] = useState<BrushMaskData | null>(null);
   const [maskEditorOpen, setMaskEditorOpen] = useState(() => readDraft('studio_open_mask') === '1');
-  const [choosingOriginal, setChoosingOriginal] = useState(false);
   const [refImage, setRefImage] = useState<RefImage | null>(() => {
     try {
       const raw = readDraft('studio_ref_image');
@@ -98,6 +97,7 @@ export function CreativeStudio({ onOpenStyles, onOpenGallery, onSubmitBatch, onC
   }, [imageCapabilities, draftLoaded]);
   const [fullscreen, setFullscreen] = useState<ResultRecord | null>(null);
   const [splitOpen, setSplitOpen] = useState(false);
+  const [splitRecord, setSplitRecord] = useState<ResultRecord | null>(null);
   const [config, setConfig] = useState<GenerationConfig>(() => {
     const size = resolveSize('1:1');
     return {
@@ -244,18 +244,13 @@ export function CreativeStudio({ onOpenStyles, onOpenGallery, onSubmitBatch, onC
     setPromptHistory(next.history);
   }, []);
 
-  const referenceIsEmpty = useCallback(() => {
-    const draft = currentDraftRef.current;
-    return !draft.refImage && !draft.sourceRecord && !draft.mask && !draft.maskDataUrl && draft.config?.mode !== 'edit' && !draft.config?.refImages?.length;
-  }, []);
-
   const maxReferences = Math.min(MAX_REFERENCE_IMAGES, imageCapabilities?.maxReferences ?? MAX_REFERENCE_IMAGES);
   const referenceImages = useMemo(() => studioReferenceImages({ refImage, config }), [refImage, config]);
 
-  // Explicit uploads append or replace one image. Clipboard and drop remain empty-only.
+  // All input methods append in order; only an explicit replacement changes an existing image.
   const handleUploadRefs = useCallback(
-    async (files: File[], replaceId?: string, onlyEmpty = false) => {
-      if (!files.length || imageLock.current || submitLock.current || maskEditorOpen || (onlyEmpty && !referenceIsEmpty())) return;
+    async (files: File[], replaceId?: string) => {
+      if (!files.length || imageLock.current || submitLock.current || maskEditorOpen) return;
       const previous = currentDraftRef.current;
       const references = studioReferenceImages(previous);
       if (replaceId && !references.some((reference) => reference.id === replaceId)) return;
@@ -270,7 +265,7 @@ export function CreativeStudio({ onOpenStyles, onOpenGallery, onSubmitBatch, onC
       try {
         const prepared: RefImage[] = [];
         for (const file of files) prepared.push({ id: randomId(), ...await prepareImageFile(file, { preserveOriginal: true }) });
-        if (!alive.current || imageSequence.current !== sequence || (onlyEmpty && !referenceIsEmpty())) return;
+        if (!alive.current || imageSequence.current !== sequence) return;
         const next = replaceId ? references.map((reference) => reference.id === replaceId ? prepared[0] : reference) : [...references, ...prepared];
         const source = next[0].recordId ? (previous.sourceRecord?.id === next[0].recordId ? previous.sourceRecord : results.find((record) => record.id === next[0].recordId) || null) : null;
         currentDraftRef.current = { ...currentDraftRef.current, refImage: next[0], sourceRecord: source, mask: null, maskDataUrl: '', config: { ...currentDraftRef.current.config, mode: 'reference', refImages: next } };
@@ -285,7 +280,7 @@ export function CreativeStudio({ onOpenStyles, onOpenGallery, onSubmitBatch, onC
         if (imageSequence.current === sequence) { imageLock.current = false; if (alive.current) setImageBusy(false); }
       }
     },
-    [pushToast, referenceIsEmpty, maskEditorOpen, maxReferences, results],
+    [pushToast, maskEditorOpen, maxReferences, results],
   );
 
   const handleRemoveRef = useCallback((id?: string) => {
@@ -302,7 +297,7 @@ export function CreativeStudio({ onOpenStyles, onOpenGallery, onSubmitBatch, onC
 
   // 提交 (buildGenerationPayload 走真实协议: ref_images + maskFactory)
   const handleSubmit = useCallback(async () => {
-    if (!config.prompt.trim() || submitLock.current || imageLock.current || !draftLoaded || !imageCapabilities || submitting || polishing || choosingOriginal || maskEditorOpen || fullscreen || splitOpen) return;
+    if (!config.prompt.trim() || submitLock.current || imageLock.current || !draftLoaded || !imageCapabilities || submitting || polishing || maskEditorOpen || fullscreen || splitOpen) return;
     submitLock.current = true;
     setSubmitting(true);
     try {
@@ -380,7 +375,6 @@ export function CreativeStudio({ onOpenStyles, onOpenGallery, onSubmitBatch, onC
     submitting,
     polishing,
     maskEditorOpen,
-    choosingOriginal,
     fullscreen,
     splitOpen,
   ]);
@@ -430,6 +424,11 @@ export function CreativeStudio({ onOpenStyles, onOpenGallery, onSubmitBatch, onC
   const handleDownload = useCallback((record: ResultRecord) => {
     void downloadRecord(record).catch(() => pushToast('error', '下载失败, 请检查本地原图'));
   }, [pushToast]);
+  const handleCopy = useCallback((record: ResultRecord) => {
+    return copyRecordImage(record)
+      .then(() => pushToast('success', '已复制原图'))
+      .catch((error) => pushToast('error', error instanceof Error ? error.message : '复制失败, 请改用下载'));
+  }, [pushToast]);
 
   const handleUseAsRef = useCallback(async (record: ResultRecord, edit = false) => {
     const sequence = ++imageSequence.current;
@@ -455,25 +454,22 @@ export function CreativeStudio({ onOpenStyles, onOpenGallery, onSubmitBatch, onC
     }
   }, []);
 
-  const openMaskEditor = useCallback((referenceId?: string) => {
-    if (imageLock.current || polishLock.current || submitLock.current) return;
-    const selected = referenceId ? referenceImages.find((reference) => reference.id === referenceId) : refImage;
-    if (!selected) { pushToast('info', '先上传图片才能涂抹蒙版'); return; }
-    if (config.mode !== 'edit') {
-      const source = selected.recordId ? (sourceRecord?.id === selected.recordId ? sourceRecord : results.find((record) => record.id === selected.recordId) || null) : null;
-      const editConfig = { ...imageEditConfig(source), refImages: referenceImages };
-      currentDraftRef.current = { ...currentDraftRef.current, config: { ...config, ...editConfig }, refImage: selected, sourceRecord: source, styleId: 'default', styleName: '', styleTemplate: null, tone: 'none', promptHistory: null };
-      setRefImage(selected);
-      setSourceRecord(source);
-      setConfig((current) => ({ ...current, ...editConfig }));
-      setStyleId('default');
-      setStyleName('');
-      setStyleTemplate(null);
-      setTone('none');
-      setPromptHistory(null);
-    }
+  const switchToEdit = useCallback(() => {
+    if (imageLock.current || polishLock.current || submitLock.current || config.mode === 'edit') return;
+    const first = referenceImages[0];
+    if (!first) return;
+    const source = first.recordId ? (sourceRecord?.id === first.recordId ? sourceRecord : results.find((record) => record.id === first.recordId) || null) : null;
+    const nextConfig: GenerationConfig = { ...config, ...imageEditConfig(source), prompt: config.prompt, refImages: referenceImages };
+    currentDraftRef.current = { ...currentDraftRef.current, config: nextConfig, refImage: first, sourceRecord: source, mask: null, maskDataUrl: '', styleId: 'default', styleName: '', styleTemplate: null, tone: 'none', promptHistory: null };
+    setRefImage(first); setSourceRecord(source); setConfig(nextConfig);
+    setMask(null); setRestoredMask('');
+    setStyleId('default'); setStyleName(''); setStyleTemplate(null); setTone('none'); setPromptHistory(null);
+  }, [config, referenceImages, sourceRecord, results]);
+
+  const openMaskEditor = useCallback(() => {
+    if (imageLock.current || polishLock.current || submitLock.current || config.mode !== 'edit' || !refImage) return;
     setMaskEditorOpen(true);
-  }, [refImage, referenceImages, config, sourceRecord, results, pushToast]);
+  }, [config.mode, refImage]);
 
   const railRef = useRef<HTMLDivElement>(null);
 
@@ -504,8 +500,6 @@ export function CreativeStudio({ onOpenStyles, onOpenGallery, onSubmitBatch, onC
                 promptHistory={promptHistory}
                 onTogglePolish={handleTogglePolish}
                 imageBusy={imageBusy}
-                canAddReference={referenceIsEmpty() && !maskEditorOpen && !imageBusy && !submitting}
-                onAddRef={(file) => { void handleUploadRefs([file], undefined, true); }}
                 selectedTemplate={selectedTemplate}
                 onUnpinStyle={() => { setStyleId('default'); setStyleName(''); setStyleTemplate(null); }}
                 refImage={refImage}
@@ -517,11 +511,11 @@ export function CreativeStudio({ onOpenStyles, onOpenGallery, onSubmitBatch, onC
                   void handleUploadRefs(files, replaceId);
                 }}
                 onOpenMaskEditor={openMaskEditor}
-                choosingOriginal={choosingOriginal}
-                onChoosingOriginalChange={setChoosingOriginal}
+                onSwitchToEdit={switchToEdit}
                 onSwitchToReference={() => {
                   const first = referenceImages[0] || refImage;
                   const source = first?.recordId ? (sourceRecord?.id === first.recordId ? sourceRecord : results.find((record) => record.id === first.recordId) || null) : null;
+                  currentDraftRef.current = { ...currentDraftRef.current, refImage: first, sourceRecord: source, mask: null, maskDataUrl: '', config: { ...config, mode: 'reference', refImages: referenceImages } };
                   setRefImage(first); setSourceRecord(source); setMask(null); setRestoredMask('');
                   setConfig((current) => ({ ...current, mode: 'reference', refImages: referenceImages }));
                 }}
@@ -542,9 +536,7 @@ export function CreativeStudio({ onOpenStyles, onOpenGallery, onSubmitBatch, onC
               entries={canvasEntries}
               onOpenGallery={onOpenGallery}
               onDownload={handleDownload}
-              onUseAsRef={(record) => {
-                void handleUseAsRef(record).catch(() => pushToast('error', '无法读取本地原图'));
-              }}
+              onCopy={handleCopy}
               onOpenMask={(record) => {
                 void handleUseAsRef(record, true).catch((error) => pushToast('error', error instanceof Error ? error.message : '无法读取本地原图'));
               }}
@@ -565,15 +557,15 @@ export function CreativeStudio({ onOpenStyles, onOpenGallery, onSubmitBatch, onC
                 railRef.current?.scrollIntoView({ behavior: 'smooth' });
                 railRef.current?.querySelector('textarea')?.focus();
               }}
-              onOpenSplit={() => setSplitOpen(true)}
             />
           </div>
         </div>
       </div>
 
       {/* 局部重绘工作区 (MaskEditor 复用, 深色遮罩层照稿) */}
-      {refImage && (
+      {maskEditorOpen && refImage && (
         <MaskEditor
+          key={refImage.id}
           open={maskEditorOpen}
           image={refImage}
           initialMask={mask}
@@ -581,17 +573,22 @@ export function CreativeStudio({ onOpenStyles, onOpenGallery, onSubmitBatch, onC
           regionPrompt={config.prompt}
           onClose={() => setMaskEditorOpen(false)}
           onApply={async (nextMask, prompt, maskDataUrl = '') => {
-            await writeWorkspaceDraft('studio', { ...currentDraftRef.current, config: { ...config, prompt, mode: 'edit' }, refImage, sourceRecord, mask: nextMask, tone, maskDataUrl });
+            const nextConfig: GenerationConfig = { ...config, prompt, mode: 'edit', refImages: referenceImages };
+            const nextDraft: StudioDraft = { ...currentDraftRef.current, config: nextConfig, refImage, sourceRecord, mask: nextMask, maskDataUrl, styleId: 'default', styleName: '', styleTemplate: null, tone: 'none', promptHistory: null };
+            await writeWorkspaceDraft('studio', nextDraft);
+            if (!alive.current) return;
+            currentDraftRef.current = nextDraft;
             setMask(nextMask);
             setRestoredMask(maskDataUrl);
-            setConfig((current) => ({ ...current, prompt, mode: 'edit' }));
+            setConfig(nextConfig);
+            setStyleId('default'); setStyleName(''); setStyleTemplate(null); setTone('none'); setPromptHistory(null);
             setMaskEditorOpen(false);
             pushToast('success', '蒙版已保存并应用');
           }}
         />
       )}
 
-      {/* 全屏查看 */}
+      {/* 作品详情 */}
       {fullscreen && (
         <StitchGalleryViewer
           cards={[{ kind: 'single', record: fullscreen }]}
@@ -599,6 +596,7 @@ export function CreativeStudio({ onOpenStyles, onOpenGallery, onSubmitBatch, onC
           onClose={() => setFullscreen(null)}
           onUseAsRef={(record) => void handleUseAsRef(record).catch(() => pushToast('error', '无法读取本地原图'))}
           onEditRecord={(record) => void handleUseAsRef(record, true).catch(() => pushToast('error', '无法读取本地原图'))}
+          onSplit={(record) => { setFullscreen(null); setSplitRecord(record); setSplitOpen(true); }}
           onUseRecipe={onUseRecipe}
           onNotify={pushToast}
         />
@@ -606,14 +604,15 @@ export function CreativeStudio({ onOpenStyles, onOpenGallery, onSubmitBatch, onC
 
       <SplitToolDrawer
         open={splitOpen}
-        onClose={() => setSplitOpen(false)}
+        onClose={() => { setSplitOpen(false); setSplitRecord(null); }}
         galleryRecords={results}
+        initialRecord={splitRecord}
         onUseAsReference={(record) => {
           imageSequence.current++; imageLock.current = false; setImageBusy(false);
           currentDraftRef.current = { ...currentDraftRef.current, refImage: record, sourceRecord: null, mask: null, maskDataUrl: '', config: { ...currentDraftRef.current.config, mode: 'reference', refImages: [] } };
           setRefImage(record); setSourceRecord(null); setMask(null); setRestoredMask('');
           setConfig((current) => ({ ...current, mode: 'reference', refImages: [] }));
-          setSplitOpen(false); pushToast('success', '已设为参考图');
+          setSplitOpen(false); setSplitRecord(null); pushToast('success', '已设为参考图');
         }}
       />
 

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { ResultRecord } from '../types/generation';
+import type { RefImage, ResultRecord } from '../types/generation';
+import { SplitToolDrawer } from '../components/tools/SplitToolDrawer';
 import { StitchIcon } from '../components/ui/StitchIcon';
 import { StitchGalleryViewer } from '../components/gallery/StitchGalleryViewer';
 import { ToastStack } from '../components/shell/QueueDrawer';
@@ -26,6 +27,7 @@ interface GalleryProps {
   onUseAsRef: (record: ResultRecord) => void;
   onEditRecord: (record: ResultRecord) => void;
   onUseSeries: (card: SeriesCard) => void;
+  onUseSliceAsRef: (ref: RefImage) => void;
 }
 
 type TypeFilter = 'all' | 'studio' | 'storyboard';
@@ -44,7 +46,7 @@ function timeGroup(timestamp: number): Group {
   return timestamp >= week.getTime() ? 'week' : 'earlier';
 }
 
-export function GalleryGrid({ records, onClear, onDeleteMany, onUseRecipe, onUseAsRef, onEditRecord, onUseSeries }: GalleryProps) {
+export function GalleryGrid({ records, onClear, onDeleteMany, onUseRecipe, onUseAsRef, onEditRecord, onUseSeries, onUseSliceAsRef }: GalleryProps) {
   const [typeFilter, setTypeFilter] = useState<TypeFilter>('all');
   const [source, setSource] = useState('all');
   const [ratio, setRatio] = useState('all');
@@ -52,6 +54,7 @@ export function GalleryGrid({ records, onClear, onDeleteMany, onUseRecipe, onUse
   const [sort, setSort] = useState('newest');
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [viewer, setViewer] = useState<{ cards: GalleryCard[]; index: number } | null>(null);
+  const [splitRecord, setSplitRecord] = useState<ResultRecord | null>(null);
   const [working, setWorking] = useState(false);
   const [toasts, setToasts] = useState<{ id: string; type: 'info' | 'success' | 'error'; message: string }[]>([]);
   const searchRef = useRef<HTMLInputElement>(null);
@@ -106,7 +109,6 @@ export function GalleryGrid({ records, onClear, onDeleteMany, onUseRecipe, onUse
         if ((typeFilter === 'studio' || source === 'quick-studio') && card.kind !== 'single') return false;
         if ((typeFilter === 'storyboard' || source === 'storyboard-stream') && card.kind !== 'series') return false;
         const items = cardRecords(card);
-        if (['picture-book', 'ecommerce', 'video-board', 'brand-ip'].includes(source) && !items.some((record) => record.template === source)) return false;
         if (ratio !== 'all' && !items.some((record) => metadata[record.id]?.ratio === ratio)) return false;
         const query = search.trim().toLowerCase();
         return (
@@ -254,11 +256,7 @@ export function GalleryGrid({ records, onClear, onDeleteMany, onUseRecipe, onUse
                 >
                   <option value="all">来源: 全部来源</option>
                   <option value="quick-studio">来源: 快捷单图</option>
-                  <option value="storyboard-stream">来源: 系列分镜流</option>
-                  <option value="picture-book">来源: 绘本连环画</option>
-                  <option value="ecommerce">来源: 电商长图</option>
-                  <option value="video-board">来源: 静态视频分镜</option>
-                  <option value="brand-ip">来源: 品牌 IP 延展</option>
+                  <option value="storyboard-stream">来源: 系列策划</option>
                 </select>
                 <StitchIcon
                   name="expand_more"
@@ -563,9 +561,17 @@ export function GalleryGrid({ records, onClear, onDeleteMany, onUseRecipe, onUse
           onEditRecord={onEditRecord}
           onUseRecipe={onUseRecipe}
           onUseSeries={onUseSeries}
+          onSplit={(record) => { setViewer(null); setSplitRecord(record); }}
           onNotify={pushToast}
         />
       )}
+      <SplitToolDrawer
+        open={Boolean(splitRecord)}
+        initialRecord={splitRecord}
+        onClose={() => setSplitRecord(null)}
+        galleryRecords={records}
+        onUseAsReference={(ref) => { setSplitRecord(null); onUseSliceAsRef(ref); }}
+      />
       <ToastStack toasts={toasts} />
     </main>
   );

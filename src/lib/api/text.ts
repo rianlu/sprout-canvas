@@ -3,7 +3,7 @@ import { getCreditQuote, getCreditSnapshot } from '../credits';
 import { randomId } from '../random/id';
 import { readWorkspaceDraft, writeWorkspaceDraft } from '../storage/gallery-db';
 
-interface PendingText { requestId: string; signature: string; unknown: boolean }
+interface PendingText { requestId: string; signature: string; unknown: boolean; sceneCount?: number }
 interface TextResult { text: string; providerName?: string; attempts?: unknown[] }
 export async function requestTextGeneration(system: string, content: string, kind: 'prompt' | 'series' = 'prompt', sceneCount?: number, onResult?: (result: TextResult) => Promise<void>) {
   const creditQuote = getCreditQuote();
@@ -12,11 +12,12 @@ export async function requestTextGeneration(system: string, content: string, kin
   const previous = await readWorkspaceDraft<PendingText>(key);
   let pending = previous?.signature === signature ? previous : undefined;
   let requestInput = { system, content };
-  // An instruction update must not turn an unfinished polish into another paid request.
-  if (!pending && previous && kind === 'prompt') {
+  // Instruction changes must not charge again for an unfinished result with the same input.
+  if (!pending && previous) {
     try {
       const original = JSON.parse(previous.signature) as { system?: unknown; content?: unknown };
-      if (original.content === content && typeof original.system === 'string') {
+      const previousCount = previous.sceneCount ?? (typeof original.system === 'string' ? Number(original.system.match(/恰好 (\d+) 项/)?.[1]) : undefined);
+      if (original.content === content && typeof original.system === 'string' && (kind === 'prompt' || previousCount === sceneCount)) {
         pending = previous;
         requestInput = { system: original.system, content };
       }
@@ -55,7 +56,7 @@ export async function requestTextGeneration(system: string, content: string, kin
     pending = undefined;
     requestInput = { system, content };
   }
-  const request = pending || { requestId: randomId(), signature, unknown: false };
+  const request = pending || { requestId: randomId(), signature, unknown: false, ...(kind === 'series' ? { sceneCount } : {}) };
   await writeWorkspaceDraft(key, request);
   try {
     const result = await apiFetch<TextResult>('/api/text', {

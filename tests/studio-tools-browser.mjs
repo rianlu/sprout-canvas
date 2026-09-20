@@ -14,7 +14,7 @@ await mkdir(output, { recursive: true });
 const app = await startHarness({ serveDist: true });
 const executablePath = process.env.SPROUT_BROWSER_EXECUTABLE || (existsSync('/Applications/Google Chrome.app/Contents/MacOS/Google Chrome') ? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' : undefined);
 const browser = await chromium.launch({ executablePath, headless: true });
-const context = await browser.newContext({ viewport: { width: 1600, height: 1000 }, locale: 'zh-CN', reducedMotion: 'reduce', acceptDownloads: true });
+const context = await browser.newContext({ viewport: { width: 1600, height: 1000 }, locale: 'zh-CN', reducedMotion: 'reduce', acceptDownloads: true, permissions: ['clipboard-read', 'clipboard-write'] });
 const page = await context.newPage();
 page.setDefaultTimeout(10000);
 const errors = [], checks = [], submissions = [];
@@ -83,6 +83,7 @@ function unzip(bytes) {
 
 try {
   await page.goto(app.base);
+  await context.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: app.base });
   await page.getByLabel('访问码', { exact: true }).fill(app.accessCode);
   await page.getByRole('button', { name: '进入工作台', exact: true }).click(); await input().waitFor();
   await page.getByRole('button', { name: '从风格库挑选提示词模板', exact: true }).click();
@@ -126,7 +127,7 @@ try {
   assert.deepEqual((await draft()).config.refImages.map((ref) => ref.id), originalIds, 'failed multi-file input does not partially append');
   await upload(files.slice(2));
   await until(async () => (await draft()).config.refImages.length === 4, 'four references saved');
-  assert.equal(await page.getByRole('button', { name: '已达 4 张上限', exact: true }).isDisabled(), true);
+  assert.equal(await references().getByRole('button', { name: /^添加参考图/ }).count(), 0);
   const beforeReplace = (await draft()).config.refImages;
   const replacement = { name: '新背景.png', mimeType: 'image/png', buffer: png(360, 640, [210, 170, 120, 255]) };
   await replace(2, replacement);
@@ -151,10 +152,10 @@ try {
   checks.push('最多四图, 多选/追加/单张替换/删除/刷新顺序一致, 非法批次保持原图, 桌面手机深浅主题无横向溢出');
 
   await page.getByRole('button', { name: '局部重绘', exact: true }).click();
-  assert.ok(await page.getByRole('button', { name: /^开始绘制/ }).isDisabled());
+  assert.ok(await page.getByRole('button', { name: /^开始局部重绘/ }).isDisabled());
   await page.keyboard.press(process.platform === 'darwin' ? 'Meta+Enter' : 'Control+Enter');
-  assert.equal(submissions.length, 0, 'choosing an original cannot submit a reference job');
-  await page.getByRole('button', { name: '局部重绘参考图 2', exact: true }).click();
+  assert.equal(submissions.length, 0, 'edit mode without a saved mask cannot submit a job');
+  await page.getByRole('button', { name: '绘制蒙版', exact: true }).click();
   const maskDialog = page.getByRole('dialog', { name: '局部重绘工作区', exact: true });
   await maskDialog.waitFor();
   const canvas = maskDialog.getByLabel('蒙版画布, 按住拖动涂抹');
@@ -166,20 +167,36 @@ try {
   await maskDialog.getByRole('button', { name: '保存并应用蒙版', exact: true }).click(); await maskDialog.waitFor({ state: 'hidden' });
   await page.reload(); await page.getByLabel('局部修改要求', { exact: true }).waitFor();
   await page.getByRole('button', { name: '编辑蒙版', exact: true }).waitFor();
-  assert.equal((await draft()).refImage.id, expectedReferences[1].id);
+  assert.equal((await draft()).refImage.id, expectedReferences[0].id);
   assert.deepEqual((await draft()).config.refImages, expectedReferences);
-  assert.match(await page.locator('.studio-reference-area').innerText(), /另 3 张参考图已保留/);
+  assert.match(await page.locator('.studio-reference-area').innerText(), /其余 3 张图片已保留/);
+  assert.equal(await page.locator('.studio-reference-area').getByRole('img').count(), 1);
   const spentBefore = (await auth()).credits.spent;
   await page.getByRole('button', { name: /^开始局部重绘/ }).click();
   await until(() => submissions.length === 1, 'edit request');
   assert.equal(submissions[0].request.references.length, 1);
-  assert.equal(submissions[0].request.references[0].id, expectedReferences[1].id);
-  assert.equal(submissions[0].request.references[0].dataUrl, expectedReferences[1].dataUrl);
+  assert.equal(submissions[0].request.references[0].id, expectedReferences[0].id);
+  assert.equal(submissions[0].request.references[0].dataUrl, expectedReferences[0].dataUrl);
   assert.ok(submissions[0].request.mask);
   await until(async () => (await stored('records')).length === 1, 'edited result saved', 15000);
   await until(async () => (await auth()).credits.reserved === 0, 'edit points settled');
   assert.equal((await auth()).credits.spent - spentBefore, 10);
   await closeQueue();
+  const resultCard = page.locator('.studio-feed article').filter({ has: page.getByTitle('复制原图', { exact: true }) }).first();
+  await resultCard.hover();
+  await resultCard.getByTitle('复制原图', { exact: true }).click();
+  await until(async () => await page.getByText('已复制原图', { exact: true }).count(), 'copied original toast');
+  const copiedBytes = await page.evaluate(async () => {
+    const items = await navigator.clipboard.read();
+    const image = items.find((item) => item.types.includes('image/png'));
+    return image ? (await image.getType('image/png')).size : 0;
+  });
+  assert.ok(copiedBytes > 1000, 'clipboard holds original image bytes, not an empty thumbnail');
+  await resultCard.getByRole('button', { name: /^查看作品详情/ }).click();
+  const viewer = page.getByRole('dialog', { name: '作品检视', exact: true });
+  await viewer.waitFor();
+  await viewer.getByRole('button', { name: '关闭查看器', exact: true }).click();
+  await viewer.waitFor({ state: 'hidden' });
   await page.getByRole('button', { name: '参考图生成', exact: true }).click();
   assert.deepEqual((await draft()).config.refImages, expectedReferences);
   assert.equal(await page.locator('.studio-reference-area').getByRole('button', { name: /^(局部涂抹修改|绘制蒙版|编辑蒙版)$/ }).count(), 0);
@@ -210,10 +227,14 @@ try {
   await page.getByRole('button', { name: '复用完整配方', exact: true }).click();
   await references().waitFor();
   assert.deepEqual((await draft()).config.refImages.map((ref) => ref.id), expectedReferences.map((ref) => ref.id));
-  checks.push('选择单张蒙版原图后仅提交该图, 其余参考可恢复; 四图请求/outbox/配方完整, 刷新不重发, 按输出一张扣十点');
+  checks.push('切换局部重绘后仅提交第一张原图, 其余参考可恢复; 四图请求/outbox/配方完整, 刷新不重发, 按输出一张扣十点');
 
-  await page.locator('summary').first().click();
-  await page.getByRole('button', { name: '切图拆分', exact: true }).click();
+  await page.getByRole('button', { name: /^查看作品详情/ }).first().click();
+  const inspect = page.getByRole('dialog', { name: '作品检视', exact: true });
+  await inspect.waitFor();
+  const details = inspect.getByRole('button', { name: '查看详情', exact: true });
+  if (await details.count()) await details.click();
+  await inspect.getByRole('button', { name: '切图拆分', exact: true }).click();
   const split = page.getByRole('dialog', { name: '切图工具', exact: true }); await split.waitFor();
   await split.locator('input[type=file]').setInputFiles({ name: '九宫格测试.png', mimeType: 'image/png', buffer: png(641, 359) });
   await split.getByRole('button', { name: '切分为 3×3', exact: true }).click();

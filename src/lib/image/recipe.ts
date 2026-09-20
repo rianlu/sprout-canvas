@@ -65,7 +65,8 @@ export async function recipeDraft(record: ResultRecord) {
   const recipe = record.recipe;
   if (!recipe) throw new Error('这张历史作品未保存完整配方');
   const refImages: RefImage[] = [];
-  for (const ref of recipe.references) {
+  const references = [...recipe.references, ...(recipe.referenceImage ? [recipe.referenceImage] : [])];
+  for (const ref of references) {
     const blob = await getArtifact(`ref-${ref.id}`) || (ref.recordId ? await getArtifact(ref.recordId) : undefined);
     if (!blob) throw new Error(`参考图 ${ref.name} 已不存在, 无法完整复用此配方`);
     refImages.push({ ...ref, dataUrl: await blobDataUrl(blob), size: blob.size });
