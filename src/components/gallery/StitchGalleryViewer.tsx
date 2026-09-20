@@ -138,7 +138,7 @@ export function StitchGalleryViewer({ cards, initialIndex, initialSceneIndex = 0
 
   return (
     <div
-      className="stitch-viewer fixed inset-0 z-50 flex items-center justify-center sm:p-4 bg-inverse-surface/50 backdrop-blur-sm"
+      className="stitch-viewer fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-inverse-surface/50 backdrop-blur-sm"
       onClick={(event) => {
         if (event.target === event.currentTarget) onClose();
       }}
@@ -148,7 +148,7 @@ export function StitchGalleryViewer({ cards, initialIndex, initialSceneIndex = 0
         role="dialog"
         aria-modal="true"
         aria-label="作品检视"
-        className="stitch-viewer-dialog relative w-full h-full bg-surface sm:rounded-2xl shadow-[0_20px_60px_rgba(40,48,36,0.20)] flex flex-col overflow-hidden"
+        className="stitch-viewer-dialog relative flex h-[min(92dvh,calc(100dvh-1.5rem))] w-[min(100%,calc(100vw-1.5rem))] max-w-5xl flex-col overflow-hidden rounded-2xl bg-surface shadow-[0_20px_60px_rgba(40,48,36,0.20)] sm:h-[min(88dvh,56rem)] sm:w-[min(80vw,64rem)]"
       >
         <div className="h-16 px-3 md:px-space-lg bg-surface-container-lowest border-b border-outline-variant/30 flex items-center justify-between gap-2 md:gap-space-md shrink-0">
           <div className="flex items-center gap-space-md min-w-0 flex-1">
@@ -172,11 +172,12 @@ export function StitchGalleryViewer({ cards, initialIndex, initialSceneIndex = 0
             </div>
           </div>
           <div className="flex items-center gap-space-xs shrink-0">
-            <div className="hidden sm:flex items-center bg-surface-container rounded-lg p-0.5">
+            <div className="flex items-center bg-surface-container rounded-lg p-0.5">
               <button
                 type="button"
                 className="p-1.5 rounded hover:bg-surface-container-high"
-                title="查看上一套"
+                title={series ? '上一套' : '上一张'}
+                aria-label={series ? '上一套' : '上一张'}
                 onClick={() => changeCard(-1)}
                 disabled={cards.length < 2}
               >
@@ -188,7 +189,8 @@ export function StitchGalleryViewer({ cards, initialIndex, initialSceneIndex = 0
               <button
                 type="button"
                 className="p-1.5 rounded hover:bg-surface-container-high"
-                title="查看下一套"
+                title={series ? '下一套' : '下一张'}
+                aria-label={series ? '下一套' : '下一张'}
                 onClick={() => changeCard(1)}
                 disabled={cards.length < 2}
               >
@@ -228,7 +230,7 @@ export function StitchGalleryViewer({ cards, initialIndex, initialSceneIndex = 0
             </button>
           </div>
         </div>
-        <div className="stitch-viewer-content flex-1 flex min-h-0 relative overflow-hidden">
+        <div className="stitch-viewer-content flex-1 flex min-h-0 items-stretch relative overflow-hidden">
           <div className={`stitch-viewer-stage flex-1 flex-col min-w-0 min-h-0 ${detailsOpen ? 'hidden lg:flex' : 'flex'}`}>
             {series && (
               <div className="flex items-center flex-wrap gap-2 px-3 py-2 bg-surface-container-lowest border-b border-outline-variant/30 shrink-0">
@@ -355,8 +357,8 @@ export function StitchGalleryViewer({ cards, initialIndex, initialSceneIndex = 0
               </div>
             )}
           </div>
-          {detailsOpen && <aside id="viewer-details" aria-label="作品详情" className="stitch-viewer-inspector w-full lg:w-80 min-h-0 bg-surface-container-lowest p-space-lg flex flex-col justify-between overflow-y-auto shrink-0 lg:border-l border-outline-variant/30">
-            <div className="space-y-space-md">
+          {detailsOpen && <aside id="viewer-details" aria-label="作品详情" className="stitch-viewer-inspector flex h-full min-h-0 w-full flex-1 flex-col overflow-hidden bg-surface-container-lowest lg:w-80 lg:flex-none lg:border-l border-outline-variant/30">
+            <div className="min-h-0 flex-1 space-y-space-md overflow-y-auto p-space-lg">
               <div className="flex items-center gap-space-xs text-primary">
                 <StitchIcon name="tune" size={20} />
                 <h3 className="font-headline-sm text-headline-sm">参数与创作配方</h3>
@@ -377,7 +379,7 @@ export function StitchGalleryViewer({ cards, initialIndex, initialSceneIndex = 0
                       <StitchIcon name="content_copy" size={15} />
                     </button>
                   </div>
-                  <p className="font-body-sm text-body-sm text-on-surface leading-relaxed whitespace-pre-wrap break-words">
+                  <p className="max-h-40 overflow-y-auto font-body-sm text-body-sm text-on-surface leading-relaxed whitespace-pre-wrap break-words">
                     {card.masterPrompt || '未提供'}
                   </p>
                 </div>
@@ -397,7 +399,7 @@ export function StitchGalleryViewer({ cards, initialIndex, initialSceneIndex = 0
                     <StitchIcon name="content_copy" size={15} />
                   </button>
                 </div>
-                <p className="font-body-sm text-body-sm text-on-surface font-medium leading-relaxed whitespace-pre-wrap break-words">
+                <p className="max-h-40 overflow-y-auto font-body-sm text-body-sm text-on-surface font-medium leading-relaxed whitespace-pre-wrap break-words">
                   {record.recipe?.prompt || record.prompt || '未提供'}
                 </p>
               </div>
@@ -430,8 +432,7 @@ export function StitchGalleryViewer({ cards, initialIndex, initialSceneIndex = 0
                 </div>
               </div>
             </div>
-            <div className="space-y-space-xs pt-space-md mt-space-md">
-              {record.recipe && <p className="font-meta-sm text-meta-sm text-outline">{record.recipe.model} · {record.providerName}{record.version ? ` · 版本 ${record.version}` : ''}</p>}
+            <div className="shrink-0 space-y-space-xs border-t border-outline-variant/30 bg-surface-container-lowest px-space-lg py-space-md">
               {record.recipe && onUseRecipe && (
                 <button type="button" className="w-full py-2 rounded-xl bg-surface-container text-on-surface font-body-sm text-body-sm hover:bg-surface-container-high" onClick={() => { onUseRecipe(record); onClose(); }}>复用完整配方</button>
               )}

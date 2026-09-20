@@ -19,7 +19,7 @@
 | 系列策划 | 上方 7:5 设定区, 梗概/剧本统一输入, 可选图片放在系列参考图区, 从梗概提取画面要求; 先拆解提示词, 下方 1/2/4 列分镜供检查编辑, 独立确认后生成图片; 保留时间轴, 单镜编辑/重绘/置顶, 模板和版本切换 | `StitchSeriesStudio.tsx`, `useSeriesStudio.ts` |
 | 风格库 | 标题, 搜索, 分类胶囊, 三列图文卡, 密度切换, 详情与两项主动作. 从服务端动态读取已上架模板, 卡片/详情/复制/发送使用同一原文, 用户确认后绘制 | `StitchStylesLibrary.tsx`, `useStyleCatalog.ts`, `server/style-store.mjs` |
 | 风格管理 | 独立管理员入口, 同一标题/正文层级和语义色, 简洁图片/提示词/作者表单; 支持上传/拖拽/粘贴, 可选信息折叠, 上下架与备份预览 | `StyleAdmin.tsx`, `server/admin-auth.mjs`, `server/style-routes.mjs` |
-| 展馆 | 统一素色背景, 24px 画布边距和标题字体层级, 双排筛选, 日期分组, 4:3 卡片, 系列纸垫, 全选和批量操作 | `StitchGalleryGrid.tsx` |
+| 展馆 | 统一素色背景, 24px 画布边距和标题字体层级, 单图/系列分段, 平铺画幅与排序, 日期分组, 4:3 卡片, 系列纸垫; 选择模式才显示勾选和批量操作 | `StitchGalleryGrid.tsx` |
 | 图片详情 | 接近全视口的大图区域, 固定工具栏, 可收起配方栏, 滚轮平移, Ctrl 滚轮/双指缩放与拖动, 100%/适应窗口, 分镜与版本切换, 原图/ZIP/再创作 | `StitchGalleryViewer.tsx`, `ImageViewport.tsx` |
 | 蒙版与队列 | 明确区分参考图生成/局部重绘, 编辑继承原作品参数并只读展示, 使用原图尺寸蒙版, 保存成功才关闭. 队列置顶, 归档, 历史分页与恢复均接线 | `MaskEditor.tsx`, `StitchStudioRail.tsx`, `QueueDrawer.tsx` |
 

@@ -4,11 +4,11 @@ import { SplitToolDrawer } from '../components/tools/SplitToolDrawer';
 import { StitchIcon } from '../components/ui/StitchIcon';
 import { StitchGalleryViewer } from '../components/gallery/StitchGalleryViewer';
 import { ToastStack } from '../components/shell/QueueDrawer';
+import { useFocusTrap } from '../hooks/useFocusTrap';
 import {
   cardRecords,
   cardTimestamp,
   cardTitle,
-  downloadRecord,
   downloadRecords,
   latestSceneVersions,
   type GalleryCard,
@@ -34,8 +34,20 @@ type TypeFilter = 'all' | 'studio' | 'storyboard';
 type Group = 'today' | 'week' | 'earlier';
 const GROUPS: Group[] = ['today', 'week', 'earlier'];
 const GROUP_LABEL = { today: '今日作品', week: '近 7 天', earlier: '往期作品' };
-const SELECT_CLASS =
-  'appearance-none bg-surface-container-lowest border border-outline-variant/40 hover:border-outline text-on-surface font-body-sm text-body-sm py-1.5 pl-3 pr-7 rounded-xl cursor-pointer shadow-xs transition-colors focus:ring-1 focus:ring-primary max-w-full';
+const RATIOS = [
+  ['all', '全部'],
+  ['1:1', '1:1'],
+  ['16:9', '16:9'],
+  ['9:16', '9:16'],
+  ['4:3', '4:3'],
+  ['3:4', '3:4'],
+  ['3:2', '3:2'],
+  ['2:3', '2:3'],
+  ['21:9', '21:9'],
+] as const;
+const CHIP_WRAP = 'flex items-center gap-1 p-1 bg-surface-container rounded-xl overflow-x-auto select-none border border-outline-variant/30';
+const chipClass = (active: boolean) =>
+  `px-2.5 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-colors disabled:opacity-40 ${active ? 'bg-primary text-on-primary shadow-sm' : 'text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high'}`;
 
 function timeGroup(timestamp: number): Group {
   const today = new Date();
@@ -46,19 +58,27 @@ function timeGroup(timestamp: number): Group {
   return timestamp >= week.getTime() ? 'week' : 'earlier';
 }
 
+function countLabel(singles: number, series: number) {
+  const parts = [];
+  if (singles) parts.push(`${singles} 张单图`);
+  if (series) parts.push(`${series} 套系列`);
+  return parts.join(' · ') || '暂无作品';
+}
+
 export function GalleryGrid({ records, onClear, onDeleteMany, onUseRecipe, onUseAsRef, onEditRecord, onUseSeries, onUseSliceAsRef }: GalleryProps) {
   const [typeFilter, setTypeFilter] = useState<TypeFilter>('all');
-  const [source, setSource] = useState('all');
   const [ratio, setRatio] = useState('all');
   const [search, setSearch] = useState('');
   const [sort, setSort] = useState('newest');
+  const [selecting, setSelecting] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [confirming, setConfirming] = useState(false);
   const [viewer, setViewer] = useState<{ cards: GalleryCard[]; index: number } | null>(null);
   const [splitRecord, setSplitRecord] = useState<ResultRecord | null>(null);
   const [working, setWorking] = useState(false);
   const [toasts, setToasts] = useState<{ id: string; type: 'info' | 'success' | 'error'; message: string }[]>([]);
   const searchRef = useRef<HTMLInputElement>(null);
-  const allRef = useRef<HTMLInputElement>(null);
+  const confirmRef = useFocusTrap<HTMLDivElement>(confirming);
   const metadata = useImageMetadata(records);
   const pushToast = useCallback((type: 'info' | 'success' | 'error', message: string) => {
     const id = randomId();
@@ -66,16 +86,24 @@ export function GalleryGrid({ records, onClear, onDeleteMany, onUseRecipe, onUse
     window.setTimeout(() => setToasts((current) => current.filter((toast) => toast.id !== id)), 3200);
   }, []);
 
+  const exitSelect = useCallback(() => {
+    setSelecting(false);
+    setSelected(new Set());
+    setConfirming(false);
+  }, []);
+
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
-      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k' && !viewer) {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k' && !viewer && !confirming) {
         event.preventDefault();
         searchRef.current?.focus();
       }
+      if (event.key === 'Escape' && confirming) { event.preventDefault(); setConfirming(false); }
+      else if (event.key === 'Escape' && selecting && !viewer) { event.preventDefault(); exitSelect(); }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [viewer]);
+  }, [confirming, exitSelect, selecting, viewer]);
 
   const cards = useMemo<GalleryCard[]>(() => {
     const series = new Map<string, ResultRecord[]>();
@@ -106,8 +134,8 @@ export function GalleryGrid({ records, onClear, onDeleteMany, onUseRecipe, onUse
   const filtered = useMemo(
     () =>
       cards.filter((card) => {
-        if ((typeFilter === 'studio' || source === 'quick-studio') && card.kind !== 'single') return false;
-        if ((typeFilter === 'storyboard' || source === 'storyboard-stream') && card.kind !== 'series') return false;
+        if (typeFilter === 'studio' && card.kind !== 'single') return false;
+        if (typeFilter === 'storyboard' && card.kind !== 'series') return false;
         const items = cardRecords(card);
         if (ratio !== 'all' && !items.some((record) => metadata[record.id]?.ratio === ratio)) return false;
         const query = search.trim().toLowerCase();
@@ -117,23 +145,21 @@ export function GalleryGrid({ records, onClear, onDeleteMany, onUseRecipe, onUse
           items.some((record) => [record.prompt, record.recipe?.prompt, record.recipe?.styleName].filter(Boolean).join(' ').toLowerCase().includes(query))
         );
       }),
-    [cards, metadata, ratio, search, source, typeFilter],
+    [cards, metadata, ratio, search, typeFilter],
   );
 
   const visibleRecords = useMemo(() => filtered.flatMap(cardRecords), [filtered]);
   const selectedRecords = visibleRecords.filter((record) => selected.has(record.id));
   const selectedCount = selectedRecords.length;
-  const allSelected = visibleRecords.length > 0 && selectedCount === visibleRecords.length;
   const grouped = useMemo(() => {
     const groups: Record<Group, GalleryCard[]> = { today: [], week: [], earlier: [] };
     for (const card of filtered) groups[timeGroup(cardTimestamp(card))].push(card);
     return groups;
   }, [filtered]);
   const singlesCount = cards.filter((card) => card.kind === 'single').length;
-  const seriesCount = records.length - singlesCount;
-  useEffect(() => {
-    if (allRef.current) allRef.current.indeterminate = selectedCount > 0 && !allSelected;
-  }, [selectedCount, allSelected]);
+  const seriesCount = cards.filter((card) => card.kind === 'series').length;
+  const selectedSingles = filtered.filter((card) => card.kind === 'single' && cardRecords(card).some((record) => selected.has(record.id))).length;
+  const selectedSeries = filtered.filter((card) => card.kind === 'series' && cardRecords(card).some((record) => selected.has(record.id))).length;
 
   const toggle = (items: ResultRecord[]) =>
     setSelected((current) => {
@@ -157,9 +183,8 @@ export function GalleryGrid({ records, onClear, onDeleteMany, onUseRecipe, onUse
       setWorking(false);
     }
   };
-  const deleteSelected = async () => {
-    if (!selectedCount || working || !window.confirm(`确定永久删除选中的 ${selectedCount} 张作品及其旧版本吗? 删除后无法恢复.`))
-      return;
+  const confirmDelete = async () => {
+    if (!selectedCount || working) return;
     setWorking(true);
     try {
       if (selectedCount === records.length) await onClear();
@@ -167,8 +192,8 @@ export function GalleryGrid({ records, onClear, onDeleteMany, onUseRecipe, onUse
         const sceneKeys = new Set(selectedRecords.filter((record) => record.sceneId).map((record) => `${record.seriesId}:${record.sceneId}`));
         await onDeleteMany(records.filter((record) => selected.has(record.id) || sceneKeys.has(`${record.seriesId}:${record.sceneId}`)).map((record) => record.id));
       }
-      setSelected(new Set());
-      pushToast('success', `已删除 ${selectedCount} 张作品`);
+      pushToast('success', `已删除 ${countLabel(selectedSingles, selectedSeries).replace(' · ', '和')}`);
+      exitSelect();
     } catch {
       pushToast('error', '删除未完成, 请检查本地存储后重试');
     } finally {
@@ -180,179 +205,102 @@ export function GalleryGrid({ records, onClear, onDeleteMany, onUseRecipe, onUse
   return (
     <main className="stitch-page w-full bg-surface">
       <div className="w-full px-gutter-canvas pt-space-lg pb-space-xl flex flex-col gap-space-lg">
-        <div className="flex flex-col md:flex-row md:items-end justify-between gap-space-lg">
-          <div className="flex flex-col">
-            <div className="flex items-center gap-2 mb-space-2xs text-secondary font-meta-sm text-meta-sm tracking-wider uppercase font-medium">
-              <StitchIcon name="photo_library" size={18} />
-              <span>创作记录 · 本地保存 · 浏览与下载</span>
-            </div>
-            <div className="flex flex-wrap items-baseline gap-space-sm">
-              <h1 className="font-headline-lg text-headline-lg text-on-surface tracking-tight">
-                作品展馆 · 浏览画作
-              </h1>
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-surface-container-low text-on-surface-variant font-meta-sm text-meta-sm">
-                共 {records.length} 幅作品
-              </span>
-            </div>
-            <p className="mt-1 font-body-md text-body-md text-on-surface-variant max-w-4xl leading-relaxed">
-              查看你生成的所有单图与系列作品, 支持按条件检索, 查看大图与批量下载原图.
-            </p>
+        <div className="min-w-0">
+          <div className="flex items-center gap-2 mb-space-2xs text-secondary font-meta-sm text-meta-sm">
+            <StitchIcon name="photo_library" size={18} />
+            <span>本地保存</span>
           </div>
+          <div className="flex flex-wrap items-baseline gap-space-sm">
+            <h1 className="font-headline-lg text-headline-lg text-on-surface tracking-tight">展馆</h1>
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-surface-container-low text-on-surface-variant font-meta-sm text-meta-sm">
+              {countLabel(singlesCount, seriesCount)}
+            </span>
+          </div>
+          <p className="mt-1 font-body-md text-body-md text-on-surface-variant">
+            点击图片打开详情. 批量下载或删除请点管理作品.
+          </p>
         </div>
-        <div className="flex flex-col gap-space-md bg-surface-container-low border border-outline-variant/30 p-space-md rounded-2xl">
-          <div className="flex flex-col xl:flex-row items-stretch xl:items-center justify-between gap-3.5">
-            <div className="flex items-center gap-1.5 p-1 bg-surface-container rounded-xl overflow-x-auto select-none border border-outline-variant/30">
+        <div className="flex flex-col gap-2 bg-surface-container-low border border-outline-variant/30 p-space-md rounded-2xl">
+          <div className="flex items-center gap-2">
+            <div className={`${CHIP_WRAP} min-w-0 shrink`} role="group" aria-label="作品类型">
               {(
                 [
-                  ['all', 'auto_stories', '全部画作', records.length],
-                  ['studio', 'brush', '单图创作', singlesCount],
-                  ['storyboard', 'view_carousel', '系列策划', seriesCount],
+                  ['all', 'auto_stories', '全部', cards.length],
+                  ['studio', 'brush', '单图', singlesCount],
+                  ['storyboard', 'view_carousel', '系列', seriesCount],
                 ] as const
               ).map(([id, icon, label, count]) => (
                 <button
                   key={id}
                   type="button"
                   aria-pressed={typeFilter === id}
-                  className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-medium transition-all whitespace-nowrap ${typeFilter === id ? 'bg-primary text-on-primary shadow-sm' : 'text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high'}`}
+                  className={`flex items-center gap-1.5 ${chipClass(typeFilter === id)}`}
                   onClick={() => setTypeFilter(id)}
                 >
                   <StitchIcon name={icon} size={15} />
                   {label}
-                  <span
-                    className={`font-meta-sm text-[10px] ${typeFilter === id ? 'px-1.5 rounded-full bg-white/20' : 'opacity-75'}`}
-                  >
+                  <span className={`font-meta-sm text-[10px] ${typeFilter === id ? 'px-1.5 rounded-full bg-white/20' : 'opacity-75'}`}>
                     {count}
                   </span>
                 </button>
               ))}
             </div>
-            <div className="relative flex-1 max-w-xl">
-              <div className="flex items-center bg-surface-container-lowest border border-outline-variant/50 rounded-xl px-3.5 py-2 shadow-sm focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/20 transition-all">
-                <StitchIcon name="search" size={19} className="text-primary mr-2" />
-                <input
-                  ref={searchRef}
-                  aria-label="检索作品"
-                  className="w-full min-w-0 bg-transparent border-none p-0 text-xs text-on-surface placeholder:text-on-surface-variant/60 focus:outline-none focus:ring-0"
-                  placeholder="检索画面描述, 提示词或系列名称..."
-                  type="search"
-                  value={search}
-                  onChange={(event) => setSearch(event.target.value)}
-                />
-                <div className="flex items-center gap-1 pl-2 border-l border-outline-variant/30 text-outline text-[11px] font-meta-sm">
-                  <kbd className="px-1.5 py-0.5 rounded bg-surface-container font-mono text-[10px]">⌘</kbd>
-                  <kbd className="px-1.5 py-0.5 rounded bg-surface-container font-mono text-[10px]">K</kbd>
-                </div>
-              </div>
+            <div className="flex min-w-0 flex-1 items-center rounded-xl border border-outline-variant/50 bg-surface-container-lowest px-3.5 py-2 shadow-sm focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/20 sm:max-w-xl sm:ml-auto">
+              <StitchIcon name="search" size={19} className="mr-2 shrink-0 text-primary" />
+              <input
+                ref={searchRef}
+                aria-label="检索作品"
+                className="w-full min-w-0 border-none bg-transparent p-0 text-xs text-on-surface placeholder:text-on-surface-variant/60 focus:outline-none focus:ring-0"
+                placeholder="检索画面描述, 提示词或系列名称..."
+                type="search"
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+              />
             </div>
           </div>
-          <div className="flex flex-wrap items-center justify-between gap-3 pt-1 border-t border-outline-variant/20">
-            <div className="flex flex-wrap items-center gap-2.5 text-xs min-w-0">
-              <div className="relative">
-                <select
-                  aria-label="作品来源"
-                  className={SELECT_CLASS}
-                  value={source}
-                  onChange={(event) => setSource(event.target.value)}
-                >
-                  <option value="all">来源: 全部来源</option>
-                  <option value="quick-studio">来源: 快捷单图</option>
-                  <option value="storyboard-stream">来源: 系列策划</option>
-                </select>
-                <StitchIcon
-                  name="expand_more"
-                  size={15}
-                  className="absolute right-2 top-2 pointer-events-none text-on-surface-variant"
-                />
-              </div>
-              <div className="relative">
-                <select
-                  aria-label="画幅比例"
-                  className={SELECT_CLASS}
-                  value={ratio}
-                  onChange={(event) => setRatio(event.target.value)}
-                >
-                  <option value="all">画幅: 全部比例</option>
-                  <option value="1:1">画幅: 1:1 方形</option>
-                  <option value="16:9">画幅: 16:9 宽屏</option>
-                  <option value="9:16">画幅: 9:16 竖屏</option>
-                  <option value="4:3">画幅: 4:3 典雅</option>
-                  <option value="3:4">画幅: 3:4 立轴</option>
-                  <option value="3:2">画幅: 3:2 横幅</option>
-                  <option value="2:3">画幅: 2:3 竖幅</option>
-                  <option value="21:9">画幅: 21:9 全景</option>
-                </select>
-                <StitchIcon
-                  name="expand_more"
-                  size={15}
-                  className="absolute right-2 top-2 pointer-events-none text-on-surface-variant"
-                />
-              </div>
-              <div className="relative">
-                <select
-                  aria-label="作品排序"
-                  className={SELECT_CLASS}
-                  value={sort}
-                  onChange={(event) => setSort(event.target.value)}
-                >
-                  <option value="newest">排序: 生成时间 (最新优先)</option>
-                  <option value="oldest">排序: 生成时间 (最早创作)</option>
-
-                </select>
-                <StitchIcon
-                  name="sort"
-                  size={15}
-                  className="absolute right-2 top-2 pointer-events-none text-on-surface-variant"
-                />
-              </div>
-              <div className="hidden md:flex items-center gap-1 ml-1 pl-2 border-l border-outline-variant/30 text-on-surface-variant">
-                <span className="text-[11px] text-outline">跳转:</span>
-                {GROUPS.map((group, index) => (
-                  <button
-                    key={group}
-                    type="button"
-                    disabled={!grouped[group].length}
-                    className="px-2 py-0.5 rounded-md hover:bg-surface-container text-xs hover:text-primary disabled:opacity-40"
-                    onClick={() =>
-                      document.getElementById(`group-${group}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-                    }
-                  >
-                    {['今日', '近7天', '往期作品'][index]}
-                  </button>
-                ))}
-              </div>
+          <div className={`${CHIP_WRAP}`} role="group" aria-label="画幅比例">
+            {RATIOS.map(([id, label]) => (
+              <button key={id} type="button" aria-pressed={ratio === id} className={chipClass(ratio === id)} onClick={() => setRatio(id)}>
+                {label}
+              </button>
+            ))}
+          </div>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className={CHIP_WRAP} role="group" aria-label="作品排序">
+              <button type="button" aria-pressed={sort === 'newest'} className={chipClass(sort === 'newest')} onClick={() => setSort('newest')}>最新</button>
+              <button type="button" aria-pressed={sort === 'oldest'} className={chipClass(sort === 'oldest')} onClick={() => setSort('oldest')}>最早</button>
             </div>
-            <div className="flex flex-wrap items-center gap-1.5 bg-surface-container-lowest border border-outline-variant/40 px-2.5 py-1 rounded-xl shadow-xs ml-auto">
-              <label className="flex items-center gap-1.5 px-1.5 py-0.5 cursor-pointer select-none">
-                <input
-                  ref={allRef}
-                  className="w-3.5 h-3.5 rounded accent-primary cursor-pointer"
-                  type="checkbox"
-                  checked={allSelected}
-                  onChange={() => toggle(visibleRecords)}
-                  disabled={!visibleRecords.length}
-                />
-                <span className="text-xs text-on-surface font-medium">全选</span>
-              </label>
-              <div className="w-px h-3.5 bg-outline-variant/40 mx-0.5" />
+            {selecting ? (
+              <div className="flex flex-wrap items-center gap-1" role="toolbar" aria-label="管理作品">
+                <button
+                  type="button"
+                  className="h-8 px-3 rounded-xl bg-secondary-container text-on-secondary-container font-meta-sm text-meta-sm font-medium hover:bg-secondary-fixed disabled:opacity-40"
+                  disabled={!selectedCount || working}
+                  onClick={() => void batchDownload(selectedRecords)}
+                >
+                  下载{selectedCount ? ` ${selectedCount}` : ''}
+                </button>
+                <button
+                  type="button"
+                  className="h-8 px-3 rounded-xl bg-error-container text-on-error-container font-meta-sm text-meta-sm font-medium hover:bg-error/20 disabled:opacity-40"
+                  aria-label="删除选中作品"
+                  disabled={!selectedCount || working}
+                  onClick={() => setConfirming(true)}
+                >
+                  删除{selectedCount ? ` ${selectedCount}` : ''}
+                </button>
+                <button type="button" className="h-8 px-3 rounded-xl bg-surface-container text-on-surface font-meta-sm text-meta-sm hover:bg-surface-container-high" onClick={exitSelect}>取消</button>
+              </div>
+            ) : (
               <button
                 type="button"
-                className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-primary-fixed/50 hover:bg-primary-fixed text-on-primary-fixed text-xs font-medium disabled:opacity-50"
-                disabled={!selectedCount || working}
-                onClick={() => void batchDownload(selectedRecords)}
+                className="h-8 shrink-0 px-3 rounded-xl bg-secondary-container font-meta-sm text-meta-sm font-medium text-on-secondary-container hover:bg-secondary-fixed disabled:opacity-40"
+                disabled={!filtered.length}
+                onClick={() => setSelecting(true)}
               >
-                <StitchIcon name="download" size={15} className="text-primary" />
-                <span>批量下载原图 ({selectedCount})</span>
+                管理作品
               </button>
-              <button
-                type="button"
-                className="flex items-center gap-1 px-2 py-1 rounded-lg hover:bg-error-container text-error text-xs disabled:opacity-40"
-                title="永久删除选中作品"
-                disabled={!selectedCount || working}
-                onClick={() => void deleteSelected()}
-              >
-                <StitchIcon name="delete" size={15} />
-              </button>
-            </div>
+            )}
           </div>
         </div>
         <div className="flex flex-col gap-10">
@@ -362,28 +310,17 @@ export function GalleryGrid({ records, onClear, onDeleteMany, onUseRecipe, onUse
                 <section key={group} id={`group-${group}`} className="flex flex-col gap-4 scroll-mt-32 md:scroll-mt-20">
                   <div className="flex flex-wrap items-center justify-between gap-2 border-b border-outline-variant/30 pb-2.5">
                     <div className="flex flex-wrap items-center gap-2.5">
-                      <div
-                        className={`w-6 h-6 rounded-lg flex items-center justify-center text-primary ${group === 'today' ? 'bg-primary-fixed' : 'bg-surface-container'}`}
-                      >
+                      <div className={`w-6 h-6 rounded-lg flex items-center justify-center text-primary ${group === 'today' ? 'bg-primary-fixed' : 'bg-surface-container'}`}>
                         <StitchIcon name={group === 'today' ? 'wb_sunny' : 'calendar_month'} size={16} />
                       </div>
-                      <h2 className="font-headline-sm text-headline-sm text-on-surface">
-                        {GROUP_LABEL[group]}
-                      </h2>
-                      <span
-                        className={`px-2.5 py-0.5 rounded-full font-meta-sm text-[11px] ${group === 'today' ? 'bg-secondary-container text-on-secondary-container' : 'bg-surface-container text-on-surface-variant'}`}
-                      >
-                        {grouped[group].reduce((total, card) => total + cardRecords(card).length, 0)} 幅作品
-                        {grouped[group].some((card) => card.kind === 'series')
-                          ? ` (含 ${grouped[group].filter((card) => card.kind === 'series').length} 套系列画册)`
-                          : ''}
+                      <h2 className="font-headline-sm text-headline-sm text-on-surface">{GROUP_LABEL[group]}</h2>
+                      <span className={`px-2.5 py-0.5 rounded-full font-meta-sm text-[11px] ${group === 'today' ? 'bg-secondary-container text-on-secondary-container' : 'bg-surface-container text-on-surface-variant'}`}>
+                        {countLabel(
+                          grouped[group].filter((card) => card.kind === 'single').length,
+                          grouped[group].filter((card) => card.kind === 'series').length,
+                        )}
                       </span>
                     </div>
-                    <span className="font-meta-sm text-xs text-on-surface-variant/70">
-                      {group === 'today'
-                        ? `${new Date().toLocaleDateString('zh-CN').replaceAll('/', '.')} · 创作记录`
-                        : '全部作品'}
-                    </span>
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
                     {grouped[group].map((card) => {
@@ -393,10 +330,11 @@ export function GalleryGrid({ records, onClear, onDeleteMany, onUseRecipe, onUse
                       const info = metadata[cover.id];
                       const series = card.kind === 'series';
                       const date = new Date(cardTimestamp(card));
+                      const checked = items.every((record) => selected.has(record.id));
                       return (
                         <article
                           key={series ? card.seriesId : cover.id}
-                          className="gallery-card group relative isolate bg-surface-container-lowest border border-outline-variant/40 rounded-2xl p-2.5 shadow-[0_2px_10px_rgba(70,80,60,0.04)] hover:shadow-[0_12px_28px_rgba(70,80,60,0.12)] hover:-translate-y-1 transition-all duration-300 flex flex-col min-w-0"
+                          className={`gallery-card group relative isolate bg-surface-container-lowest border rounded-2xl p-2.5 shadow-[0_2px_10px_rgba(70,80,60,0.04)] hover:shadow-[0_12px_28px_rgba(70,80,60,0.12)] hover:-translate-y-1 transition-all duration-300 flex flex-col min-w-0 ${selecting && checked ? 'border-primary' : 'border-outline-variant/40'}`}
                           data-source={series ? 'storyboard' : 'studio'}
                         >
                           {series && (
@@ -410,8 +348,9 @@ export function GalleryGrid({ records, onClear, onDeleteMany, onUseRecipe, onUse
                               type="button"
                               className="w-full h-full block"
                               title={title}
-                              aria-label={`检视${series ? '系列' : '作品'}: ${title}`}
-                              onClick={() => openViewer(card)}
+                              aria-label={selecting ? `选择${series ? '系列' : '作品'}: ${title}` : `检视${series ? '系列' : '作品'}: ${title}`}
+                              aria-pressed={selecting ? checked : undefined}
+                              onClick={() => { if (selecting) toggle(items); else openViewer(card); }}
                             >
                               <RecordImage
                                 alt={title}
@@ -421,102 +360,35 @@ export function GalleryGrid({ records, onClear, onDeleteMany, onUseRecipe, onUse
                               />
                             </button>
                             <div className="absolute top-2.5 left-2.5 right-2.5 flex items-center justify-between pointer-events-none z-10">
-                              <span
-                                className={`px-2 py-0.5 rounded-md backdrop-blur-md font-meta-sm text-[10px] shadow-xs flex items-center gap-1 ${series ? 'bg-primary text-on-primary font-medium' : 'bg-surface-bright/90 text-secondary'}`}
-                              >
+                              <span className={`px-2 py-0.5 rounded-md backdrop-blur-md font-meta-sm text-[10px] shadow-xs flex items-center gap-1 ${series ? 'bg-primary text-on-primary font-medium' : 'bg-surface-bright/90 text-secondary'}`}>
                                 <StitchIcon name={series ? 'view_carousel' : 'brush'} size={13} />
-                                {series ? `系列 · ${items.length} 幕` : '单图创作'}
+                                {series ? `系列 · ${items.length} 幕` : '单图'}
                               </span>
-                              <input
-                                className="pointer-events-auto w-4 h-4 rounded accent-primary border-outline-variant/60 shadow-xs cursor-pointer"
-                                type="checkbox"
-                                checked={items.every((record) => selected.has(record.id))}
-                                ref={(element) => {
-                                  if (element)
-                                    element.indeterminate =
-                                      items.some((record) => selected.has(record.id)) &&
-                                      !items.every((record) => selected.has(record.id));
-                                }}
-                                onChange={() => toggle(items)}
-                                aria-label={`选择${series ? '系列' : '作品'}: ${title}`}
-                              />
-                            </div>
-                            <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-on-surface/65 to-transparent opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity duration-300 p-2.5 pointer-events-none">
-                              <div className="w-full grid grid-cols-2 gap-1.5 pointer-events-auto">
-                                <button
-                                  type="button"
-                                  className="py-1.5 bg-surface-container-lowest/95 backdrop-blur-md hover:bg-surface-container-lowest text-on-surface rounded-lg text-xs font-medium shadow-sm flex items-center justify-center gap-1"
-                                  onClick={() => openViewer(card)}
-                                >
-                                  <StitchIcon
-                                    name={series ? 'auto_stories' : 'zoom_in'}
-                                    size={14}
-                                    className="text-primary"
-                                  />
-                                  {series ? '检视画册' : '检视'}
-                                </button>
-                                <button
-                                  type="button"
-                                  disabled={working}
-                                  className="py-1.5 bg-primary/95 hover:bg-primary text-on-primary rounded-lg text-xs font-medium shadow-sm flex items-center justify-center gap-1"
-                                  onClick={() =>
-                                    series
-                                      ? void batchDownload(items, `sprout-series-${card.seriesId}`)
-                                      : void downloadRecord(cover).catch(() => pushToast('error', '下载失败, 请检查本地原图'))
-                                  }
-                                >
-                                  <StitchIcon name={series ? 'folder_zip' : 'download'} size={14} />
-                                  {series ? '打包全套' : '下载'}
-                                </button>
-                              </div>
+                              {selecting && (
+                                <input
+                                  className="pointer-events-auto w-4 h-4 rounded accent-primary border-outline-variant/60 shadow-xs cursor-pointer"
+                                  type="checkbox"
+                                  checked={checked}
+                                  ref={(element) => {
+                                    if (element) element.indeterminate = items.some((record) => selected.has(record.id)) && !checked;
+                                  }}
+                                  onChange={() => toggle(items)}
+                                  aria-label={`选择${series ? '系列' : '作品'}: ${title}`}
+                                />
+                              )}
                             </div>
                           </div>
-                          <div className="pt-2.5 px-1 flex flex-col gap-1.5">
+                          <div className="pt-2.5 px-1 flex flex-col gap-1">
                             <div className="flex items-center justify-between gap-2 text-[11px] text-on-surface-variant">
-                              <span className="font-meta-sm truncate">
-                                {info ? `${info.size} · ${info.ratio}` : '读取画幅中'}
-                              </span>
+                              <span className="font-meta-sm truncate">{info ? `${info.size} · ${info.ratio}` : '读取画幅中'}</span>
                               <span className="font-meta-sm text-outline shrink-0">{cover.outputFormat?.toUpperCase()}</span>
                             </div>
-                            <h3 className="font-body-md text-body-md text-on-surface font-medium truncate" title={title}>
-                              {title}
-                            </h3>
-                            <p className="font-body-sm text-body-sm text-on-surface-variant truncate">
-                              {series ? `风格与分镜: ${cover.prompt}` : cover.prompt}
-                            </p>
-                            <div className="flex items-center justify-between pt-1.5 mt-0.5 border-t border-outline-variant/25 text-[11px] text-on-surface-variant">
-                              <span className="font-meta-sm">
-                                {group === 'today'
-                                  ? date.toLocaleTimeString('zh-CN', {
-                                      hour: '2-digit',
-                                      minute: '2-digit',
-                                      hour12: false,
-                                    })
-                                  : date.toLocaleDateString('zh-CN', { month: '2-digit', day: '2-digit' })}
-                              </span>
-                              <div className="flex items-center gap-2">
-                                <button
-                                  type="button"
-                                  title={series ? '打包全套' : '下载原图'}
-                                  className="text-outline hover:text-primary flex"
-                                  onClick={() =>
-                                    series
-                                      ? void batchDownload(items, `sprout-series-${card.seriesId}`)
-                                      : void downloadRecord(cover).catch(() => pushToast('error', '下载失败, 请检查本地原图'))
-                                  }
-                                >
-                                  <StitchIcon name={series ? 'folder_zip' : 'download'} size={14} />
-                                </button>
-                                <button
-                                  type="button"
-                                  title="查看详情"
-                                  className="text-outline hover:text-primary flex"
-                                  onClick={() => openViewer(card)}
-                                >
-                                  <StitchIcon name={series ? 'arrow_forward' : 'info'} size={14} />
-                                </button>
-                              </div>
-                            </div>
+                            <h3 className="font-body-md text-body-md text-on-surface font-medium truncate" title={title}>{title}</h3>
+                            <span className="pt-1 font-meta-sm text-[11px] text-on-surface-variant">
+                              {group === 'today'
+                                ? date.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false })
+                                : date.toLocaleDateString('zh-CN', { month: '2-digit', day: '2-digit' })}
+                            </span>
                           </div>
                         </article>
                       );
@@ -529,9 +401,7 @@ export function GalleryGrid({ records, onClear, onDeleteMany, onUseRecipe, onUse
         {filtered.length === 0 && (
           <div className="py-20 rounded-2xl border border-dashed border-outline-variant/50 text-center flex flex-col items-center gap-space-sm bg-surface-container-lowest/50">
             <StitchIcon name="gallery_thumbnail" size={40} className="text-outline" />
-            <p className="font-headline-sm text-headline-sm">
-              {records.length ? '没有匹配的作品' : '展馆等待第一幅画作'}
-            </p>
+            <p className="font-headline-sm text-headline-sm">{records.length ? '没有匹配的作品' : '展馆等待第一幅画作'}</p>
             <p className="text-on-surface-variant font-body-sm text-body-sm">
               {records.length ? '调整筛选条件或试试其他关键词.' : '在单图创作或系列策划中生成的作品会保存在这里.'}
             </p>
@@ -539,12 +409,7 @@ export function GalleryGrid({ records, onClear, onDeleteMany, onUseRecipe, onUse
               <button
                 type="button"
                 className="px-4 py-2 rounded-xl bg-primary text-on-primary text-xs"
-                onClick={() => {
-                  setTypeFilter('all');
-                  setSource('all');
-                  setRatio('all');
-                  setSearch('');
-                }}
+                onClick={() => { setTypeFilter('all'); setRatio('all'); setSearch(''); }}
               >
                 重置筛选
               </button>
@@ -552,6 +417,29 @@ export function GalleryGrid({ records, onClear, onDeleteMany, onUseRecipe, onUse
           </div>
         )}
       </div>
+      {confirming && (
+        <div className="fixed inset-0 z-50 bg-inverse-surface/45 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => { if (!working) setConfirming(false); }}>
+          <div
+            ref={confirmRef}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="gallery-delete-title"
+            className="w-full max-w-md rounded-2xl bg-surface-container-lowest p-5 shadow-2xl"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <h3 id="gallery-delete-title" className="font-headline-sm text-headline-sm text-on-surface">确认删除作品</h3>
+            <p className="mt-2 font-body-sm text-body-sm text-on-surface-variant leading-relaxed">
+              确定永久删除选中的{countLabel(selectedSingles, selectedSeries).replace(' · ', '和')}吗?
+              {selectedSeries > 0 ? ' 系列会连同各幕旧版本一起删除.' : ''}
+              删除后无法恢复.
+            </p>
+            <div className="mt-4 flex justify-end gap-2">
+              <button type="button" className="px-3 py-2 rounded-lg bg-surface-container font-body-sm text-body-sm" disabled={working} onClick={() => setConfirming(false)}>取消</button>
+              <button type="button" className="px-3 py-2 rounded-lg bg-error text-on-error font-body-sm text-body-sm disabled:opacity-60" disabled={working} onClick={() => void confirmDelete()}>确认删除</button>
+            </div>
+          </div>
+        </div>
+      )}
       {viewer && (
         <StitchGalleryViewer
           cards={viewer.cards}

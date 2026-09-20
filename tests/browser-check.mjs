@@ -183,9 +183,10 @@ try {
   await closeQueue(page);
   await screenshot(page, 'studio-results-desktop');
   await nav(page, '展馆');
+  await page.getByRole('button', { name: '管理作品', exact: true }).click();
   await page.getByRole('checkbox', { name: /选择作品/ }).first().check();
-  page.once('dialog', (dialog) => dialog.accept());
-  await page.getByTitle('永久删除选中作品').click();
+  await page.getByRole('button', { name: '删除选中作品', exact: true }).click();
+  await page.getByRole('dialog', { name: '确认删除作品' }).getByRole('button', { name: '确认删除', exact: true }).click();
   const remaining = await waitRecords(page, 1);
   await page.reload();
   await page.locator('.gallery-card').waitFor();
@@ -493,10 +494,11 @@ try {
   assert.equal((await rows(page)).length, 8, 'ending the series draft keeps every saved scene version');
   checks.push('待确认和部分完成的系列草稿继续恢复, 全镜及单镜重绘完成后结束草稿, 刷新开启新策划且保留所有作品版本');
   await nav(page, '展馆');
-  await page.getByLabel('作品来源', { exact: true }).selectOption('storyboard-stream');
+  await page.getByRole('button', { name: /^系列/ }).click();
   assert.equal(await page.locator('.gallery-card').count(), 1);
+  await page.getByRole('button', { name: /检视系列:/ }).first().click();
   const zipEvent = page.waitForEvent('download');
-  await page.getByTitle('打包全套', { exact: true }).click();
+  await page.getByTitle('打包下载全套 ZIP', { exact: true }).click();
   const zip = await zipEvent; await zip.saveAs(path.join(target, 'series.zip'));
   const zipBytes = await readFile(path.join(target, 'series.zip'));
   assert.equal(zipBytes.readUInt32LE(zipBytes.length - 22), 0x06054b50);
@@ -744,7 +746,7 @@ try {
   await op.getByLabel('系列输出格式').selectOption('webp');
   assert.equal(await op.getByRole('button', { name: '品牌 IP 延展', exact: true }).count(), 0);
   await nav(op, '展馆');
-  await op.getByLabel('作品来源').selectOption('storyboard-stream');
+  await op.getByRole('button', { name: /^系列/ }).click();
   await op.getByRole('button', { name: /检视系列:/ }).first().click();
   await op.getByRole('button', { name: '基于此系列继续衍生分镜', exact: true }).click();
   await op.locator('#series-story-prompt').waitFor();
@@ -770,7 +772,7 @@ try {
     Object.defineProperty(navigator, 'share', { configurable: true, value: async ({ files }) => { window.__sharedFiles = files.map((file) => ({ name: file.name, size: file.size, type: file.type })); } });
   });
   await nav(op, '展馆');
-  await op.getByLabel('作品来源').selectOption('storyboard-stream');
+  await op.getByRole('button', { name: /^系列/ }).click();
   await op.getByRole('button', { name: /检视系列:/ }).first().click();
   await op.getByRole('button', { name: '分享文件', exact: true }).click();
   await op.waitForFunction(() => window.__sharedFiles?.length === 4);
@@ -1159,9 +1161,10 @@ try {
   await rp.setViewportSize({ width: 390, height: 844 });
   await screenshot(rp, 'studio-retry-completed-mobile', true);
   await nav(rp, '展馆');
+  await rp.getByRole('button', { name: '管理作品', exact: true }).click();
   await rp.getByRole('checkbox', { name: /选择作品/ }).first().check();
-  rp.once('dialog', (dialog) => dialog.accept());
-  await rp.getByTitle('永久删除选中作品').click();
+  await rp.getByRole('button', { name: '删除选中作品', exact: true }).click();
+  await rp.getByRole('dialog', { name: '确认删除作品' }).getByRole('button', { name: '确认删除', exact: true }).click();
   await waitRecords(rp, 0);
   await nav(rp, '单图创作');
   await rp.reload();
