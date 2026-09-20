@@ -255,6 +255,18 @@ export function archiveCompleted(userId) {
   }
 }
 
+export function archiveJob(jobId, userId) {
+  const job = imageJobs.get(jobId);
+  if (!job || job.userId !== userId) throw requestError('任务不存在', 404);
+  if (job.archivedAt) return publicJob(job, userId);
+  if (['pending', 'running', 'submitting', 'unsubmitted'].includes(job.status) || job.status === 'succeeded' && !job.acknowledgedAt || job.interruptionReason === 'pending-restart') {
+    throw requestError('进行中的任务不能从队列清除', 409);
+  }
+  job.archivedAt = Date.now();
+  persist(job);
+  return publicJob(job, userId);
+}
+
 export function providerHealth(providers) {
   return providers.map((provider) => {
     const open = isProviderCircuitOpen(provider.id);

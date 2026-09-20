@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { archiveQueueJobs, cancelQueueJob, listQueueJobs, prioritizeQueueJob, resumeQueueJob, submitQueueJob, submitQueueBatch, updateQueueJob, type QueueSubmitInput } from '../lib/api/queue';
+import { archiveQueueJob, archiveQueueJobs, cancelQueueJob, listQueueJobs, prioritizeQueueJob, resumeQueueJob, submitQueueJob, submitQueueBatch, updateQueueJob, type QueueSubmitInput } from '../lib/api/queue';
 import { ApiError } from '../lib/api/client';
 import { attachLocalReference, getOutboxInput, isJobConsumed, listOutbox, removeOutbox, saveOutbox, saveOutboxBatch, markOutboxAccepted, collectUnusedReferences, replaceWorkspaceRequest } from '../lib/storage/gallery-db';
 import { randomId } from '../lib/random/id';
@@ -282,6 +282,11 @@ export function useQueue(onResult: (records: ResultRecord[], jobId: string) => P
   }, [tick]);
   const prioritize = useCallback(async (jobId: string) => { await prioritizeQueueJob(jobId); await tick(); }, [tick]);
   const archive = useCallback(async () => { await archiveQueueJobs(); historyCache.current.clear(); historyExpanded.current = false; await tick(); }, [tick]);
+  const archiveJob = useCallback(async (jobId: string) => {
+    await archiveQueueJob(jobId);
+    historyCache.current.delete(jobId);
+    await tick();
+  }, [tick]);
   const loadMore = useCallback(async () => {
     if (!historyCursor || loadingHistory) return;
     setLoadingHistory(true);
@@ -297,5 +302,5 @@ export function useQueue(onResult: (records: ResultRecord[], jobId: string) => P
   }, [historyCursor, loadingHistory, tick, ownerId]);
   const refresh = useCallback(() => { delivery.retry(); return tick(); }, [delivery.retry, tick]);
   const visibleJobs = jobs.map((job) => ({ ...job, delivery: delivery.states.get(job.id) }));
-  return { jobs: visibleJobs, activity, error: error || delivery.error, submit, submitBatch, cancel, retry, update, prioritize, archive, refresh, loadMore, hasMore: Boolean(historyCursor), loadingHistory };
+  return { jobs: visibleJobs, activity, error: error || delivery.error, submit, submitBatch, cancel, retry, update, prioritize, archive, archiveJob, refresh, loadMore, hasMore: Boolean(historyCursor), loadingHistory };
 }

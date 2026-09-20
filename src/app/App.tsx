@@ -214,6 +214,7 @@ export function App() {
         onRetryJob={queue.retry}
         onPrioritizeJob={queue.prioritize}
         onArchive={queue.archive}
+        onArchiveJob={queue.archiveJob}
         onLoadMore={queue.loadMore}
         hasMore={queue.hasMore}
         loadingHistory={queue.loadingHistory}

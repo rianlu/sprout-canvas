@@ -1,11 +1,11 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { CircleAlert, CircleCheck, Info, LoaderCircle, RefreshCw, X } from '../ui/icons';
 import { StitchIcon } from '../ui/StitchIcon';
 import { useFocusTrap } from '../../hooks/useFocusTrap';
 import type { QueueActivity, QueueJob } from '../../types/queue';
 import { CreditStatus } from '../ui/CreditStatus';
 import { CreditCost } from '../ui/CreditCost';
-import { deliveryMessage, isQueueActive, personalQueuePosition } from '../../lib/queue-presentation';
+import { canDismissQueueJob, deliveryMessage, isQueueActive, personalQueuePosition } from '../../lib/queue-presentation';
 import { QueueElapsed } from '../queue/QueueElapsed';
 import { QueueSummary } from '../queue/QueueSummary';
 
@@ -18,9 +18,20 @@ export interface QueueDrawerProps {
   onRetryJob: (jobId: string) => Promise<unknown>;
   onPrioritizeJob: (jobId: string) => Promise<void>;
   onArchive: () => Promise<void>;
+  onArchiveJob: (jobId: string) => Promise<void>;
   onLoadMore: () => Promise<void>;
   hasMore: boolean;
   loadingHistory: boolean;
+}
+
+const DISMISS_MS = 200;
+
+function mergeExitingJobs(jobs: QueueJob[], exiting: { id: string; job: QueueJob; index: number }[]) {
+  const list = [...jobs];
+  for (const item of [...exiting].sort((a, b) => a.index - b.index)) {
+    if (!list.some((job) => job.id === item.id)) list.splice(Math.min(item.index, list.length), 0, item.job);
+  }
+  return list;
 }
 
 function jobTitle(job: QueueJob): string {
@@ -52,9 +63,10 @@ function statusLabel(job: QueueJob, open: boolean): {
  * 保持右侧任务抽屉布局, 使用状态图标, 真实耗时与个人顺序.
  * 无实时进度时不显示比例条, 按 PRD §7.1 区分等待与实际处理状态.
  */
-export function QueueDrawer({ open, onClose, jobs, activity, onCancelJob, onRetryJob, onPrioritizeJob, onArchive, onLoadMore, hasMore, loadingHistory }: QueueDrawerProps) {
+export function QueueDrawer({ open, onClose, jobs, activity, onCancelJob, onRetryJob, onPrioritizeJob, onArchive, onArchiveJob, onLoadMore, hasMore, loadingHistory }: QueueDrawerProps) {
   const dialogRef = useFocusTrap<HTMLDivElement>(open);
   const [error, setError] = useState('');
+  const [exiting, setExiting] = useState<{ id: string; job: QueueJob; index: number }[]>([]);
   const visibleJobs = [...jobs].sort((a, b) => {
     if (a.status === 'running') return -1;
     if (b.status === 'running') return 1;
@@ -63,6 +75,7 @@ export function QueueDrawer({ open, onClose, jobs, activity, onCancelJob, onRetr
     if (b.status === 'pending') return 1;
     return b.queuedAt - a.queuedAt;
   });
+  const listedJobs = useMemo(() => mergeExitingJobs(visibleJobs, exiting), [visibleJobs, exiting]);
   const activeCount = jobs.filter((job) => isQueueActive(job) || job.status === 'unsubmitted').length;
   const runningLabel = activeCount > 0 ? `${activeCount} 项待完成` : '暂无待办';
 
@@ -109,7 +122,8 @@ export function QueueDrawer({ open, onClose, jobs, activity, onCancelJob, onRetr
         </div>
 
         {/* 任务列表 */}
-        <div className="flex-1 overflow-y-auto p-space-lg space-y-space-md">
+        <div className="flex-1 overflow-y-auto p-space-lg">
+          <div className="mb-space-md space-y-space-md">
           <QueueSummary activity={activity} />
           <p className="font-meta-sm text-meta-sm text-on-surface-variant">以下仅展示我的任务. 置顶只调整自己的待生成顺序.</p>
           {error && (
@@ -117,18 +131,22 @@ export function QueueDrawer({ open, onClose, jobs, activity, onCancelJob, onRetr
               {error}
             </p>
           )}
-          {visibleJobs.length === 0 && (
+          {listedJobs.length === 0 && (
             <div className="text-center py-space-xl text-on-surface-variant font-body-sm text-body-sm">
               当前没有进行中的任务
             </div>
           )}
-          {visibleJobs.map((job) => {
+          </div>
+          {listedJobs.map((job) => {
             const { title, meta, icon } = statusLabel(job, open);
+            const leaving = exiting.some((item) => item.id === job.id);
             return (
               <div
                 key={job.id}
-                className="p-space-md rounded-xl bg-surface-container-lowest shadow-[0_2px_12px_rgba(85,95,75,0.04)]"
+                className={`grid transition-[grid-template-rows,opacity,margin] duration-200 ease-out motion-reduce:transition-none ${leaving ? 'mb-0 grid-rows-[0fr] opacity-0' : 'mb-space-md grid-rows-[1fr] opacity-100 last:mb-0'}`}
               >
+              <div className="min-h-0 overflow-hidden">
+              <div className="p-space-md rounded-xl bg-surface-container-lowest shadow-[0_2px_12px_rgba(85,95,75,0.04)]">
                 <div className="flex items-start justify-between gap-space-xs mb-space-xs">
                   <div className="flex-1 min-w-0">
                     <h4 className="font-body-sm text-body-sm font-medium text-on-surface truncate">{title}</h4>
@@ -143,53 +161,74 @@ export function QueueDrawer({ open, onClose, jobs, activity, onCancelJob, onRetr
                 {(job.delivery?.error || job.error) && <p className={`font-meta-sm text-meta-sm mb-space-xs break-words ${job.status === 'unsubmitted' ? 'text-on-surface-variant' : 'text-error'}`}>{job.delivery?.error || job.error}</p>}
                 <div className="flex flex-wrap gap-2 justify-between items-center text-on-surface-variant">
                   <span className="font-meta-sm text-meta-sm">
-                    {job.status === 'pending' ? '轮到后自动开始' : job.status === 'running' ? '正在绘制本张' : ''}
+                    {job.status === 'pending' ? '轮到后自动开始' : job.status === 'running' ? '正在绘制本张' : job.supersededBy ? '请查看队列中的新任务' : ''}
                   </span>
-                  {job.status === 'pending' || job.status === 'unsubmitted' ? (
-                    <div className="flex gap-3">
-                      {job.status === 'pending' && <button
-                        type="button"
-                        title="置顶到自己的待执行队列, 不影响其他用户"
-                        className="font-meta-sm text-meta-sm hover:text-primary"
-                        onClick={() => { setError(''); void onPrioritizeJob(job.id).catch((cause) => setError(cause.message)); }}
-                      >
-                        置顶
-                      </button>}
-                      {job.status === 'unsubmitted' && <button type="button" className="inline-flex items-center gap-1.5 font-meta-sm text-meta-sm text-primary" onClick={() => { void onRetryJob(job.id).catch((cause) => setError(cause.message)); }}>继续提交<CreditCost /></button>}
-                      {job.status === 'pending' && <button
-                        type="button"
-                        className="font-meta-sm text-meta-sm hover:text-error transition-colors"
-                        onClick={() => {
-                          setError('');
-                          void onCancelJob(job.id).catch(() => setError('取消失败, 任务可能已经开始'));
-                        }}
-                      >
-                        取消
-                      </button>}
-                    </div>
-                  ) : job.status === 'submitting' ? (
-                    <span className="font-meta-sm text-meta-sm text-outline">提交中</span>
-                  ) : job.status === 'succeeded' && job.delivery?.phase === 'error' ? (
-                    <button type="button" className="font-meta-sm text-meta-sm text-primary flex items-center gap-1" onClick={() => { setError(''); void onRetryJob(job.id).catch((cause) => setError(cause.message)); }}><RefreshCw size={12} aria-hidden />重试领取</button>
-                  ) : job.status === 'running' ? (
-                    <span title="请求已发往上游, 无法撤回" className="font-meta-sm text-meta-sm text-outline">生成中</span>
-                  ) : job.supersededBy ? (
-                    <span className="font-meta-sm text-meta-sm text-on-surface-variant">历史记录</span>
-                  ) : ['failed', 'expired', 'interrupted'].includes(job.status) ? (
-                    <button
+                  <div className="flex flex-wrap items-center gap-3">
+                    {job.status === 'pending' && <button
                       type="button"
-                      disabled={!job.canRetry}
-                      className="font-meta-sm text-meta-sm hover:text-primary transition-colors flex items-center gap-0.5 disabled:opacity-50"
+                      title="置顶到自己的待执行队列, 不影响其他用户"
+                      className="font-meta-sm text-meta-sm hover:text-primary"
+                      onClick={() => { setError(''); void onPrioritizeJob(job.id).catch((cause) => setError(cause.message)); }}
+                    >
+                      置顶
+                    </button>}
+                    {job.status === 'unsubmitted' && <button type="button" className="inline-flex items-center gap-1.5 font-meta-sm text-meta-sm text-primary" onClick={() => { void onRetryJob(job.id).catch((cause) => setError(cause.message)); }}>继续提交<CreditCost /></button>}
+                    {job.status === 'pending' && <button
+                      type="button"
+                      className="font-meta-sm text-meta-sm hover:text-error transition-colors"
                       onClick={() => {
                         setError('');
-                        void onRetryJob(job.id).catch((cause) => setError(cause instanceof Error ? cause.message : '重试失败'));
+                        void onCancelJob(job.id).catch(() => setError('取消失败, 任务可能已经开始'));
                       }}
                     >
-                      <RefreshCw size={12} aria-hidden /> {job.interruptionReason === 'pending-restart' ? '恢复排队' : '重新生成'}
-                      <CreditCost points={job.interruptionReason === 'pending-restart' ? job.credit?.points : undefined} unlimited={job.interruptionReason === 'pending-restart' ? job.credit?.unlimited : undefined} />
-                    </button>
-                  ) : null}
+                      取消
+                    </button>}
+                    {job.status === 'submitting' && <span className="font-meta-sm text-meta-sm text-outline">提交中</span>}
+                    {job.status === 'succeeded' && job.delivery?.phase === 'error' && (
+                      <button type="button" className="font-meta-sm text-meta-sm text-primary flex items-center gap-1" onClick={() => { setError(''); void onRetryJob(job.id).catch((cause) => setError(cause.message)); }}><RefreshCw size={12} aria-hidden />重试领取</button>
+                    )}
+                    {job.status === 'running' && <span title="请求已发往上游, 无法撤回" className="font-meta-sm text-meta-sm text-outline">生成中</span>}
+                    {!job.supersededBy && ['failed', 'expired', 'interrupted'].includes(job.status) && (
+                      <button
+                        type="button"
+                        disabled={!job.canRetry}
+                        className="font-meta-sm text-meta-sm hover:text-primary transition-colors flex items-center gap-0.5 disabled:opacity-50"
+                        onClick={() => {
+                          setError('');
+                          void onRetryJob(job.id).catch((cause) => setError(cause instanceof Error ? cause.message : '重试失败'));
+                        }}
+                      >
+                        <RefreshCw size={12} aria-hidden /> {job.interruptionReason === 'pending-restart' ? '恢复排队' : '重新生成'}
+                        <CreditCost points={job.interruptionReason === 'pending-restart' ? job.credit?.points : undefined} unlimited={job.interruptionReason === 'pending-restart' ? job.credit?.unlimited : undefined} />
+                      </button>
+                    )}
+                    {canDismissQueueJob(job) && (
+                      <button
+                        type="button"
+                        disabled={leaving}
+                        className="font-meta-sm text-meta-sm hover:text-error transition-colors disabled:opacity-40"
+                        onClick={() => {
+                          if (leaving) return;
+                          const index = listedJobs.findIndex((item) => item.id === job.id);
+                          setExiting((current) => current.some((item) => item.id === job.id) ? current : [...current, { id: job.id, job, index }]);
+                          const started = performance.now();
+                          const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+                          void onArchiveJob(job.id)
+                            .then(async () => {
+                              const wait = reduceMotion ? 0 : Math.max(0, DISMISS_MS - (performance.now() - started));
+                              if (wait) await new Promise((resolve) => window.setTimeout(resolve, wait));
+                            })
+                            .catch(() => { setExiting((current) => current.filter((item) => item.id !== job.id)); setError('清除失败, 请重试'); })
+                            .then(() => { setExiting((current) => current.filter((item) => item.id !== job.id)); });
+                        }}
+                      >
+                        清除
+                      </button>
+                    )}
+                  </div>
                 </div>
+              </div>
+              </div>
               </div>
             );
           })}

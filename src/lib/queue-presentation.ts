@@ -25,6 +25,11 @@ export function isQueueActive(job: QueueJob): boolean {
   return ['pending', 'running', 'submitting'].includes(job.status) || job.status === 'succeeded' && !job.acknowledgedAt;
 }
 
+export function canDismissQueueJob(job: QueueJob): boolean {
+  if (isQueueActive(job) || job.status === 'unsubmitted' || job.interruptionReason === 'pending-restart') return false;
+  return true;
+}
+
 export function deliveryMessage(delivery?: QueueDelivery): { title: string; detail: string } {
   if (!delivery) return { title: '等待领取作品', detail: '图片已生成, 等待接收原图' };
   if (delivery?.phase === 'error') return {

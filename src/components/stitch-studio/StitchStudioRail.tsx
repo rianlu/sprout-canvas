@@ -98,10 +98,10 @@ function AspectRatioGrid({ value, onChange, customSizes = true, sizeTier, reques
             }
             onClick={() => onChange(r.id)}
           >
-            <div className="flex items-center justify-between w-full mb-1.5">
-              <div
-                className={`${r.box} rounded-sm border-2 ${active ? 'border-primary bg-primary/20' : 'border-outline/60'}`}
-              />
+            <div className="mb-1.5 flex h-5 w-full items-center justify-between">
+              <div className="flex h-5 w-5 items-center justify-center">
+                <div className={`${r.box} rounded-sm border-2 ${active ? 'border-primary bg-primary/20' : 'border-outline/60'}`} />
+              </div>
               {r.id === '1:1' && (
                 <span className="px-1 rounded text-[9px] bg-primary-fixed text-on-primary-fixed font-meta-sm font-medium">
                   默认

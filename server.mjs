@@ -169,12 +169,13 @@ async function route(req, res) {
   if (url.pathname === '/api/jobs/archive' && req.method === 'POST') {
     queue.archiveCompleted(userId); return json(res, 200, { ok: true });
   }
-  const match = url.pathname.match(/^\/api\/jobs\/([a-zA-Z0-9_-]+)(?:\/(result|ack|priority|resume))?$/);
+  const match = url.pathname.match(/^\/api\/jobs\/([a-zA-Z0-9_-]+)(?:\/(result|ack|priority|resume|archive))?$/);
   if (!match) throw requestError('接口不存在', 404);
   const [, jobId, action] = match;
   if (action === 'result' && req.method === 'GET') return result(req, res, jobId);
   if (action === 'ack' && req.method === 'POST') return json(res, 200, queue.acknowledge(jobId, userId));
   if (action === 'priority' && req.method === 'POST') return json(res, 200, queue.prioritize(jobId, userId));
+  if (action === 'archive' && req.method === 'POST') return json(res, 200, queue.archiveJob(jobId, userId));
   if (action === 'resume' && req.method === 'POST') return json(res, 202, queue.resumeGeneration(jobId, userId, validateGenerationSubmission(await readJson(req)), session));
   if (!action && req.method === 'PATCH') {
     const input = validateGenerationSubmission(await readJson(req));

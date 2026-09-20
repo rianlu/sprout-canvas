@@ -25,5 +25,6 @@ export async function cancelQueueJob(jobId: string) {
 export async function acknowledgeQueueJob(jobId: string, signal?: AbortSignal) { return receivedJob(await apiFetch<QueueJob>(`/api/jobs/${jobId}/ack`, { method: 'POST', signal })); }
 export async function prioritizeQueueJob(jobId: string) { return receivedJob(await apiFetch<QueueJob>(`/api/jobs/${jobId}/priority`, { method: 'POST' })); }
 export function archiveQueueJobs() { return apiFetch<{ ok: boolean }>('/api/jobs/archive', { method: 'POST' }); }
+export async function archiveQueueJob(jobId: string) { return receivedJob(await apiFetch<QueueJob>(`/api/jobs/${jobId}/archive`, { method: 'POST' })); }
 export async function updateQueueJob(jobId: string, input: QueueSubmitInput) { return receivedJob(await apiFetch<QueueJob>(`/api/jobs/${jobId}`, { method: 'PATCH', ...jsonBody(input) })); }
 export async function resumeQueueJob(jobId: string, input: QueueSubmitInput) { return receivedJob(await apiFetch<QueueJob>(`/api/jobs/${jobId}/resume`, { method: 'POST', ...jsonBody(input) })); }
