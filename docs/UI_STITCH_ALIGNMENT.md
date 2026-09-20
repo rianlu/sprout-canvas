@@ -17,7 +17,7 @@
 | 共用框架 | 顶栏/品牌/四页导航/队列/主题/退出/页脚保持统一. 手机使用双行导航, 队列显示图标计数, 关键按钮不出视口 | `src/components/shell/AppShell.tsx` |
 | 单图创作 | 440px 控制栏, 提示词/风格/参考/画幅/调性/质量/数量/格式区, 实时状态和结果卡. 固定三项调性, 按实际能力显示生成格式; 2/4 张, 蒙版与配方真正接通 | `StitchCreativeStudio.tsx`, `StitchStudioRail.tsx` |
 | 系列策划 | 上方 7:5 设定区, 梗概/剧本统一输入, 可选图片放在系列参考图区, 从梗概提取画面要求; 先拆解提示词, 下方 1/2/4 列分镜供检查编辑, 独立确认后生成图片; 保留时间轴, 单镜编辑/重绘/置顶, 模板和版本切换 | `StitchSeriesStudio.tsx`, `useSeriesStudio.ts` |
-| 风格库 | 标题, 搜索, 分类胶囊, 三列图文卡, 密度切换, 详情与两项主动作. 从服务端动态读取已上架模板, 卡片/详情/复制/发送使用同一原文, 用户确认后绘制 | `StitchStylesLibrary.tsx`, `useStyleCatalog.ts`, `server/style-store.mjs` |
+| 风格库 | 标题, 搜索, 分类胶囊单行横滑, 密度切换: 默认 1/2/3 列、紧凑 2/3/4 列, 详情与两项主动作. 从服务端动态读取已上架模板, 卡片/详情/复制/发送使用同一原文, 用户确认后绘制 | `StitchStylesLibrary.tsx`, `useStyleCatalog.ts`, `server/style-store.mjs` |
 | 风格管理 | 独立管理员入口, 同一标题/正文层级和语义色, 简洁图片/提示词/作者表单; 支持上传/拖拽/粘贴, 可选信息折叠, 上下架与备份预览 | `StyleAdmin.tsx`, `server/admin-auth.mjs`, `server/style-routes.mjs` |
 | 展馆 | 统一素色背景, 24px 画布边距和标题字体层级, 单图/系列分段, 平铺画幅与排序, 日期分组, 4:3 卡片, 系列纸垫; 选择模式才显示勾选和批量操作 | `StitchGalleryGrid.tsx` |
 | 图片详情 | 接近全视口的大图区域, 固定工具栏, 可收起配方栏, 滚轮平移, Ctrl 滚轮/双指缩放与拖动, 100%/适应窗口, 分镜与版本切换, 原图/ZIP/再创作 | `StitchGalleryViewer.tsx`, `ImageViewport.tsx` |
