@@ -209,9 +209,12 @@ try {
   await a.getByRole('button', { name: /^润色扩写/ }).click();
   await a.getByRole('alert').filter({ hasText: /需要 2 点.*可用 0 点/ }).waitFor();
   await a.getByRole('navigation', { name: '主导航', exact: true }).getByRole('link', { name: '展馆', exact: true }).click();
-  await a.locator('main article').first().hover();
-  const [download] = await Promise.all([a.waitForEvent('download'), a.locator('main article').first().getByRole('button', { name: '下载', exact: true }).click()]);
+  await a.getByRole('button', { name: /检视作品:/ }).first().click();
+  const galleryViewer = a.getByRole('dialog', { name: '作品检视', exact: true });
+  await galleryViewer.waitFor();
+  const [download] = await Promise.all([a.waitForEvent('download'), galleryViewer.getByRole('button', { name: '下载原图', exact: true }).click()]);
   assert.ok(download.suggestedFilename());
+  await galleryViewer.getByRole('button', { name: '关闭查看器', exact: true }).click();
   await a.getByRole('navigation', { name: '主导航', exact: true }).getByRole('link', { name: '风格库', exact: true }).click();
   await a.getByRole('button', { name: /全部 36/ }).waitFor();
   assert.equal(await a.getByRole('button', { name: '管理风格', exact: true }).count(), 0);

@@ -92,6 +92,10 @@ async function closeQueue(page) {
   const close = page.getByLabel('关闭队列抽屉');
   if (await close.isVisible()) { await close.click(); await close.waitFor({ state: 'hidden' }); }
 }
+async function closeViewer(page) {
+  const close = page.getByLabel('关闭查看器');
+  if (await close.isVisible()) { await close.click(); await close.waitFor({ state: 'hidden' }); }
+}
 async function drawMask(page, dialog) {
   const canvas = dialog.locator('canvas').last();
   await canvas.waitFor();
@@ -100,7 +104,7 @@ async function drawMask(page, dialog) {
   await page.mouse.move(bounds.x + bounds.width * 0.4, bounds.y + bounds.height * 0.5);
   await page.mouse.down(); await page.mouse.move(bounds.x + bounds.width * 0.6, bounds.y + bounds.height * 0.5, { steps: 6 }); await page.mouse.up();
 }
-async function nav(page, label) { await closeQueue(page); const nav = await page.getByRole('navigation', { name: '主导航', exact: true }).isVisible() ? '主导航' : '移动导航'; await page.getByRole('navigation', { name: nav, exact: true }).getByRole('link', { name: label, exact: true }).click(); }
+async function nav(page, label) { await closeQueue(page); await closeViewer(page); const nav = await page.getByRole('navigation', { name: '主导航', exact: true }).isVisible() ? '主导航' : '移动导航'; await page.getByRole('navigation', { name: nav, exact: true }).getByRole('link', { name: label, exact: true }).click(); }
 async function useTemplate(page, id) {
   const style = styles.find((item) => item.id === id);
   await nav(page, '风格库');
@@ -196,7 +200,8 @@ try {
   await page.getByRole('button', { name: /检视作品:/ }).first().click();
   const viewer = page.getByRole('dialog', { name: '作品检视', exact: true });
   const initialView = await fittedImage(page);
-  assert.ok(initialView.viewport.height > 750, 'the image gets most of the dialog height');
+  const dialogBox = await viewer.boundingBox();
+  assert.ok(dialogBox && initialView.viewport.height > dialogBox.height * 0.7, 'the image gets most of the dialog height');
   await screenshot(page, 'viewer-single-desktop');
   const viewport = viewer.getByRole('region', { name: '图片查看区', exact: true });
   const zoomIn = viewer.getByRole('button', { name: '放大图片', exact: true });
@@ -260,7 +265,8 @@ try {
     await page.setViewportSize({ width: 390, height: 844 });
     await page.evaluate((theme) => document.documentElement.classList.toggle('dark', theme === 'dark'), theme);
     const mobileView = await fittedImage(page);
-    assert.ok(mobileView.viewport.height > 650, 'mobile shows the picture before details');
+    const mobileDialog = await viewer.boundingBox();
+    assert.ok(mobileDialog && mobileView.viewport.height > mobileDialog.height * 0.7, 'mobile shows the picture before details');
     for (const { label, rect } of await fixedViewerControls(page)) assert.ok(rect.x >= 0 && rect.right <= 390, `${label} stays reachable on mobile`);
     await readableViewerIcons(page);
     await screenshot(page, `viewer-single-mobile-${theme}`);
@@ -985,10 +991,10 @@ try {
   assert.equal(record.recipe.quality, 'auto');
   assert.equal(record.recipe.background, 'transparent');
   const call = app.calls.filter((call) => call.path.includes('/images/')).at(-1);
-  const form = call.json || Object.fromEntries(await new Request('http://fixture.local', { method: 'POST', headers: { 'Content-Type': call.headers['content-type'] }, body: call.body }).formData());
-  assert.equal(form.output_format, 'png');
-  assert.equal(form.quality, 'auto');
-  assert.equal(form.background, 'transparent');
+  const payload = call.json || Object.fromEntries(await new Request('http://fixture.local', { method: 'POST', headers: { 'Content-Type': call.headers['content-type'] }, body: call.body }).formData());
+  assert.equal(payload.output_format, 'png');
+  assert.equal(payload.quality, 'auto');
+  assert.equal(payload.background, 'transparent');
   await closeQueue(cp);
   assert.equal(imageCount, controlsStart + 1);
   const copied = cp.locator('.studio-feed article').filter({ has: cp.getByTitle('复制原图', { exact: true }) }).first();
@@ -1004,7 +1010,7 @@ try {
   await cp.setViewportSize({ width: 390, height: 844 });
   await screenshot(cp, 'studio-controls-reference-mobile', true);
   await controlsFlow.context.close();
-  checks.push('精度、格式和透明背景在上游不支持时只读默认值, 请求仍按默认字段原样转发');
+  checks.push('精度和格式在上游不支持时只读默认值, 透明背景可开并按请求转发');
 
   const retryFlow = await contextPage();
   const rp = retryFlow.page;

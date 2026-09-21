@@ -128,7 +128,7 @@ export function CreativeStudio({ onOpenStyles, onOpenGallery, onSubmitBatch, onC
       const draft = { ...stored, ...transfer, promptHistory: transfer ? null : readPromptHistory(stored?.promptHistory) };
       if (draft.config) setConfig((current) => {
         const next = { ...current, ...stored?.config, ...transfer?.config, prompt: transfer?.config?.prompt ?? stored?.config?.prompt ?? current.prompt };
-        if (LOCK_UNSUPPORTED_IMAGE_OPTIONS) Object.assign(next, LOCKED_IMAGE_DEFAULTS);
+        if (LOCK_UNSUPPORTED_IMAGE_OPTIONS && next.mode !== 'edit') Object.assign(next, LOCKED_IMAGE_DEFAULTS);
         return next;
       });
       if (draft.styleId !== undefined) setStyleId(draft.styleId || 'default');

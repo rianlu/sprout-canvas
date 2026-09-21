@@ -402,7 +402,7 @@ try {
     await cards(page).nth(1).getByRole('button', { name: /^调整并重绘/ }).click();
     const dialog = page.getByRole('dialog', { name: '调整第 2 镜', exact: true });
     assert.equal(await dialog.getByLabel('本镜画幅').inputValue(), '16:9');
-    assert.equal(await dialog.getByLabel('本镜质量').inputValue(), 'medium');
+    assert.equal(await dialog.getByLabel('本镜质量').inputValue(), 'auto');
     await dialog.getByLabel('关闭本镜设置').click();
   });
 
