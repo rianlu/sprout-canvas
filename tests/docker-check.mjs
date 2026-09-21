@@ -100,7 +100,7 @@ try {
   await page.getByRole('button', { name: '进入工作台', exact: true }).click();
   await page.locator('.studio-rail textarea').waitFor();
   assert.equal(await page.locator('.studio-rail').evaluate((element) => Math.round(element.getBoundingClientRect().width)), 440);
-  await page.getByText('当前支持 PNG 格式', { exact: true }).waitFor();
+  await page.getByText('上游暂不支持修改, 将使用默认值', { exact: true }).waitFor();
   assert.equal(await page.getByLabel('当前生成格式', { exact: true }).innerText(), 'PNG');
   assert.equal(await page.getByRole('group', { name: '生成格式', exact: true }).getByRole('button').count(), 0);
   assert.ok(await page.getByRole('button', { name: '新建创作', exact: true }).isVisible());

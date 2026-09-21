@@ -68,7 +68,7 @@ export function useSeriesStudio({ onSubmit, onSubmitBatch, onUpdate, results, jo
   const [config, setConfig] = useState<GenerationConfig>(() => {
     const aspectRatio = (readDraft('batch_aspect_ratio') || '16:9') as AspectRatio;
     const size = resolveSize(aspectRatio);
-    const quality = ['auto', 'low', 'medium', 'high'].includes(readDraft('batch_quality')) ? readDraft('batch_quality') as GenerationConfig['quality'] : 'medium';
+    const quality = ['auto', 'low', 'medium', 'high'].includes(readDraft('batch_quality')) ? readDraft('batch_quality') as GenerationConfig['quality'] : 'auto';
     const outputFormat = ['png', 'jpeg', 'webp'].includes(readDraft('batch_output_format')) ? readDraft('batch_output_format') as GenerationConfig['outputFormat'] : 'png';
     return { mode: 'text', generationMode: 'images', imageModel: '', prompt: '', imageCount: 1, aspectRatio, sizeTier: '1K', requestSize: size.size, sizeHint: size.hint, quality, background: 'auto', outputFormat, outputCompression: 90, refImages: [] };
   });

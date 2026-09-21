@@ -179,7 +179,7 @@ function dataUrlToImagePart(ref) {
 }
 
 function appendMultipartField(parts, boundary, name, value) {
-  if (value === undefined || value === null || value === '' || value === 'auto') return;
+  if (value === undefined || value === null || value === '') return;
   parts.push(Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="${name}"\r\n\r\n${value}\r\n`));
 }
 

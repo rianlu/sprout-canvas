@@ -398,7 +398,7 @@ try {
   await scenario('分镜设置读取原任务参数, 不跟随后来修改的默认值', async (page) => {
     await completePlan(page);
     await page.getByRole('button', { name: '1:1 方形插画', exact: true }).click();
-    await page.getByLabel('系列生成质量').selectOption('low');
+    await page.getByLabel('系列生成质量').selectOption('high');
     await cards(page).nth(1).getByRole('button', { name: /^调整并重绘/ }).click();
     const dialog = page.getByRole('dialog', { name: '调整第 2 镜', exact: true });
     assert.equal(await dialog.getByLabel('本镜画幅').inputValue(), '16:9');

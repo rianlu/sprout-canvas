@@ -4,6 +4,7 @@ import type { QueueJob } from '../types/queue';
 import type { ImageCapabilities } from '../types/provider';
 import { prepareImageFile } from '../lib/image/compress';
 import { buildGenerationPayload, resolveSize } from '../lib/api/generation';
+import { LOCK_UNSUPPORTED_IMAGE_OPTIONS, LOCKED_IMAGE_DEFAULTS } from '../lib/image/channel-limits';
 import type { QueueSubmitInput } from '../lib/api/queue';
 import { requestTextGeneration } from '../lib/api/text';
 import { getStyles } from '../lib/api/styles';
@@ -40,12 +41,6 @@ interface CreativeStudioProps {
 const STUDIO_STYLE_DRAFT_KEY = 'studio_style';
 const STUDIO_PROMPT_DRAFT_KEY = 'studio_prompt';
 
-/** 渲染调性 (PRD v3.1): prompt 注入实现, 不动上游协议 */
-const TONE_SUFFIX: Record<string, string> = {
-  soft: '，柔和自然的光影，温润真实的摄影质感',
-  vivid: '，色调鲜活明艳，高对比富有张力',
-};
-
 /**
  * 单图创作页 (照搬 Stitch 单图稿). DOM 类名原样, 逻辑层复用 v3.0.
  */
@@ -65,7 +60,7 @@ export function CreativeStudio({ onOpenStyles, onOpenGallery, onSubmitBatch, onC
   const imageSequence = useRef(0);
   const alive = useRef(true);
   useEffect(() => { alive.current = true; return () => { alive.current = false; imageSequence.current++; }; }, []);
-  const [tone, setTone] = useState<'soft' | 'vivid' | 'none'>('soft');
+
   const [styleId, setStyleId] = useState(() => readDraft(STUDIO_STYLE_DRAFT_KEY) || 'default');
   const [styleName, setStyleName] = useState('');
   const [styleTemplate, setStyleTemplate] = useState<StudioStyleTemplate | null>(null);
@@ -110,7 +105,7 @@ export function CreativeStudio({ onOpenStyles, onOpenGallery, onSubmitBatch, onC
       sizeTier: '1K',
       requestSize: size.size,
       sizeHint: size.hint,
-      quality: 'medium',
+      quality: 'auto',
       background: 'auto',
       outputFormat: 'png',
       outputCompression: 90,
@@ -131,14 +126,17 @@ export function CreativeStudio({ onOpenStyles, onOpenGallery, onSubmitBatch, onC
       const transfer = await readWorkspaceDraft<StudioDraft>('studio-transfer');
       if (!alive) return;
       const draft = { ...stored, ...transfer, promptHistory: transfer ? null : readPromptHistory(stored?.promptHistory) };
-      if (draft.config) setConfig((current) => ({ ...current, ...stored?.config, ...transfer?.config, prompt: transfer?.config?.prompt ?? stored?.config?.prompt ?? current.prompt }));
+      if (draft.config) setConfig((current) => {
+        const next = { ...current, ...stored?.config, ...transfer?.config, prompt: transfer?.config?.prompt ?? stored?.config?.prompt ?? current.prompt };
+        if (LOCK_UNSUPPORTED_IMAGE_OPTIONS) Object.assign(next, LOCKED_IMAGE_DEFAULTS);
+        return next;
+      });
       if (draft.styleId !== undefined) setStyleId(draft.styleId || 'default');
       setStyleName(draft.styleName || '');
       setStyleTemplate(draft.styleTemplate && draft.styleTemplate.id === draft.styleId ? draft.styleTemplate : null);
       if (draft.refImage !== undefined || draft.config?.refImages?.length) setRefImage(draft.refImage || studioReferenceImages(draft)[0] || null);
       setSourceRecord(draft.sourceRecord || null);
       if (draft.mask !== undefined) setMask(draft.mask);
-      if (draft.tone) setTone(draft.tone);
       setRestoredMask(draft.maskDataUrl || '');
       setPromptHistory(draft.promptHistory);
       const transferredStyle = transfer?.styleId && transfer.styleId !== 'default' ? transfer.styleName || '提示词模板' : '';
@@ -154,7 +152,7 @@ export function CreativeStudio({ onOpenStyles, onOpenGallery, onSubmitBatch, onC
     })().catch((error) => { if (alive) { setDraftLoaded(true); pushToast('error', error instanceof Error ? error.message : '草稿读取失败'); } });
     return () => { alive = false; };
   }, [pushToast]);
-  const currentDraft = useMemo<StudioDraft>(() => ({ config, styleId, styleName, styleTemplate, refImage, sourceRecord, mask, tone, maskDataUrl: restoredMask, promptHistory }), [config, styleId, styleName, styleTemplate, refImage, sourceRecord, mask, tone, restoredMask, promptHistory]);
+  const currentDraft = useMemo<StudioDraft>(() => ({ config, styleId, styleName, styleTemplate, refImage, sourceRecord, mask, tone: 'none', maskDataUrl: restoredMask, promptHistory }), [config, styleId, styleName, styleTemplate, refImage, sourceRecord, mask, restoredMask, promptHistory]);
   const currentDraftRef = useRef(currentDraft);
   currentDraftRef.current = currentDraft;
   useEffect(() => {
@@ -191,8 +189,14 @@ export function CreativeStudio({ onOpenStyles, onOpenGallery, onSubmitBatch, onC
         const size = resolveSize(next.aspectRatio, next.sizeTier);
         next.requestSize = size.size; next.sizeHint = size.hint;
       }
-      if (patch.background === 'transparent' && next.outputFormat === 'jpeg') next.outputFormat = 'png';
-      if (patch.outputFormat === 'jpeg' && next.background === 'transparent') next.background = 'auto';
+      if (LOCK_UNSUPPORTED_IMAGE_OPTIONS) {
+        next.quality = LOCKED_IMAGE_DEFAULTS.quality;
+        next.outputFormat = LOCKED_IMAGE_DEFAULTS.outputFormat;
+        next.background = LOCKED_IMAGE_DEFAULTS.background;
+      } else {
+        if (patch.background === 'transparent' && next.outputFormat === 'jpeg') next.outputFormat = 'png';
+        if (patch.outputFormat === 'jpeg' && next.background === 'transparent') next.background = 'auto';
+      }
       return next;
     });
   }, []);
@@ -317,7 +321,7 @@ export function CreativeStudio({ onOpenStyles, onOpenGallery, onSubmitBatch, onC
       if (isEdit && refImage && !await hasEditableRegion(mask || { strokes: [], width: 0, height: 0 }, refImage.dataUrl, restoredMask)) throw new Error('蒙版没有需要修改的区域, 请重新涂抹');
       const styledPrompt = isEdit
         ? `在输入原图上进行局部编辑, 仅修改蒙版指定区域, 保持原图画幅, 构图和画风, 尽量保留未涂抹区域的内容与细节.\n修改要求: ${config.prompt}`
-        : config.prompt + (TONE_SUFFIX[tone] ?? '');
+        : config.prompt;
       const refImages = isEdit ? [refImage!] : referenceImages;
       if (refImages.length > maxReferences) throw new Error(`最多使用 ${maxReferences} 张参考图, 请先移除多余图片`);
       const payload = await buildGenerationPayload(
@@ -341,7 +345,7 @@ export function CreativeStudio({ onOpenStyles, onOpenGallery, onSubmitBatch, onC
           batchId, version: editSource ? (editSource.version || 1) + 1 : 1,
           styleId: isEdit ? editSource?.recipe?.styleId : styleId === 'default' ? undefined : styleId,
           styleName: isEdit ? editSource?.recipe?.styleName : styleId === 'default' ? undefined : styleName,
-          tone: isEdit ? editSource?.recipe?.tone || 'none' : tone,
+          tone: 'none',
           ...(editSource ? { parentId: editSource.id } : {}),
           ...(editSource?.kind === 'series' ? { seriesId: editSource.seriesId, sceneId: editSource.sceneId, sceneIndex: editSource.sceneIndex, template: editSource.template, masterPrompt: editSource.masterPrompt } : {}),
         },
@@ -362,7 +366,7 @@ export function CreativeStudio({ onOpenStyles, onOpenGallery, onSubmitBatch, onC
     imageCapabilities,
     styleId,
     styleName,
-    tone,
+
     refImage,
     referenceImages,
     maxReferences,
@@ -444,7 +448,6 @@ export function CreativeStudio({ onOpenStyles, onOpenGallery, onSubmitBatch, onC
       setStyleId('default');
       setStyleName('');
       setStyleTemplate(null);
-      setTone('none');
       setMask(null);
       setRestoredMask('');
       setFullscreen(null);
@@ -463,7 +466,7 @@ export function CreativeStudio({ onOpenStyles, onOpenGallery, onSubmitBatch, onC
     currentDraftRef.current = { ...currentDraftRef.current, config: nextConfig, refImage: first, sourceRecord: source, mask: null, maskDataUrl: '', styleId: 'default', styleName: '', styleTemplate: null, tone: 'none', promptHistory: null };
     setRefImage(first); setSourceRecord(source); setConfig(nextConfig);
     setMask(null); setRestoredMask('');
-    setStyleId('default'); setStyleName(''); setStyleTemplate(null); setTone('none'); setPromptHistory(null);
+    setStyleId('default'); setStyleName(''); setStyleTemplate(null); setPromptHistory(null);
   }, [config, referenceImages, sourceRecord, results]);
 
   const openMaskEditor = useCallback(() => {
@@ -521,8 +524,6 @@ export function CreativeStudio({ onOpenStyles, onOpenGallery, onSubmitBatch, onC
                 }}
                 sourceRecord={sourceRecord}
                 maskStrokes={maskStrokes}
-                tone={tone}
-                onToneChange={setTone}
                 config={config}
                 onConfigChange={handleConfigChange}
                 onSubmit={() => {
@@ -581,7 +582,7 @@ export function CreativeStudio({ onOpenStyles, onOpenGallery, onSubmitBatch, onC
             setMask(nextMask);
             setRestoredMask(maskDataUrl);
             setConfig(nextConfig);
-            setStyleId('default'); setStyleName(''); setStyleTemplate(null); setTone('none'); setPromptHistory(null);
+            setStyleId('default'); setStyleName(''); setStyleTemplate(null); setPromptHistory(null);
             setMaskEditorOpen(false);
             pushToast('success', '蒙版已保存并应用');
           }}

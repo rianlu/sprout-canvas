@@ -177,7 +177,7 @@ try {
   await page.getByRole('button', { name: /开始绘制/ }).click();
   const first = await waitRecords(page, 2);
   assert.equal(imageCount, 2);
-  assert.ok(first.every((record) => record.jobId && record.recipe?.quality === 'medium' && record.outputFormat === 'jpeg' && record.width > 2));
+  assert.ok(first.every((record) => record.jobId && record.recipe?.quality === 'auto' && record.outputFormat === 'jpeg' && record.width > 2));
   assert.equal((await rows(page, 'consumed')).length, 2);
   const times = Object.fromEntries(first.map((record) => [record.id, record.createdAt]));
   await closeQueue(page);
@@ -288,7 +288,6 @@ try {
   await viewer.getByRole('button', { name: '复用完整配方' }).click();
   await page.locator('.studio-rail textarea').waitFor();
   assert.equal(await page.locator('.studio-rail textarea').inputValue(), savedRecipe.prompt);
-  assert.equal(await page.getByRole('button', { name: /不额外调整/ }).getAttribute('aria-pressed'), 'true');
   checks.push('2 张生成, 实际格式下载, 原子领取, 删除后刷新不重现, 时间稳定, 完整配方复用');
 
   // Save a real brush mask, navigate away and reload without losing it.
@@ -728,7 +727,7 @@ try {
   await op.getByTitle('修改尚未执行的分镜').first().click();
   const pendingEditor = op.getByRole('dialog', { name: '调整第 2 镜', exact: true });
   await pendingEditor.getByLabel('本镜画面提示词').fill('陶瓷杯置于森林木桌上, 展示杯壁上的绿色叶纹');
-  await pendingEditor.getByLabel('本镜质量').selectOption('low');
+  await pendingEditor.getByLabel('本镜质量').selectOption('medium');
   await pendingEditor.getByRole('button', { name: '更新排队任务', exact: true }).click();
   await pendingEditor.waitFor({ state: 'hidden' });
   const lastSceneJob = (await jobs(op)).find((job) => job.status === 'pending' && job.clientContext.sceneIndex === 3);
@@ -738,11 +737,11 @@ try {
   releaseImage(); holdImage = undefined;
   const opRecords = await waitRecords(op, 8);
   await waitEmptyWorkspace(op, 'series');
-  assert.ok(opRecords.some((record) => record.sceneIndex === 1 && record.recipe.quality === 'low' && record.recipe.prompt.includes('绿色叶纹')));
-  assert.ok(app.calls.some((call) => call.path.endsWith('/images/edits') && call.body.includes(Buffer.from('绿色叶纹')) && /name="quality"\r\n\r\nlow/.test(call.body.toString())));
+  assert.ok(opRecords.some((record) => record.sceneIndex === 1 && record.recipe.quality === 'medium' && record.recipe.prompt.includes('绿色叶纹')));
+  assert.ok(app.calls.some((call) => call.path.endsWith('/images/edits') && call.body.includes(Buffer.from('绿色叶纹')) && /name="quality"\r\n\r\nmedium/.test(call.body.toString())));
   const originalSceneIds = opRecords.filter((record) => record.kind === 'series').map((record) => record.sceneId);
   const originalSeriesId = opRecords.find((record) => record.kind === 'series').seriesId;
-  await op.getByLabel('系列生成质量').selectOption('low');
+  await op.getByLabel('系列生成质量').selectOption('medium');
   await op.getByLabel('系列输出格式').selectOption('webp');
   assert.equal(await op.getByRole('button', { name: '品牌 IP 延展', exact: true }).count(), 0);
   await nav(op, '展馆');
@@ -808,20 +807,15 @@ try {
   await useTemplate(ep, 'open-15563');
   await ep.getByLabel('画面提示词', { exact: true }).fill('一只白色杯子放在森林木桌上');
   await ep.getByRole('button', { name: /16:9 宽屏/ }).click();
-  await ep.getByRole('button', { name: '高清 HD', exact: true }).click();
-  await ep.locator('.studio-rail label:has(input[type=checkbox])').click();
-  assert.ok(await ep.getByLabel('透明背景', { exact: true }).isChecked());
+  assert.ok(!await ep.getByLabel('透明背景', { exact: true }).isChecked());
   await ep.getByRole('button', { name: /开始绘制/ }).click();
   const originalWide = (await waitRecords(ep, 1))[0];
   assert.equal(originalWide.recipe.size, '1280x720');
   await closeQueue(ep);
   await ep.getByRole('button', { name: /1:1 方图/ }).click();
-  await ep.getByRole('button', { name: '标准', exact: true }).click();
-  await ep.getByRole('button', { name: 'JPEG', exact: true }).click();
   await ep.getByRole('button', { name: '4 张', exact: true }).click();
   await useTemplate(ep, 'open-13957');
   await ep.getByRole('button', { name: '4 张', exact: true }).click();
-  await ep.getByRole('button', { name: /生动鲜明/ }).click();
   await ep.getByTitle('局部涂抹修改', { exact: true }).click();
   const wideMask = ep.getByRole('dialog', { name: /局部重绘工作区/ });
   await wideMask.waitFor();
@@ -835,8 +829,8 @@ try {
     await editSettings.waitFor();
     const text = await editSettings.innerText();
     assert.match(text, /16:9/); assert.match(text, /1280×720/); assert.match(text, /1672×940/);
-    assert.match(text, /精细/); assert.match(text, /PNG/); assert.match(text, /透明/); assert.match(text, /水彩/);
-    assert.doesNotMatch(text, /1:1|JPEG/);
+    assert.match(text, /自动/); assert.match(text, /PNG/); assert.match(text, /水彩/);
+    assert.doesNotMatch(text, /1:1|JPEG|透明/);
     assert.equal(await ep.getByRole('button', { name: /1:1 方图/ }).count(), 0);
     assert.equal(await ep.getByRole('button', { name: '从风格库挑选提示词模板', exact: true }).count(), 0);
   };
@@ -856,8 +850,8 @@ try {
   for (const key of ['size', 'quality', 'background', 'outputFormat', 'outputCompression', 'model', 'providerId', 'styleId', 'styleName', 'tone']) assert.equal(editedWide.recipe[key], originalWide.recipe[key], `single edit keeps ${key}`);
   const editCall = app.calls.filter((call) => call.path.includes('/images/')).at(-1);
   const form = await new Response(editCall.body, { headers: { 'Content-Type': editCall.headers['content-type'] } }).formData();
-  assert.equal(form.get('size'), '1280x720'); assert.equal(form.get('quality'), 'high');
-  assert.equal(form.get('output_format'), 'png'); assert.equal(form.get('background'), 'transparent');
+  assert.equal(form.get('size'), '1280x720'); assert.equal(form.get('quality'), 'auto');
+  assert.equal(form.get('output_format'), 'png');
   assert.match(form.get('prompt'), /把杯子的把手改成红色/);
   assert.doesNotMatch(form.get('prompt'), /黏土|高对比富有张力|柔和自然的光影/);
   assert.deepEqual(Buffer.from(await form.get('image').arrayBuffer()), imageOverride, 'edit uploads original bytes without resizing');
@@ -968,91 +962,32 @@ try {
   const controlsFlow = await contextPage();
   const cp = controlsFlow.page;
   const formatControls = cp.getByRole('group', { name: '生成格式', exact: true });
-  const toneControls = cp.getByRole('group', { name: '渲染调性', exact: true });
   const controlsSubmit = cp.getByRole('button', { name: /开始绘制/ });
   const controlsStart = imageCount;
-  assert.equal(await toneControls.getByRole('button').count(), 3);
-  await cp.getByLabel('画面提示词', { exact: true }).fill('检查生成格式与渲染调性');
-  await formatControls.getByRole('button', { name: 'JPEG', exact: true }).click();
-  await until(async () => (await workspaceDraft(cp))?.config.outputFormat === 'jpeg', 'format choice saved');
-  const capabilitiesGate = new Promise((resolve) => { releaseCapabilities = resolve; });
-  await cp.route('**/api/config', async (route) => {
-    const response = await route.fetch();
-    const config = await response.json();
-    await capabilitiesGate;
-    await route.fulfill({ response, json: { ...config, imageCapabilities: { ...config.imageCapabilities, formats: ['png'] } } });
-  });
-  await cp.reload();
-  await formatControls.getByRole('status').filter({ hasText: '正在读取可用格式' }).waitFor();
-  assert.equal(await formatControls.getByRole('button').count(), 0, 'do not expose unverified formats before capabilities arrive');
-  assert.ok(await controlsSubmit.isDisabled());
-  await cp.getByLabel('画面提示词', { exact: true }).press('Control+Enter');
-  assert.equal(imageCount, controlsStart);
-  assert.equal((await rows(cp, 'outbox')).length, 0, 'a shortcut cannot submit while capabilities are loading');
-  releaseCapabilities(); releaseCapabilities = undefined;
-  await cp.getByText('当前支持 PNG 格式', { exact: true }).waitFor();
+  await cp.getByText('上游暂不支持修改, 将使用默认值', { exact: true }).waitFor();
   assert.equal(await cp.getByLabel('当前生成格式', { exact: true }).innerText(), 'PNG');
-  assert.equal(await formatControls.getByRole('button').count(), 0, 'a single supported format is a read-only value');
-  await until(async () => (await workspaceDraft(cp))?.config.outputFormat === 'png', 'unsupported saved format replaced by the supported format');
-  assert.ok(await controlsSubmit.isEnabled());
+  assert.equal(await formatControls.getByRole('button').count(), 0);
+  assert.ok(await cp.getByLabel('透明背景', { exact: true }).isDisabled());
+  assert.ok(!await cp.getByLabel('透明背景', { exact: true }).isChecked());
   await screenshot(cp, 'studio-controls-png-only-desktop', true);
   await cp.setViewportSize({ width: 390, height: 844 });
   await cp.evaluate(() => document.documentElement.classList.add('dark'));
   await screenshot(cp, 'studio-controls-png-only-mobile-dark', true);
-  await cp.unroute('**/api/config');
-  await cp.reload();
-  await formatControls.getByRole('button', { name: 'WEBP', exact: true }).waitFor();
-  assert.equal(await formatControls.getByRole('button').count(), 3);
-  checks.push('单格式通道明确显示只支持 PNG, 不提供无效切换; 能力读取期间不提前展示格式或通过快捷键提交, 不支持的旧草稿格式同步恢复');
-
   await cp.setViewportSize({ width: 1600, height: 1000 });
   await cp.evaluate(() => document.documentElement.classList.remove('dark'));
-  const toneCases = [
-    { format: 'png', tone: 'none', label: '不额外调整', suffix: '' },
-    { format: 'jpeg', tone: 'soft', label: '柔和自然', suffix: '，柔和自然的光影，温润真实的摄影质感' },
-    { format: 'webp', tone: 'vivid', label: '生动鲜明', suffix: '，色调鲜活明艳，高对比富有张力' },
-  ];
-  for (const [index, setting] of toneCases.entries()) {
-    const prompt = `检查 ${setting.format.toUpperCase()} 生成与调性`;
-    if (setting.format === 'jpeg') {
-      await cp.getByLabel('透明背景', { exact: true }).locator('..').click();
-      assert.ok(await cp.getByLabel('透明背景', { exact: true }).isChecked());
-    }
-    await formatControls.getByRole('button', { name: setting.format.toUpperCase(), exact: true }).click();
-    await toneControls.getByRole('button', { name: new RegExp(`^${setting.label}`) }).click();
-    await cp.getByLabel('画面提示词', { exact: true }).fill(prompt);
-    if (setting.format === 'jpeg') assert.ok(!await cp.getByLabel('透明背景', { exact: true }).isChecked());
-    if (setting.format === 'webp') {
-      await cp.getByLabel('透明背景', { exact: true }).locator('..').click();
-      assert.ok(await cp.getByLabel('透明背景', { exact: true }).isChecked());
-      await cp.locator('.studio-rail input[type=file]').setInputFiles({ name: 'tone-reference.png', mimeType: 'image/png', buffer: png(640, 360) });
-      await until(async () => Boolean((await workspaceDraft(cp))?.refImage), 'reference draft saved');
-      assert.equal(await toneControls.getByRole('button').count(), 3, 'uploading an image must not add a hidden tone option');
-      assert.equal(await toneControls.getByRole('button', { name: /^生动鲜明/ }).getAttribute('aria-pressed'), 'true', 'an uploaded reference preserves the chosen tone');
-    }
-    await until(async () => {
-      const draft = await workspaceDraft(cp);
-      return draft?.config.outputFormat === setting.format && draft?.config.prompt === prompt && draft?.tone === setting.tone;
-    }, 'format, tone and prompt saved');
-    await cp.reload();
-    await formatControls.getByRole('button', { name: setting.format.toUpperCase(), exact: true }).waitFor();
-    assert.equal(await formatControls.getByRole('button', { name: setting.format.toUpperCase(), exact: true }).getAttribute('aria-pressed'), 'true');
-    assert.equal(await toneControls.getByRole('button', { name: new RegExp(`^${setting.label}`) }).getAttribute('aria-pressed'), 'true');
-    assert.equal(await toneControls.getByRole('button').count(), 3);
-    await controlsSubmit.click();
-    const record = (await waitRecords(cp, index + 1)).find((item) => item.prompt === prompt);
-    assert.equal(record.recipe.outputFormat, setting.format);
-    assert.equal(record.recipe.tone, setting.tone);
-    assert.equal(record.recipe.prompt, prompt + setting.suffix);
-    const call = app.calls.filter((call) => call.path.includes('/images/')).at(-1);
-    const form = call.json || Object.fromEntries(await new Request('http://fixture.local', { method: 'POST', headers: { 'Content-Type': call.headers['content-type'] }, body: call.body }).formData());
-    assert.equal(form.output_format, setting.format, 'the selected format reaches the provider');
-    assert.equal(form.prompt, prompt + setting.suffix, 'tone descriptions are applied only when selected');
-    assert.equal(record.mode, setting.format === 'webp' ? 'reference' : 'text');
-    assert.equal(record.outputFormat, 'jpeg', 'record the actual returned format even if the provider ignores the requested format');
-    await closeQueue(cp);
-  }
-  assert.equal(imageCount, controlsStart + 3);
+  const prompt = '检查锁定的默认生成参数';
+  await cp.getByLabel('画面提示词', { exact: true }).fill(prompt);
+  await controlsSubmit.click();
+  const record = (await waitRecords(cp, 1)).find((item) => item.prompt === prompt);
+  assert.equal(record.recipe.outputFormat, 'png');
+  assert.equal(record.recipe.quality, 'auto');
+  assert.equal(record.recipe.background, 'auto');
+  const call = app.calls.filter((call) => call.path.includes('/images/')).at(-1);
+  const form = call.json || Object.fromEntries(await new Request('http://fixture.local', { method: 'POST', headers: { 'Content-Type': call.headers['content-type'] }, body: call.body }).formData());
+  assert.equal(form.output_format, 'png');
+  assert.equal(form.quality, 'auto');
+  await closeQueue(cp);
+  assert.equal(imageCount, controlsStart + 1);
   const copied = cp.locator('.studio-feed article').filter({ has: cp.getByTitle('复制原图', { exact: true }) }).first();
   await copied.getByTitle('复制原图', { exact: true }).waitFor();
   await copied.getByRole('button', { name: /^查看作品详情/ }).click();
@@ -1061,17 +996,12 @@ try {
   const copiedDetails = copiedViewer.getByRole('button', { name: '查看详情', exact: true });
   if (await copiedDetails.count()) await copiedDetails.click();
   await copiedViewer.getByRole('button', { name: '用作参考图再创作', exact: true }).click();
-  await until(async () => (await toneControls.getByRole('button', { name: /^不额外调整/ }).getAttribute('aria-pressed')) === 'true', 'reference image loaded and additional tone cleared');
-  assert.equal(await toneControls.getByRole('button').count(), 3);
-  assert.equal(await toneControls.getByRole('button', { name: /^不额外调整/ }).getAttribute('aria-pressed'), 'true');
-  for (const label of ['柔和自然', '生动鲜明', '不额外调整']) await toneControls.getByRole('button', { name: new RegExp(`^${label}`) }).click();
-  assert.equal(await toneControls.getByRole('button').count(), 3, 'all tone choices remain available after switching');
   assert.equal(await cp.getByRole('button', { name: /原始配方/ }).count(), 0);
   await screenshot(cp, 'studio-controls-reference-desktop', true);
   await cp.setViewportSize({ width: 390, height: 844 });
   await screenshot(cp, 'studio-controls-reference-mobile', true);
   await controlsFlow.context.close();
-  checks.push('PNG/JPEG/WebP 切换与刷新后选中状态一致, 三种格式和调性进入实际请求; 上传参考图保留选择, 使用已有作品关闭额外调性, 三个选项始终可切换');
+  checks.push('精度、格式和透明背景在上游不支持时只读默认值, 请求仍按默认字段原样转发');
 
   const retryFlow = await contextPage();
   const rp = retryFlow.page;
@@ -1181,9 +1111,6 @@ try {
   await dp.getByLabel('画面提示词', { exact: true }).fill(draftPrompt);
   await dp.getByRole('button', { name: '2 张', exact: true }).click();
   await dp.getByRole('button', { name: /16:9 宽屏/ }).click();
-  await dp.getByRole('button', { name: '高清 HD', exact: true }).click();
-  await dp.getByRole('group', { name: '生成格式', exact: true }).getByRole('button', { name: 'WEBP', exact: true }).click();
-  await dp.getByRole('button', { name: /^生动鲜明/ }).click();
   await dp.locator('.studio-rail input[type=file]').setInputFiles(referenceFile);
   await until(async () => (await workspaceDraft(dp))?.refImage?.name === referenceFile.name, 'unsubmitted reference saved');
   await dp.reload();
@@ -1210,8 +1137,8 @@ try {
   releaseImage(); releaseImage = undefined; holdImage = undefined;
   await waitRecords(dp, 4);
   const completedDraft = await waitEmptyWorkspace(dp);
-  for (const [key, value] of Object.entries({ aspectRatio: '16:9', quality: 'high', outputFormat: 'webp', imageCount: 2 })) assert.equal(completedDraft.config[key], value);
-  assert.equal(completedDraft.tone, 'vivid');
+  for (const [key, value] of Object.entries({ aspectRatio: '16:9', quality: 'auto', outputFormat: 'png', imageCount: 2 })) assert.equal(completedDraft.config[key], value);
+  assert.equal(completedDraft.tone, 'none');
   await nav(dp, '单图创作');
   await dp.getByLabel('画面提示词', { exact: true }).waitFor();
   assert.equal(await dp.getByLabel('画面提示词', { exact: true }).inputValue(), '');

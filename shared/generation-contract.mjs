@@ -1,7 +1,7 @@
 import { validateCreditQuote } from './credits-contract.mjs';
 
 export const GENERATION_DEFAULTS = Object.freeze({
-  size: '1024x1024', quality: 'medium', outputFormat: 'png', background: 'auto', outputCompression: 90,
+  size: '1024x1024', quality: 'auto', outputFormat: 'png', background: 'auto', outputCompression: 90,
 });
 
 export const IMAGE_SIZES = Object.freeze(['auto', '1024x1024', '1536x1024', '1024x1536']);

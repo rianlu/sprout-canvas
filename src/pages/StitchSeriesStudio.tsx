@@ -221,7 +221,7 @@ export function SeriesStudio(props: SeriesStudioProps) {
                   <StitchIcon name="verified" size={16} className="text-primary" />
                   默认质量:{' '}
                   <strong className="text-on-surface font-medium">
-                    <select aria-label="系列生成质量" disabled={planLocked} className="bg-transparent disabled:opacity-60" value={config.quality} onChange={(event) => setConfig((current) => ({ ...current, quality: event.target.value as typeof current.quality }))}><option value="low">快速</option><option value="medium">标准</option><option value="high">精细</option><option value="auto">自动</option></select>
+                    <select aria-label="系列生成质量" disabled={planLocked} className="bg-transparent disabled:opacity-60" value={config.quality} onChange={(event) => setConfig((current) => ({ ...current, quality: event.target.value as typeof current.quality }))}><option value="auto">自动</option><option value="low">快速</option><option value="medium">标准</option><option value="high">精细</option></select>
                   </strong>
                 </span>
                 <span className="text-outline">·</span>

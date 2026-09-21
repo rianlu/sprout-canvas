@@ -20,6 +20,7 @@ import { StudioTemplateCard } from './StudioTemplateCard';
 import { StitchIcon } from '../ui/StitchIcon';
 import { useImageMetadata } from '../../hooks/useImageMetadata';
 import { formatRequestSize, qualityLabel, resolveSize } from '../../lib/api/generation';
+import { LOCK_UNSUPPORTED_IMAGE_OPTIONS } from '../../lib/image/channel-limits';
 import { imageFileExtension } from '../../lib/image/format';
 import { RecordImage } from '../gallery/RecordImage';
 import type { ImageCapabilities } from '../../types/provider';
@@ -60,8 +61,6 @@ export interface StitchStudioRailProps {
   maskStrokes: number;
   config: GenerationConfig;
   onConfigChange: (patch: Partial<GenerationConfig>) => void;
-  tone: 'soft' | 'vivid' | 'none';
-  onToneChange: (tone: 'soft' | 'vivid' | 'none') => void;
   onSubmit: () => void;
   submitting: boolean;
   onRemoveRef: (referenceId?: string) => void;
@@ -131,7 +130,7 @@ function SegmentedControl<T extends string>({
 }) {
   return (
     <div
-      className={`grid p-0.5 bg-surface-container rounded-lg ${columns === 3 ? 'grid-cols-3' : 'grid-cols-2'} text-center font-meta-sm text-meta-sm`}
+      className={`grid p-0.5 bg-surface-container rounded-lg ${columns === 4 ? 'grid-cols-4' : columns === 3 ? 'grid-cols-3' : 'grid-cols-2'} text-center font-meta-sm text-meta-sm`}
     >
       {options.map((opt) => {
         const active = opt.id === value;
@@ -175,8 +174,7 @@ export function StitchStudioRail(props: StitchStudioRailProps) {
     maskStrokes,
     config,
     onConfigChange,
-    tone,
-    onToneChange,
+
     onSubmit,
     submitting,
   } = props;
@@ -379,118 +377,118 @@ export function StitchStudioRail(props: StitchStudioRailProps) {
           <p className="font-meta-sm text-[10px] text-outline">目标画幅, 实际尺寸以生成文件为准</p>
         </div>
 
-        {/* 渲染调性 (PRD v3.1 新增, prompt 注入) */}
-        <div role="group" aria-label="渲染调性" className="bg-surface-container-low p-2.5 rounded-xl flex flex-col gap-2">
+        <div className="bg-surface-container-low p-2.5 rounded-xl flex flex-col gap-1.5">
           <div className="flex items-center justify-between">
-            <span className="font-meta-sm text-meta-sm text-on-surface font-medium">渲染调性</span>
-            <span className="font-meta-sm text-[10px] text-outline">可选的画面氛围</span>
+            <span className="font-meta-sm text-meta-sm text-on-surface font-medium">生成数量</span>
+            <span className="font-meta-sm text-[10px] text-outline">n (张)</span>
           </div>
           <SegmentedControl
             columns={3}
-            value={tone}
-            onChange={onToneChange}
+            value={String(config.imageCount) as '1' | '2' | '4'}
+            onChange={(v) => onConfigChange({ imageCount: Number(v) })}
             options={[
-              { id: 'none', label: '不额外调整', sub: '遵循提示词与画风' },
-              { id: 'soft', label: '柔和自然', sub: '柔和光影 · 温润自然' },
-              { id: 'vivid', label: '生动鲜明', sub: '明艳色彩 · 鲜明对比' },
+              { id: '1', label: '1 张' },
+              { id: '2', label: '2 张' },
+              { id: '4', label: '4 张' },
             ]}
           />
         </div>
 
-        {/* 精度 + 数量 */}
-        <div className="grid grid-cols-2 gap-space-sm">
-          <div className="bg-surface-container-low p-2.5 rounded-xl flex flex-col gap-1.5">
-            <div className="flex items-center justify-between">
-              <span className="font-meta-sm text-meta-sm text-on-surface font-medium">渲染精度</span>
-              <span className="font-meta-sm text-[10px] text-outline">quality</span>
+        {LOCK_UNSUPPORTED_IMAGE_OPTIONS ? (
+          <div role="group" aria-label="生成格式" className="rounded-xl bg-surface-container-low p-2.5 flex flex-col gap-2.5 text-on-surface-variant">
+            <p className="font-meta-sm text-[11px] text-outline">上游暂不支持修改, 将使用默认值</p>
+            <div className="flex items-center justify-between gap-2">
+              <span className="font-meta-sm text-meta-sm">渲染精度</span>
+              <span className="px-2.5 py-0.5 rounded-md bg-surface-container font-meta-sm text-[11px]">{qualityLabel(config.quality)}</span>
             </div>
-            <SegmentedControl
-              value={config.quality}
-              onChange={(quality) => onConfigChange({ quality })}
-              options={[
-                ...(config.quality === 'low' ? [{ id: 'low' as const, label: '快速' }] : []),
-                ...(config.quality === 'auto' ? [{ id: 'auto' as const, label: '自动' }] : []),
-                { id: 'medium', label: '标准' },
-                { id: 'high', label: '高清 HD' },
-              ]}
-            />
-          </div>
-          <div className="bg-surface-container-low p-2.5 rounded-xl flex flex-col gap-1.5">
-            <div className="flex items-center justify-between">
-              <span className="font-meta-sm text-meta-sm text-on-surface font-medium">生成数量</span>
-              <span className="font-meta-sm text-[10px] text-outline">n (张)</span>
+            <div className="flex items-center justify-between gap-2">
+              <span className="font-meta-sm text-meta-sm">生成格式</span>
+              <span aria-label="当前生成格式" className="px-2.5 py-0.5 rounded-md bg-surface-container font-meta-sm text-[11px]">{(config.outputFormat === 'auto' ? 'png' : config.outputFormat).toUpperCase()}</span>
             </div>
-            <SegmentedControl
-              columns={3}
-              value={String(config.imageCount) as '1' | '2' | '4'}
-              onChange={(v) => onConfigChange({ imageCount: Number(v) })}
-              options={[
-                { id: '1', label: '1 张' },
-                { id: '2', label: '2 张' },
-                { id: '4', label: '4 张' },
-              ]}
-            />
-          </div>
-        </div>
-
-        {/* 背景透光 */}
-        <div className="p-2.5 bg-surface-container-low rounded-xl flex flex-col gap-1.5">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-1.5">
-              <Layers className="text-primary" size={18} aria-hidden />
-              <span className="font-body-sm text-body-sm font-medium text-on-surface">画布背景透光 (background)</span>
+            <div className="flex items-center justify-between gap-2">
+              <span className="font-meta-sm text-meta-sm">透明背景</span>
+              <label className="relative inline-flex items-center opacity-50">
+                <input className="sr-only" type="checkbox" aria-label="透明背景" checked={config.background === 'transparent'} disabled readOnly />
+                <div className="w-9 h-5 rounded-full bg-surface-container-highest after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:h-4 after:w-4 after:rounded-full after:bg-white" />
+              </label>
             </div>
-            <label className="relative inline-flex items-center cursor-pointer">
-              <input
-                className="sr-only peer"
-                type="checkbox"
-                aria-label="透明背景"
-                checked={config.background === 'transparent'}
-                onChange={(event) => onConfigChange({ background: event.target.checked ? 'transparent' : 'auto' })}
-              />
-              <div className="w-9 h-5 bg-surface-container-highest peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-primary" />
-            </label>
           </div>
-          <div className="flex items-center justify-between text-outline font-meta-sm text-[10px]">
-            <span>开启后使用支持透明的 PNG 或 WebP</span>
-            <span className="text-primary">素材免抠</span>
-          </div>
-        </div>
-
-        {/* 生成格式: 单一能力显示为固定值, 多格式通道才提供选择 */}
-        <div role="group" aria-label="生成格式" className="flex flex-col gap-1.5 p-2.5 bg-surface-container-low rounded-xl">
-          <div className="flex items-center justify-between gap-2">
-            <div className="flex items-center gap-1.5">
-              <Download className="text-outline" size={16} aria-hidden />
-              <span className="font-meta-sm text-meta-sm text-on-surface-variant font-medium">生成格式</span>
-            </div>
-            {outputFormats.length === 1 ? (
-              <span aria-label="当前生成格式" className="px-2.5 py-0.5 rounded-md bg-surface-container font-meta-sm text-[11px] text-primary font-medium">{outputFormats[0].toUpperCase()}</span>
-            ) : outputFormats.length > 1 ? (
-              <div className="flex items-center gap-1 bg-surface-container p-0.5 rounded-lg">
-                {outputFormats.map((fmt) => {
-                  const active = (config.outputFormat === 'auto' ? 'png' : config.outputFormat) === fmt;
-                  return (
-                    <button
-                      key={fmt}
-                      type="button"
-                      aria-pressed={active}
-                      className={
-                        active
-                          ? 'px-2.5 py-0.5 rounded-md bg-surface-container-lowest font-meta-sm text-[11px] text-primary font-medium shadow-sm'
-                          : 'px-2 py-0.5 rounded-md font-meta-sm text-[11px] text-on-surface-variant hover:text-on-surface transition-colors'
-                      }
-                      onClick={() => onConfigChange({ outputFormat: fmt })}
-                    >
-                      {fmt.toUpperCase()}
-                    </button>
-                  );
-                })}
+        ) : (
+          <>
+            <div className="bg-surface-container-low p-2.5 rounded-xl flex flex-col gap-1.5">
+              <div className="flex items-center justify-between">
+                <span className="font-meta-sm text-meta-sm text-on-surface font-medium">渲染精度</span>
+                <span className="font-meta-sm text-[10px] text-outline">quality</span>
               </div>
-            ) : <span role="status" className="font-meta-sm text-meta-sm text-outline">正在读取可用格式...</span>}
-          </div>
-          {outputFormats.length === 1 && <p className="font-meta-sm text-meta-sm text-on-surface-variant">当前支持 {outputFormats[0].toUpperCase()} 格式</p>}
-        </div>
+              <SegmentedControl
+                columns={4}
+                value={config.quality}
+                onChange={(quality) => onConfigChange({ quality })}
+                options={[
+                  { id: 'auto', label: '自动' },
+                  { id: 'low', label: '快速' },
+                  { id: 'medium', label: '标准' },
+                  { id: 'high', label: '高清 HD' },
+                ]}
+              />
+            </div>
+            <div className="p-2.5 bg-surface-container-low rounded-xl flex flex-col gap-1.5">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1.5">
+                  <Layers className="text-primary" size={18} aria-hidden />
+                  <span className="font-body-sm text-body-sm font-medium text-on-surface">画布背景透光 (background)</span>
+                </div>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input
+                    className="sr-only peer"
+                    type="checkbox"
+                    aria-label="透明背景"
+                    checked={config.background === 'transparent'}
+                    onChange={(event) => onConfigChange({ background: event.target.checked ? 'transparent' : 'auto' })}
+                  />
+                  <div className="w-9 h-5 bg-surface-container-highest peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-primary" />
+                </label>
+              </div>
+              <div className="flex items-center justify-between text-outline font-meta-sm text-[10px]">
+                <span>开启后使用支持透明的 PNG 或 WebP</span>
+                <span className="text-primary">素材免抠</span>
+              </div>
+            </div>
+            <div role="group" aria-label="生成格式" className="flex flex-col gap-1.5 p-2.5 bg-surface-container-low rounded-xl">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-1.5">
+                  <Download className="text-outline" size={16} aria-hidden />
+                  <span className="font-meta-sm text-meta-sm text-on-surface-variant font-medium">生成格式</span>
+                </div>
+                {outputFormats.length === 1 ? (
+                  <span aria-label="当前生成格式" className="px-2.5 py-0.5 rounded-md bg-surface-container font-meta-sm text-[11px] text-primary font-medium">{outputFormats[0].toUpperCase()}</span>
+                ) : outputFormats.length > 1 ? (
+                  <div className="flex items-center gap-1 bg-surface-container p-0.5 rounded-lg">
+                    {outputFormats.map((fmt) => {
+                      const active = (config.outputFormat === 'auto' ? 'png' : config.outputFormat) === fmt;
+                      return (
+                        <button
+                          key={fmt}
+                          type="button"
+                          aria-pressed={active}
+                          className={
+                            active
+                              ? 'px-2.5 py-0.5 rounded-md bg-surface-container-lowest font-meta-sm text-[11px] text-primary font-medium shadow-sm'
+                              : 'px-2 py-0.5 rounded-md font-meta-sm text-[11px] text-on-surface-variant hover:text-on-surface transition-colors'
+                          }
+                          onClick={() => onConfigChange({ outputFormat: fmt })}
+                        >
+                          {fmt.toUpperCase()}
+                        </button>
+                      );
+                    })}
+                  </div>
+                ) : <span role="status" className="font-meta-sm text-meta-sm text-outline">正在读取可用格式...</span>}
+              </div>
+              {outputFormats.length === 1 && <p className="font-meta-sm text-meta-sm text-on-surface-variant">当前支持 {outputFormats[0].toUpperCase()} 格式</p>}
+            </div>
+          </>
+        )}
       </div>}
 
       {/* 提交按钮 */}
