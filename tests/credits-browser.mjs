@@ -153,7 +153,6 @@ try {
   assert.equal(await dialog.getByRole('button', { name: '刷新数据', exact: true }).count(), 0);
   assert.equal(await dialog.getByRole('button', { name: '载入最新版本', exact: true }).count(), 0);
   await dialog.getByLabel('调整点数 (正数追加, 负数扣减)', { exact: true }).fill('5');
-  await dialog.getByLabel('操作原因').fill('追加朋友测试额度');
   const adjustmentBodies = []; let loseAdjustmentResponse = true;
   await admin.route(`**/api/admin/access-codes/${sharedId}`, async (route) => {
     if (route.request().method() !== 'PATCH') return route.continue();
@@ -196,10 +195,8 @@ try {
   await card(admin, '朋友长期共享').getByRole('button', { name: /^用量明细 / }).click();
   dialog = admin.getByRole('dialog', { name: '用量明细', exact: true });
   assert.equal(await admin.getByRole('dialog', { name: '管理访问码', exact: true }).count(), 0, '用量图标不触发卡片编辑');
-  await dialog.getByRole('button', { name: '核实处理' }).click();
-  await dialog.getByLabel('核实说明').fill('上游确认未产出结果');
   await screenshot(admin, 'usage-review');
-  await dialog.getByRole('button', { name: '确认核实结果' }).click();
+  await dialog.getByRole('button', { name: '返还点数', exact: true }).click();
   await dialog.getByText('核实结果已保存', { exact: true }).waitFor();
   assert.equal((await api(a, `/api/text/${textId}`)).data.credit.state, 'refunded');
   await dialog.getByLabel('关闭访问码弹窗').click();
@@ -426,7 +423,6 @@ try {
   dialog = admin.getByRole('dialog', { name: '管理访问码', exact: true });
   await dialog.getByRole('switch', { name: '无限额度', exact: true }).uncheck();
   await dialog.getByLabel('调整点数 (正数追加, 负数扣减)', { exact: true }).fill('30');
-  await dialog.getByLabel('操作原因').fill('切回有限额度并补充测试点数');
   await dialog.getByLabel('访问名称(用户可见)', { exact: true }).fill('限量朋友');
   const conflict = await api(admin, `/api/admin/access-codes/${unlimitedOwner.accessCodeId}`, 'PATCH', { requestId: randomUUID(), version: 1, note: '其他页面已修改' });
   assert.equal(conflict.status, 200);

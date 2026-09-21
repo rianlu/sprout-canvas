@@ -67,7 +67,6 @@ export function AccessCodeManager({ active, reviewCodeId, onReviewOpened }: { ac
   const [secrets, setSecrets] = useState<(AccessCodeRecord & { code?: string })[] | null>(null);
   const [usage, setUsage] = useState<Usage | null>(null);
   const [danger, setDanger] = useState<{ kind: 'reset' | 'delete'; requestId: string } | null>(null);
-  const [resolution, setResolution] = useState<{ id: string; requestId: string; decision: 'charge' | 'refund'; reason: string } | null>(null);
   const [prices, setPrices] = useState<CreditPrices | null>(null); const [priceError, setPriceError] = useState('');
   const [priceRequestId, setPriceRequestId] = useState(randomId);
   const lock = useRef(false); const sequence = useRef(0);
@@ -94,9 +93,9 @@ export function AccessCodeManager({ active, reviewCodeId, onReviewOpened }: { ac
     finally { lock.current = false; setBusy(false); }
   }
   function patch(value: Partial<Manager>) { setManager((old) => old && { ...old, ...value }); }
-  const close = useCallback(() => { setCreation(null); setManager(null); setManagerStale(false); setSecrets(null); setUsageRecord(null); setUsage(null); setDanger(null); setResolution(null); setError(''); setMessage(''); }, []);
+  const close = useCallback(() => { setCreation(null); setManager(null); setManagerStale(false); setSecrets(null); setUsageRecord(null); setUsage(null); setDanger(null); setError(''); setMessage(''); }, []);
   function openRecord(record: AccessCodeRecord) {
-    setManager(editRecord(record)); setManagerStale(false); setUsageRecord(null); setUsage(null); setDanger(null); setResolution(null);
+    setManager(editRecord(record)); setManagerStale(false); setUsageRecord(null); setUsage(null); setDanger(null);
     void run(async () => { setManager(editRecord((await getAccessCode(record.id)).accessCode)); });
   }
   async function refreshManager() {
@@ -114,8 +113,18 @@ export function AccessCodeManager({ active, reviewCodeId, onReviewOpened }: { ac
     setMessage('数据已刷新, 已保留尚未保存的修改, 请核对后继续');
   }
   function openUsage(record: AccessCodeRecord) {
-    setManager(null); setUsageRecord(record); setUsage(null); setResolution(null);
+    setManager(null); setUsageRecord(record); setUsage(null);
     void run(() => loadUsage(record.id));
+  }
+  function settleUnknown(id: string, decision: 'charge' | 'refund') {
+    const codeId = usageRecord?.id;
+    if (!codeId) return;
+    void run(async () => {
+      await resolveCredits(id, { requestId: randomId(), decision });
+      await loadUsage(codeId);
+      await refresh();
+      setMessage('核实结果已保存');
+    });
   }
   async function loadUsage(id: string) {
     const results = await Promise.allSettled([accessCodeLedger(id), unresolvedCredits(id), getAccessCode(id)]);
@@ -129,7 +138,7 @@ export function AccessCodeManager({ active, reviewCodeId, onReviewOpened }: { ac
   useEffect(() => {
     if (!active || !reviewCodeId || busy || lock.current) return;
     onReviewOpened?.();
-    setCreation(null); setManager(null); setSecrets(null); setUsageRecord(null); setUsage(null); setDanger(null); setResolution(null);
+    setCreation(null); setManager(null); setSecrets(null); setUsageRecord(null); setUsage(null); setDanger(null);
     void run(() => loadUsage(reviewCodeId));
   }, [active, reviewCodeId, onReviewOpened, busy]);
   function saveCreation(event: FormEvent) {
@@ -142,7 +151,7 @@ export function AccessCodeManager({ active, reviewCodeId, onReviewOpened }: { ac
   function saveManager(event: FormEvent) {
     event.preventDefault(); if (!manager || managerStale) return; const value = manager;
     void run(async () => {
-      await updateAccessCode(value.record.id, { requestId: value.requestId, version: value.record.version, note: value.note, enabled: value.enabled, unlimited: value.unlimited, delta: value.unlimited ? 0 : value.delta, reason: value.reason });
+      await updateAccessCode(value.record.id, { requestId: value.requestId, version: value.record.version, note: value.note, enabled: value.enabled, unlimited: value.unlimited, delta: value.unlimited ? 0 : value.delta });
       setManager(null); setUsage(null); setMessage('访问码设置已保存'); await refresh();
     });
   }
@@ -194,7 +203,6 @@ export function AccessCodeManager({ active, reviewCodeId, onReviewOpened }: { ac
         <form onSubmit={saveManager}><fieldset disabled={busy || Boolean(danger)} className="space-y-4">
           <label className="flex flex-col gap-2 font-body-sm text-body-sm">访问名称(用户可见)<input aria-label="访问名称(用户可见)" className={field} maxLength={CREDIT_LIMITS.note} value={manager.note} onChange={(event) => patch({ note: event.target.value })} placeholder="例如: 朋友共用, 第一轮测试" /><span className="font-meta-sm text-meta-sm text-on-surface-variant">显示在用户菜单中, 共用此码的人显示相同名称. 留空显示创作者.</span></label>
           <QuotaInput label="调整点数 (正数追加, 负数扣减)" value={manager.delta} min={-CREDIT_LIMITS.points} unlimited={manager.unlimited} onValueChange={(delta) => patch({ delta })} onUnlimitedChange={(unlimited) => patch({ unlimited })} description={manager.unlimited ? `原可用余额 ${manager.record.available.toLocaleString()} 点保留. 新任务不扣减余额, 已受理任务按原规则结算.` : `不调整时保持 0. 保存后可用约 ${(manager.record.available + manager.delta).toLocaleString()} 点, 最终以任务实时结算为准.`} />
-          {!manager.unlimited && manager.delta !== 0 && <label className="flex flex-col gap-2 font-body-sm text-body-sm">操作原因<input className={field} required maxLength={CREDIT_LIMITS.reason} value={manager.reason} onChange={(event) => patch({ reason: event.target.value })} placeholder="例如: 追加朋友测试额度" /></label>}
           <label className="flex items-center justify-between gap-3 font-body-sm text-body-sm p-3 rounded-xl bg-surface-container-low"><span>允许使用此访问码</span><input type="checkbox" checked={manager.enabled} onChange={(event) => patch({ enabled: event.target.checked })} className="w-4 h-4 accent-primary" /></label>
           {!manager.enabled && manager.record.enabled && <p className="font-meta-sm text-meta-sm text-on-surface-variant">保存后停止新建任务, 未执行的任务会取消并释放占用点数. 已开始的任务正常收尾.</p>}
           <div className="flex flex-wrap items-center justify-end gap-2">
@@ -220,12 +228,13 @@ export function AccessCodeManager({ active, reviewCodeId, onReviewOpened }: { ac
         {usage && <>
           {usage.operations.length > 0 && <section aria-label="待核实任务" className="p-3 rounded-xl border border-outline-variant/40 space-y-3">
             <h3 className="font-body-md text-body-md font-medium">待核实任务</h3><p className="font-meta-sm text-meta-sm text-on-surface-variant">核对上游实际结果后再结算. 无限额度任务仅记录结果, 不扣减余额.</p>
-            {usage.operations.map((op) => <div key={op.id} className="flex flex-wrap items-center justify-between gap-2 font-body-sm text-body-sm"><span>{kinds[op.kind]} · {op.unlimited ? '无限额度' : `${op.points} 点`} · {time(op.createdAt)}</span><button type="button" disabled={busy} className="text-primary" onClick={() => setResolution({ id: op.id, requestId: randomId(), decision: 'refund', reason: '' })}>核实处理</button></div>)}
-            {resolution && <form onSubmit={(event) => { event.preventDefault(); void run(async () => { await resolveCredits(resolution.id, resolution); setResolution(null); await loadUsage(usageRecord.id); await refresh(); setMessage('核实结果已保存'); }); }}><fieldset disabled={busy} className="space-y-3 border-t border-outline-variant/30 pt-3">
-              <label className="flex flex-col gap-1 text-body-sm">核实结果<select aria-label="核实结果" className={field} value={resolution.decision} onChange={(event) => setResolution({ ...resolution, decision: event.target.value as 'charge' | 'refund' })}><option value="refund">确认失败, 返还占用点数</option><option value="charge">确认成功, 按原额度规则结算</option></select></label>
-              <label className="flex flex-col gap-1 text-body-sm">核实说明<input required className={field} maxLength={CREDIT_LIMITS.reason} value={resolution.reason} onChange={(event) => setResolution({ ...resolution, reason: event.target.value })} /></label>
-              <button type="submit" disabled={!resolution.reason.trim()} className={`${button} bg-primary text-on-primary`}>确认核实结果</button>
-            </fieldset></form>}
+            {usage.operations.map((op) => <div key={op.id} className="flex flex-wrap items-center justify-between gap-2 font-body-sm text-body-sm">
+              <span>{kinds[op.kind]} · {op.unlimited ? '无限额度' : `${op.points} 点`} · {time(op.createdAt)}</span>
+              <div className="flex items-center gap-2">
+                <button type="button" disabled={busy} className={`${button} bg-primary text-on-primary`} onClick={() => settleUnknown(op.id, 'refund')}>返还点数</button>
+                <button type="button" disabled={busy} className={`${button} bg-surface-container`} onClick={() => settleUnknown(op.id, 'charge')}>扣除点数</button>
+              </div>
+            </div>)}
           </section>}
           {usage.unresolvedCursor !== null && <button type="button" disabled={busy} className={`${button} bg-surface-container`} onClick={() => void run(async () => { const result = await unresolvedCredits(usageRecord.id, usage.unresolvedCursor!); setUsage((old) => old && { ...old, operations: [...old.operations, ...result.operations], unresolvedCursor: result.nextCursor }); })}>加载更多待核实任务</button>}
           <ol className="space-y-2">{usage.entries.map((entry) => <li key={entry.id} className="p-3 rounded-xl bg-surface-container-low">

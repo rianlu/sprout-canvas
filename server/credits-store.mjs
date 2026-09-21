@@ -214,7 +214,7 @@ export function createCreditsStore(db, transaction) {
       if (input.enabled !== undefined && typeof input.enabled !== 'boolean') throw requestError('启用状态无效');
       if (input.unlimited !== undefined && typeof input.unlimited !== 'boolean') throw requestError('额度模式无效');
       const delta = creditInteger(input.delta ?? 0, '调整点数', -CREDIT_LIMITS.points, CREDIT_LIMITS.points);
-      const reason = creditText(input.reason ?? '', '调整原因', CREDIT_LIMITS.reason, Boolean(delta));
+      const reason = creditText(input.reason ?? '', '调整原因', CREDIT_LIMITS.reason) || (delta > 0 ? '管理员追加灵感点' : delta < 0 ? '管理员扣减灵感点' : '');
       return adminAction(input.requestId, `update:${id}`, { note, enabled: input.enabled, unlimited: input.unlimited, delta: input.delta === undefined ? undefined : delta, reason: input.reason === undefined ? undefined : reason, version: input.version }, () => {
         const row = requiredCode(id, input.version);
         const enabled = input.enabled === undefined ? row.enabled : Number(input.enabled);
@@ -234,7 +234,7 @@ export function createCreditsStore(db, transaction) {
       creditInteger(input.version, '访问码版本', 1, Number.MAX_SAFE_INTEGER);
       const delta = creditInteger(input.delta, '调整点数', -CREDIT_LIMITS.points, CREDIT_LIMITS.points);
       if (!delta) throw requestError('调整点数不能为 0');
-      const reason = creditText(input.reason, '调整原因', CREDIT_LIMITS.reason, true);
+      const reason = creditText(input.reason ?? '', '调整原因', CREDIT_LIMITS.reason) || (delta > 0 ? '管理员追加灵感点' : '管理员扣减灵感点');
       return adminAction(input.requestId, `adjust:${id}`, { delta, reason, version: input.version }, () => {
         const row = requiredCode(id, input.version);
         if (row.unlimited) throw requestError('无限额度不需要调整点数, 请先选择有限额度');
@@ -291,7 +291,8 @@ export function createCreditsStore(db, transaction) {
     },
     resolve(id, input) {
       if (!['charge', 'refund'].includes(input.decision)) throw requestError('结算选项无效');
-      const reason = creditText(input.reason, '核实原因', CREDIT_LIMITS.reason, true);
+      const reason = creditText(input.reason ?? '', '核实原因', CREDIT_LIMITS.reason)
+        || (input.decision === 'charge' ? '管理员确认已完成, 按原额度规则结算' : '管理员确认未产出结果, 返还占用点数');
       return adminAction(input.requestId, `resolve:${id}`, { decision: input.decision, reason }, () => {
         const op = operation(id);
         if (!op || op.state !== 'unknown') throw creditError('此任务不再需要核实, 请刷新明细', 'VERSION_CONFLICT');

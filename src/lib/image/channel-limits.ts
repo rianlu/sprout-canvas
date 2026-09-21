@@ -6,8 +6,7 @@ import type { GenerationConfig } from '../../types/generation';
  */
 export const LOCK_UNSUPPORTED_IMAGE_OPTIONS = true;
 
-export const LOCKED_IMAGE_DEFAULTS: Pick<GenerationConfig, 'quality' | 'outputFormat' | 'background'> = {
+export const LOCKED_IMAGE_DEFAULTS: Pick<GenerationConfig, 'quality' | 'outputFormat'> = {
   quality: 'auto',
   outputFormat: 'png',
-  background: 'auto',
 };

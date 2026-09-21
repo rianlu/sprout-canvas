@@ -192,11 +192,9 @@ export function CreativeStudio({ onOpenStyles, onOpenGallery, onSubmitBatch, onC
       if (LOCK_UNSUPPORTED_IMAGE_OPTIONS) {
         next.quality = LOCKED_IMAGE_DEFAULTS.quality;
         next.outputFormat = LOCKED_IMAGE_DEFAULTS.outputFormat;
-        next.background = LOCKED_IMAGE_DEFAULTS.background;
-      } else {
-        if (patch.background === 'transparent' && next.outputFormat === 'jpeg') next.outputFormat = 'png';
-        if (patch.outputFormat === 'jpeg' && next.background === 'transparent') next.background = 'auto';
       }
+      if (patch.background === 'transparent' && next.outputFormat === 'jpeg') next.outputFormat = 'png';
+      if (patch.outputFormat === 'jpeg' && next.background === 'transparent') next.background = 'auto';
       return next;
     });
   }, []);

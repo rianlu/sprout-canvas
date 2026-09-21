@@ -687,20 +687,32 @@ function providerLoad(providerId) {
   return count;
 }
 
+function requestWantsTransparent(contentType, body) {
+  if (!body) return false;
+  const raw = Buffer.from(body);
+  if (isJsonContent(contentType)) {
+    try { return JSON.parse(raw.toString('utf8')).background === 'transparent'; } catch { return false; }
+  }
+  const text = raw.toString('utf8');
+  return text.includes('name="background"') && text.includes('transparent');
+}
+
 function compatibleProviders(config, upstreamPath, contentType, body) {
   const providers = Array.isArray(config.providers) ? config.providers : [];
+  const transparent = requestWantsTransparent(contentType, body);
   if (upstreamPath === '/v1/images/generations' && isJsonContent(contentType)) {
     let payload = {};
     try { if (body) payload = JSON.parse(Buffer.from(body).toString('utf8')); } catch { return []; }
     return providers.filter((provider) => {
       if (provider.generationMode !== 'images' && provider.generationMode !== 'responses') return false;
+      if (transparent && !provider.capabilities?.transparent) return false;
       if (payload.output_format && provider.capabilities?.outputFormats && !provider.capabilities.outputFormats.includes(payload.output_format)) return false;
       if (!payload.size || ['auto', '1024x1024', '1536x1024', '1024x1536'].includes(payload.size)) return true;
       return provider.generationMode === 'images' && /^gpt-image-2(?:-|$)/.test(provider.imageModel);
     });
   }
   if (upstreamPath === '/v1/images/edits' && isMultipartEdit(contentType)) {
-    return providers.filter((provider) => provider.generationMode === 'images');
+    return providers.filter((provider) => provider.generationMode === 'images' && (!transparent || provider.capabilities?.transparent));
   }
   if (upstreamPath.startsWith('/v1/responses')) {
     return providers.filter((provider) => provider.generationMode === 'responses');

@@ -395,6 +395,25 @@ export function StitchStudioRail(props: StitchStudioRailProps) {
         </div>
 
         {LOCK_UNSUPPORTED_IMAGE_OPTIONS ? (
+          <>
+          <div className="p-2.5 bg-surface-container-low rounded-xl flex flex-col gap-1.5">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="font-meta-sm text-meta-sm text-on-surface font-medium">透明背景</p>
+                <p className="font-meta-sm text-[10px] text-outline">开启后走支持透明底的通道</p>
+              </div>
+              <label className="relative inline-flex items-center cursor-pointer">
+                <input
+                  className="sr-only peer"
+                  type="checkbox"
+                  aria-label="透明背景"
+                  checked={config.background === 'transparent'}
+                  onChange={(event) => onConfigChange({ background: event.target.checked ? 'transparent' : 'auto' })}
+                />
+                <div className="w-9 h-5 bg-surface-container-highest peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-primary" />
+              </label>
+            </div>
+          </div>
           <div role="group" aria-label="生成格式" className="rounded-xl bg-surface-container-low p-2.5 flex flex-col gap-2.5 text-on-surface-variant">
             <p className="font-meta-sm text-[11px] text-outline">上游暂不支持修改, 将使用默认值</p>
             <div className="flex items-center justify-between gap-2">
@@ -405,14 +424,8 @@ export function StitchStudioRail(props: StitchStudioRailProps) {
               <span className="font-meta-sm text-meta-sm">生成格式</span>
               <span aria-label="当前生成格式" className="px-2.5 py-0.5 rounded-md bg-surface-container font-meta-sm text-[11px]">{(config.outputFormat === 'auto' ? 'png' : config.outputFormat).toUpperCase()}</span>
             </div>
-            <div className="flex items-center justify-between gap-2">
-              <span className="font-meta-sm text-meta-sm">透明背景</span>
-              <label className="relative inline-flex items-center opacity-50">
-                <input className="sr-only" type="checkbox" aria-label="透明背景" checked={config.background === 'transparent'} disabled readOnly />
-                <div className="w-9 h-5 rounded-full bg-surface-container-highest after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:h-4 after:w-4 after:rounded-full after:bg-white" />
-              </label>
-            </div>
           </div>
+          </>
         ) : (
           <>
             <div className="bg-surface-container-low p-2.5 rounded-xl flex flex-col gap-1.5">

@@ -59,7 +59,7 @@ export async function startHarness({ serveDist = false, imageMode = 'images', co
   const config = {
     host: '127.0.0.1', port, adminPassword: TEST_ADMIN_PASSWORD, cookieNamespace, dataDir: 'data', stateFile: 'data/runtime.sqlite', imageConcurrency: 1,
     defaultImageProvider: 'primary',
-    imageProviders: ['primary', 'secondary'].map((id) => ({ id, name: id, baseUrl: `${upstreamUrl}/${id}`, apiKey: `fixture-${id}-key`, imageModel: imageMode === 'images' ? 'gpt-image-2' : 'gpt-5', generationMode: imageMode })),
+    imageProviders: ['primary', 'secondary'].map((id) => ({ id, name: id, baseUrl: `${upstreamUrl}/${id}`, apiKey: `fixture-${id}-key`, imageModel: imageMode === 'images' ? 'gpt-image-2' : 'gpt-5', generationMode: imageMode, capabilities: { outputFormats: ['png', 'jpeg', 'webp'], exactSize: false, transparent: true } })),
     textProviders: [{ id: 'text', name: 'text', baseUrl: upstreamUrl, apiKey: 'fixture-text-key', model: 'text-fixture' }],
   };
   await writeFile(path.join(directory, 'config/local.config.json'), JSON.stringify(config));

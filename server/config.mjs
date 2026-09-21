@@ -35,12 +35,13 @@ function normalizeImageProvider(provider, index) {
     capabilities: {
       outputFormats: provider.capabilities?.outputFormats ?? ['png', 'jpeg', 'webp'],
       exactSize: provider.capabilities?.exactSize ?? false,
+      transparent: provider.capabilities?.transparent === true,
     },
     requestHeaders: provider.requestHeaders && typeof provider.requestHeaders === 'object' ? provider.requestHeaders : {},
   };
   if (!config.apiKey) throw new Error(`生图服务商 ${name} 缺少 apiKey. 请检查 ${path.relative(ROOT, LOCAL_CONFIG_PATH)}`);
   if (!['images', 'responses'].includes(config.generationMode)) throw new Error(`生图服务商 ${name} 的 generationMode 只能是 images 或 responses`);
-  if (!Array.isArray(config.capabilities.outputFormats) || !config.capabilities.outputFormats.length || config.capabilities.outputFormats.some((format) => !['png', 'jpeg', 'webp'].includes(format)) || typeof config.capabilities.exactSize !== 'boolean') throw new Error(`生图服务商 ${name} 的 capabilities 配置无效`);
+  if (!Array.isArray(config.capabilities.outputFormats) || !config.capabilities.outputFormats.length || config.capabilities.outputFormats.some((format) => !['png', 'jpeg', 'webp'].includes(format)) || typeof config.capabilities.exactSize !== 'boolean' || typeof config.capabilities.transparent !== 'boolean') throw new Error(`生图服务商 ${name} 的 capabilities 配置无效`);
   return config;
 }
 

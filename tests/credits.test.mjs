@@ -147,9 +147,10 @@ test('结果未知保留预占, 管理员核实幂等, 已结束请求不会重�
     assert.equal(store.credits.unresolved(access.id).operations.length, 1);
     store.credits.settle(task.creditId, 'refunded');
     assert.equal(store.credits.balance(access.id).reserved, 10);
-    const input = { requestId: requestId(), decision: 'refund', reason: '核对上游未产出结果' };
+    const input = { requestId: requestId(), decision: 'refund' };
     store.credits.resolve(task.creditId, input); store.credits.resolve(task.creditId, input);
     assert.equal(store.credits.balance(access.id).available, 100);
+    assert.equal(store.credits.ledger(access.id).entries.find((entry) => entry.event === 'refund')?.reason, '管理员确认未产出结果, 返还占用点数');
     assert.throws(() => store.credits.resolve(task.creditId, { ...input, requestId: requestId() }), /不再需要/);
   } finally { store.close(); }
 });

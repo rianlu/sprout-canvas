@@ -11,6 +11,6 @@ export function adjustAccessCode(id: string, input: { requestId: string; version
 export function resetAccessCode(id: string, input: { requestId: string; version: number; reason?: string }) { return apiFetch<{ accessCode: AccessCodeRecord; code?: string; replayed?: boolean }>(`/api/admin/access-codes/${id}/reset`, { method: 'POST', ...body(input) }); }
 export function accessCodeLedger(id: string, cursor?: number) { return apiFetch<{ entries: CreditLedgerEntry[]; nextCursor: number | null }>(`/api/admin/access-codes/${id}/ledger${cursor ? `?cursor=${cursor}` : ''}`); }
 export function unresolvedCredits(id: string, cursor?: number) { return apiFetch<{ operations: CreditOperation[]; nextCursor: number | null }>(`/api/admin/access-codes/${id}/unresolved${cursor ? `?cursor=${cursor}` : ''}`); }
-export function resolveCredits(id: string, input: { requestId: string; decision: 'charge' | 'refund'; reason: string }) { return apiFetch(`/api/admin/credit-operations/${id}/resolve`, { method: 'POST', ...body(input) }); }
+export function resolveCredits(id: string, input: { requestId: string; decision: 'charge' | 'refund'; reason?: string }) { return apiFetch(`/api/admin/credit-operations/${id}/resolve`, { method: 'POST', ...body(input) }); }
 export function getCreditPrices() { return apiFetch<{ prices: CreditPrices }>('/api/admin/credit-prices'); }
 export function saveCreditPrices(input: CreditPrices & { requestId: string }) { return apiFetch<{ prices: CreditPrices }>('/api/admin/credit-prices', { method: 'PUT', ...body(input) }); }

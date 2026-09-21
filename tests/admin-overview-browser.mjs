@@ -191,9 +191,7 @@ try {
   assert.equal(await page.getByRole('dialog', { name: '管理访问码', exact: true }).count(), 0);
   assert.ok((await dialog.innerText()).includes(finite.tail));
   await screenshot('dashboard-review-dialog');
-  await dialog.getByRole('button', { name: '核实处理', exact: true }).click();
-  await dialog.getByLabel('核实说明', { exact: true }).fill('虚拟上游确认未生成');
-  await dialog.getByRole('button', { name: '确认核实结果', exact: true }).click();
+  await dialog.getByRole('button', { name: '返还点数', exact: true }).click();
   await dialog.getByRole('status').filter({ hasText: '核实结果已保存' }).waitFor();
   await dialog.getByRole('button', { name: '关闭访问码弹窗' }).click();
   await nav('仪表盘').click();

@@ -10,7 +10,8 @@
       "generationMode": "images",
       "capabilities": {
         "outputFormats": ["png", "jpeg", "webp"],
-        "exactSize": false
+        "exactSize": false,
+        "transparent": false
       }
     },
     {
