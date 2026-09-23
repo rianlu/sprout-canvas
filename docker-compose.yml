@@ -14,7 +14,21 @@ services:
       HOST: 0.0.0.0
     restart: unless-stopped
     stop_grace_period: 460s
-
+  caddy:
+    image: caddy:2
+    container_name: sprout-caddy
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - sprout-canvas
+    networks:
+      - default
+    restart: unless-stopped
   cloudflared:
     image: cloudflare/cloudflared:2026.9.0
     profiles:
@@ -51,7 +65,9 @@ services:
       options:
         max-size: "10m"
         max-file: "3"
-
+volumes:
+  caddy_data:
+  caddy_config:
 networks:
   default:
   tunnel-egress:
