@@ -5,7 +5,7 @@
 - 使用中文名芽绘台, 英文名 SproutCanvas, 包名 `sprout-canvas`.
 - 保持多 Provider 图像生成工作台定位: 文生图, 参考图生成, 蒙版编辑和系列策划.
 - 不添加视频生成, LoRA 训练, 团队协作, 充值支付或云端作品库. 使用访问码与灵感点管理测试额度, 视频分镜只生成静态图片.
-- 按 `docs/PRD.md`, `docs/DESIGN.md` 和 `docs/FEATURE_ARCHITECTURE_REVIEW.md` 执行当前要求. 将 `docs/UI_V3_PLAN.md` 视为历史记录.
+- 按 `docs/PRD.md`, `docs/DESIGN.md` 和 `docs/FEATURE_ARCHITECTURE_REVIEW.md` 执行当前要求.
 - 保留 Stitch 五张正式稿的布局和视觉语言. 以用户后续决策覆盖原稿的功能假设: 移除作品精选收藏, 回收站和不支持的模型参数.
 
 ## 常用命令

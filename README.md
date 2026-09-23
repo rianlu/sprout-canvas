@@ -247,7 +247,6 @@ npm run dev
 | [设计规范](docs/DESIGN.md) / [品牌与定位](docs/BRAND_AND_POSITIONING.md) | 界面布局, 字体配色与产品文案约定. |
 | [功能清单与架构评估](docs/FEATURE_ARCHITECTURE_REVIEW.md) | 功能实现情况, 模块边界与技术架构. |
 | [访问码与灵感点改造清单](docs/ACCESS_CODE_CREDITS_PLAN.md) | 额度规则, 后台与用户端变更, 迁移和验收范围. |
-| [Stitch UI 对齐记录](docs/UI_STITCH_ALIGNMENT.md) | 设计稿对应关系与页面验收记录. |
 | [真实通道能力验证](docs/REAL_API_VALIDATION.md) | 实际 API 行为, 输出格式与能力边界. |
 
 ## 素材来源
