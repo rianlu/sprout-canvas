@@ -23,7 +23,8 @@ export function createStyleRoutes({ store, adminAuth, readConfig, requireUser })
     const image = pathname.match(/^\/api\/styles\/images\/([^/]+)$/);
     if (image && req.method === 'GET') {
       const file = store.image(image[1], admin);
-      res.writeHead(200, { 'Content-Type': file.mime, 'Content-Length': file.bytes.length, 'Cache-Control': 'private, no-cache' });
+      // 文件名是图片内容 SHA256, 内容不可变: 永久缓存, 替换图片时文件名变化自然失效.
+      res.writeHead(200, { 'Content-Type': file.mime, 'Content-Length': file.bytes.length, 'Cache-Control': 'private, max-age=31536000, immutable' });
       res.end(file.bytes); return true;
     }
     if (!admin) throw requestError('接口不存在', 404);

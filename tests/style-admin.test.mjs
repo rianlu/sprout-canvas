@@ -50,6 +50,7 @@ test('style management authorization, persistence, assets and archive transactio
       const image = await app.api(first.image, { cookie: admin });
       assert.equal(image.status, 200);
       assert.equal(image.headers.get('content-type'), 'image/png');
+      assert.equal(image.headers.get('cache-control'), 'private, max-age=31536000, immutable');
       assert.equal((await list(false)).styles.length, 38);
     });
     await t.test('version checks prevent lost updates and publishing affects the public library', async () => {
