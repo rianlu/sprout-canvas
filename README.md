@@ -166,9 +166,7 @@ sc_J3L9sv4YYnhv5lRbzgzA7PK4gwUbzZoc
 
 Docker 默认使用主机端口 `8888`. 持久化目录, 密码规则, HTTPS 与更新步骤见 [部署与配置](docs/DEPLOY.md#32-docker).
 
-没有域名时, 可启用 [临时公网入口](docs/DEPLOY.md#321-临时公网入口), 让 Cloudflare Tunnel 随 Docker 项目一起启动和停止.
-
-已有域名时, 按 [正式公网入口](docs/DEPLOY.md#322-正式公网入口) 配置固定网址, 继续复用现有 Docker 部署.
+服务器有公网 IP 时, 按 [Caddy 直连公网入口](docs/DEPLOY.md#321-caddy-直连公网入口) 配置 HTTPS 域名, Caddy 自动申请并续期 Let's Encrypt 证书.
 
 <details>
 <summary>使用 Node.js 在本机运行</summary>
@@ -198,7 +196,7 @@ npm start
 - **前端**: React 19, TypeScript 6, Vite 8, Tailwind CSS 3, 本地图标与字体.
 - **服务端**: Node.js 22, 同源 HTTP 服务, Images / Responses 适配, 单 worker 任务队列.
 - **数据**: 服务端使用内置 SQLite 保存任务元信息, 访问码, 点数账本, 会话和风格目录; 浏览器使用 IndexedDB 保存作品与草稿.
-- **部署**: Docker Compose, Node.js 直接运行或单实例 PM2; 可选 Cloudflare Tunnel 提供临时或固定域名的 HTTPS 入口.
+- **部署**: Docker Compose, Node.js 直接运行或单实例 PM2; 服务器直连时由 Caddy 反向代理提供 HTTPS 入口.
 
 API Key 只由服务端持有. 保持单个 Node 进程, 单个容器副本和 `imageConcurrency: 1`. 模块职责与数据流见 [功能清单与架构评估](docs/FEATURE_ARCHITECTURE_REVIEW.md).
 

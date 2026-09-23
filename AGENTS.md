@@ -119,7 +119,7 @@
 - 在接受新增/修改/导入前校验整个风格库可完整导出和恢复, 不生成超过导入限制的备份. 清理无引用示例图, 保留初始素材署名与许可.
 - 将本机手动测试与 Docker 的数据目录和网页地址隔离; 不修改真实部署密码和图像通道来运行自动测试.
 - 将临时公网隧道放在 Compose 的可选 `tunnel` profile, 通过本机 `.env` 显式启用. 使用独立 `cloudflared` 容器连接芽绘台的容器端口, 不挂载应用配置和数据. 将可选 IPv6 出站放在隧道专用网络, 不改变应用网络; 先确认实际 Docker context 和代理路径再排查连通性. 验证整个 Compose 项目的启动/停止, 不将依赖启动顺序表述为单容器持续联动; 提醒临时地址重启后变化及浏览器存储的地址隔离.
-- 使用 `docker-compose.named-tunnel.yml` 接入由 Cloudflare 控制台管理的正式隧道. 从本机 `.env` 的 `TUNNEL_TOKEN` 创建 Compose secret, 通过 `--token-file` 读取, 不将令牌写入命令参数或容器环境变量. 新域名验证通过后才切换正式服务并结束临时入口与验证连接器; 复用应用容器和数据, 不在应用代码里写死域名.
+- 服务器有公网 IP 时使用 `caddy` 服务作为默认公网入口, 监听 80/443 反向代理到 `sprout-canvas:8787`, 自动申请并续期 Let's Encrypt 证书. 将域名记录在 DNS 托管处设为 A 记录指向服务器 IP 并关闭代理 (仅 DNS), 不放行 CDN 代理. 入口配置只写 `Caddyfile`, 不将域名写死在应用代码里; 同一域名同一时刻只能指向一台机器. 保留 `docker-compose.named-tunnel.yml` 与 `cloudflared` 服务 (置于 `tunnel` profile) 仅用于回滚, 默认不启动, `.env` 不设置 `COMPOSE_PROFILES=tunnel`.
 - 通过 Tailwind 3 + PostCSS 编译 React 源码类名, 不依赖设计稿目录参与生产构建. 复用语义色与本地图标字体.
 - 先在本机完成相关验证, 再按授权提交推送. 浏览器交互使用同版本 Linux Chromium 容器补充验证; Docker 使用独立原生数据卷验证重启, 重建和文件权限. 将 GitHub CI 作为复核.
 - 修改后运行直接相关测试. 发布前检查 `npm test`, 浏览器验收, Docker 验收和 `git diff --check`.

@@ -134,112 +134,48 @@ docker compose up -d --build
 - 保持 `stop_grace_period: 460s`. 镜像包含 `/health` 健康检查.
 - 保持一个容器副本; 多副本会各自运行一个 worker, 破坏全局并发 1 的约定.
 
-#### 3.2.1 临时公网入口
+#### 3.2.1 Caddy 直连公网入口
 
-- 仅在需要临时分享时启用 `tunnel` profile. 默认只启动芽绘台, 不自动创建公网入口. 使用 Cloudflare Quick Tunnel 时无需域名, Cloudflare 账号或隧道令牌.
-- 在项目根目录的 `.env` 中添加以下配置. 保留已有内容; 若已设置其他 Compose profile, 用逗号追加 `tunnel`. 不提交 `.env`.
+服务器有公网 IP 时的默认公网入口, 取代 Cloudflare 隧道. `caddy` 服务随 Docker 项目一起启动, 监听宿主机 80/443, 自动申请并续期 Let's Encrypt 证书, 将 HTTPS 请求反向代理到容器内的 `sprout-canvas:8787`.
 
-```dotenv
-COMPOSE_PROFILES=tunnel
+前置条件: 服务器有公网 IP; 域名 DNS 可以指向该 IP (可继续使用 Cloudflare 仅 DNS 托管, 关闭代理).
+
+1. 确认 `docker-compose.yml` 包含 `caddy` 服务, 项目根目录存在 `Caddyfile`, 其中域名替换为自己的域名:
+
+```
+draw.example.com {
+    reverse_proxy sprout-canvas:8787
+}
 ```
 
-- 使用同一 Compose 项目启动两个服务. 隧道等待芽绘台健康后连接 `http://sprout-canvas:8787`, 默认自动选择连接协议, 优先使用 QUIC, 无法建立 QUIC 连接时尝试 HTTP/2. 不额外映射主机端口, 不挂载项目配置或数据. 让 Docker 网络能够访问 Cloudflare 的出站 UDP 7844 (QUIC), TCP 7844 (HTTP/2) 和 HTTPS API; 至少保持一种隧道协议可用.
+2. 在云控制台安全组放行 80 和 443 入站 (仅放行 22 时公网 HTTPS 不可达). 服务器本机不额外配置防火墙.
+
+3. 在 DNS 托管处将域名设置为 A 记录指向服务器公网 IP, 代理状态关闭 (仅 DNS, 灰云朵), 不经过 CDN 代理. 等待解析生效.
+
+4. 构建并启动:
 
 ```sh
-docker compose up -d
-docker compose logs --tail 100 cloudflared
+docker compose up -d --build
 ```
 
-- 从最新启动日志中复制 `https://...trycloudflare.com` 地址. 在 Docker Desktop 或 OrbStack 中也可展开 `sprout-canvas` 项目, 打开 `cloudflared` 的日志查看. 使用已有访问码登录, 按 HTTPS 部署要求设置 `secureCookies: true`.
-- 在隧道健康检查通过且外网访问正常后分享地址. 日志中的地址仅表示申请成功, 不代表隧道已连接; 若容器显示 `unhealthy`, 检查连接 Cloudflare 的网络和代理, 不通过关闭健康检查掩盖断开状态.
-- 在生成和文字处理结束, 图片保存后, 使用整个 Compose 项目的启动/停止按钮, 或执行下面的命令. 单独停止芽绘台容器不会同时停止隧道; `depends_on` 负责启动与整体停止的顺序, 不持续绑定两个容器的运行状态. 隧道最多等待现有请求 3 分钟后关闭, 芽绘台保留独立的任务收尾等待.
+Caddy 首次启动时向 Let's Encrypt 申请证书 (HTTP-01 验证需要 80 端口可达), 证书每 90 天自动续期, 不人工干预.
+
+5. 验证:
 
 ```sh
-docker compose stop
-docker compose up -d
+curl -fsS https://draw.example.com/ready
 ```
 
-- 保持 Docker Desktop 或 OrbStack 运行. 如需登录 Mac 后继续提供服务, 启用所用容器应用的登录启动选项. `unless-stopped` 会恢复之前运行的容器, 已手动停止的项目需再次启动. 允许关闭终端和屏幕, 不让承载服务的电脑休眠或关机.
-- 每次隧道进程重新启动都会申请新的临时地址, 从日志获取最新地址再分享. 切换地址前下载需要保留的作品; 不同地址下的浏览器作品, 草稿和登录状态不会自动迁移. 本机地址仍为 `http://127.0.0.1:8888`.
-- 在首次切换完成并验证新地址后, 结束原终端中的 `cloudflared` 进程, 避免留下另一个独立运行的入口.
-- 将隧道日志限制为每份 10 MiB, 最多 3 份. 仅在容器内的 `127.0.0.1:2000` 提供隧道健康检查. 更新隧道版本时调整 Compose 镜像标签并重新验证连接.
-- 停用临时公网入口时先执行 `docker compose stop cloudflared` 和 `docker compose rm cloudflared`, 再从 `.env` 的 `COMPOSE_PROFILES` 中移除 `tunnel`. 只移除已停止的隧道容器, 保留芽绘台和数据.
-- 将 Quick Tunnel 用于小范围临时测试, 不承诺固定地址或持续可用性. 需要固定网址时按 [Cloudflare 官方步骤](https://developers.cloudflare.com/cloudflare-one/networks/connectors/cloudflare-tunnel/get-started/create-remote-tunnel/) 配置域名与命名隧道.
+期望返回 `{"ok":true,"imageConcurrency":1}`. 再检查访问码登录, 页面和风格图片读取. 保持 `secureCookies: true`.
 
-通过 `.env` 按需配置隧道出站参数. 临时入口与正式入口共用以下设置:
+- 不将域名写死在应用代码里; 入口变更只涉及 `Caddyfile` 与 DNS 记录.
+- 修改 `Caddyfile` 后执行 `docker compose up -d --no-deps caddy` 重新加载, 证书域名变化时 Caddy 会自动重新签发.
+- 同一域名同一时刻只能指向一台机器 (服务器或本机), 切换前先停旧入口, 避免流量分流; 浏览器作品按网址隔离, 切换地址前下载需要保留的作品.
+- `docker-compose.named-tunnel.yml` 与 `cloudflared` 服务 (置于 `tunnel` profile) 保留用于回滚到隧道方案, 默认不启动; `.env` 不设置 `COMPOSE_PROFILES=tunnel`, `COMPOSE_FILE=docker-compose.yml`.
 
-| 环境变量 | 默认值 | 要求 |
-|---|---|---|
-| `TUNNEL_PROTOCOL` | `auto` | 保留自动选择, 仅在确认网络限制后指定 `quic` 或 `http2`. |
-| `TUNNEL_EDGE_IP_VERSION` | `auto` | 保留 IPv4/IPv6 自动选择, 仅在确认对应线路可用后指定 `4` 或 `6`. |
-| `TUNNEL_IPV6` | `false` | 需要 IPv6 出站时设为 `true`, 为隧道专用网络启用 IPv6; 它不会为 WiFi 或路由器提供 IPv6 连接. |
+### 3.3 Nginx (备选反代)
 
-排查连接失败或切换 WiFi 后的断开时:
-
-- 先用 `docker context show` 确认实际容器运行环境, 再检查其网络设置. OrbStack 默认自动跟随 macOS 代理; 本机终端能连接不代表容器连接也正常.
-- 在 macOS 使用 `scutil --nwi` 检查当前网络是否具备 IPv6, 结合隧道日志区分连接超时与 TLS 握手中断. 不以浏览器能打开 HTTPS 网页判断隧道的 7844 端口可用.
-- 切换 WiFi 后检查已有的 `TUNNEL_EDGE_IP_VERSION=6` 或 `TUNNEL_PROTOCOL=http2` 等强制设置. 优先恢复 `auto`, 再验证实际连接; 不将某个 WiFi 下可用的 IPv6 线路视为所有网络都可用.
-- 仅在已确认宿主网络 IPv6 直连可用时设置 `TUNNEL_IPV6=true`, 为隧道专用的 `tunnel-egress` 网络启用 IPv6. 保留 `TUNNEL_EDGE_IP_VERSION=auto`, 不要求普通部署具备 IPv6, 不改变现有应用网络.
-- 使用 OrbStack 且已确认代理阻断隧道连接时, 按 [OrbStack 代理文档](https://docs.orbstack.dev/docker/network#proxies) 设置代理例外. 先运行 `orbctl config get network.proxy.exclude` 读取已有值, 再将 Cloudflare 隧道 IPv6 网段 `2606:4700:a0::/48,2606:4700:a8::/48` 追加到该设置, 保留原有例外. 只让这些隧道连接直连, 不关闭全部代理或 TLS 校验.
-- 修改隧道参数后执行 `docker compose up -d --no-deps cloudflared`, 重新检查隧道健康状态和公网地址. 切换网络或代理后重复验证, 不以生成了临时地址作为连通依据.
-
-#### 3.2.2 正式公网入口
-
-1. 将自己的域名添加到 Cloudflare, 选择 Free 套餐并核对已有 DNS 记录. 在域名注册商的 DNS 服务器设置中填入 Cloudflare 分配的两条 Nameserver, 等待域名在 Cloudflare 显示 Active. 保留原注册商, 不把 Nameserver 更换当作域名转移.
-2. 在 Cloudflare 控制台的 **Networking > Tunnels** 创建由控制台管理的 `cloudflared` 隧道, 例如命名为 `sprout-canvas`. 在连接器安装页面选择 Docker, 将安装命令中 `--token` 后的完整令牌填入本机 `.env` 的 `TUNNEL_TOKEN` 字段. 只填写令牌, 保留已有配置, 不提交或公开 `.env`.
-
-```dotenv
-TUNNEL_TOKEN=在这里填写自己的隧道令牌
-```
-
-3. 使用下面的命令启动独立的验证连接器, 保留已有临时入口. 通过 Compose secret 将令牌提供给容器内的 `--token-file`, 不将令牌放进容器命令参数或环境变量. 等待 Cloudflare 显示该连接器已经连接, 再继续添加公网路由.
-
-```sh
-docker compose -f docker-compose.yml -f docker-compose.named-tunnel.yml run -d --rm --no-deps --name sprout-canvas-tunnel-preview cloudflared
-```
-
-4. 在该隧道的 **Routes > Add route > Published application** 添加以下路由. 下表中的 `example.com` 表示自己已接入的域名.
-
-| 字段 | 填写内容 |
-|---|---|
-| Subdomain | 留空, 使用根域名 |
-| Domain | 选择自己的域名, 例如 `example.com` |
-| Path | 留空 |
-| Service Type | HTTP |
-| Service URL | `sprout-canvas:8787`, 指向同一 Docker 网络中的应用 |
-
-5. 等待域名解析和 HTTPS 证书就绪, 验证 `https://example.com/ready` 返回正常, 再检查访问码登录, 页面和风格图片读取. 将示例域名替换为自己的域名. 保持 `secureCookies: true`, 保留现有访问码和独立管理员认证. 切换网址前下载需要保留的作品, 新域名与旧临时地址的浏览器作品和草稿不会自动合并.
-6. 验证通过后, 在 `.env` 中设置以下字段, 保留 `TUNNEL_TOKEN` 和已有网络设置. 使用覆盖文件将原 `cloudflared` 服务切换为正式隧道, 继续复用原应用容器和数据.
-
-```dotenv
-COMPOSE_PROFILES=tunnel
-COMPOSE_FILE=docker-compose.yml:docker-compose.named-tunnel.yml
-```
-
-```sh
-docker compose config --quiet
-docker compose up -d --no-deps cloudflared
-docker compose exec cloudflared cloudflared tunnel --metrics 127.0.0.1:2000 ready
-```
-
-7. 在正式服务健康检查通过后, 停止验证连接器. `--rm` 会自动移除已停止的验证容器; 再检查固定网址仍可访问.
-
-```sh
-docker stop --timeout 190 sprout-canvas-tunnel-preview
-```
-
-8. 后续继续使用 `docker compose up -d` 和 `docker compose stop` 整体启停. 保持电脑与容器运行环境在线; 重启正式隧道时继续使用同一域名, 不再分配 `trycloudflare.com` 临时地址. 更换令牌后强制重建隧道容器以更新 secret, 不重建应用容器.
-
-```sh
-docker compose up -d --no-deps --force-recreate cloudflared
-```
-
-- 按 [Cloudflare 官方指南](https://developers.cloudflare.com/cloudflare-one/networks/connectors/cloudflare-tunnel/get-started/create-remote-tunnel/) 管理隧道和公网路由. 将子域名等入口变更同步到公开地址, 不在应用代码里写死域名.
-- 将本机 `.env` 文件权限设为 0600. Compose secret 从该文件加载 `TUNNEL_TOKEN`, 应用容器不接收该令牌. 继续排除 `.env` 的 Git 提交和 Docker 构建上下文.
-
-### 3.3 Nginx
-
-将下面 upstream 端口按运行方式选择为 Node 的 8787 或 Docker 的主机 8888:
+默认公网入口为 [3.2.1 Caddy 直连公网入口](#321-caddy-直连公网入口). 仅在无法使用 Caddy 容器时, 可改用宿主机 Nginx 反向代理. 将下面 upstream 端口按运行方式选择为 Node 的 8787 或 Docker 的主机 8888:
 
 ```nginx
 server {
