@@ -86,6 +86,12 @@ function result(req, res, jobId) {
   res.end(outcome.body);
 }
 
+// Vite emits content-hashed files directly under /assets/; everything else in dist keeps its name across releases.
+function staticCacheControl(cleanPath) {
+  if (cleanPath.endsWith('.html')) return 'no-cache';
+  return /^\/assets\/[^/]+$/.test(cleanPath) ? 'public, max-age=31536000, immutable' : 'public, max-age=86400';
+}
+
 async function serveStatic(req, res, pathname) {
   let cleanPath;
   try {
@@ -115,12 +121,12 @@ async function serveStatic(req, res, pathname) {
   }
   try {
     const data = await readFile(filePath);
-    res.writeHead(200, { 'Content-Type': MIME_TYPES.get(path.extname(filePath)) || 'application/octet-stream' });
+    res.writeHead(200, { 'Content-Type': MIME_TYPES.get(path.extname(filePath)) || 'application/octet-stream', 'Cache-Control': staticCacheControl(cleanPath) });
     res.end(data);
   } catch {
     if (!path.extname(cleanPath)) {
       const data = await readFile(entryPath);
-      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-cache' });
       res.end(data);
       return;
     }

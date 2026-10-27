@@ -6,6 +6,5 @@ logs/
 output/
 data/
 scratch/
-ecosystem.local.cjs
 dist/
 CLAUDE.md

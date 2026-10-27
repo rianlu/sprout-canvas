@@ -1,0 +1,38 @@
+# Production stack: one app container behind a reverse proxy that is deployed separately and shared by other sites.
+# scripts/deploy.sh assembles the image on the host and writes its tag to .env; the host keeps only this file,
+# .env, config/, data/ and logs/.
+name: sprout-canvas
+
+services:
+  sprout-canvas:
+    image: ${SPROUT_CANVAS_IMAGE:?set SPROUT_CANVAS_IMAGE in .env}
+    container_name: sprout-canvas
+    init: true
+    restart: unless-stopped
+    # Longer than the server's own 450s shutdown wait for in-flight generations and settlements.
+    stop_grace_period: 460s
+    environment:
+      TZ: Asia/Shanghai
+      # The app is reachable only from loopback and the edge network, whose containers all count as trusted proxies.
+      # Remove this if the port is ever published beyond 127.0.0.1, or direct clients could forge X-Forwarded-For.
+      TRUST_PROXY: "1"
+    volumes:
+      - ./config:/app/config:ro
+      - ./data:/app/data
+      - ./logs:/app/logs
+    ports:
+      # Loopback only, for health checks and SSH tunnels; public traffic arrives through the proxy.
+      - "127.0.0.1:${SPROUT_CANVAS_PORT:-8888}:8787"
+    mem_limit: ${SPROUT_CANVAS_MEM_LIMIT:-256m}
+    logging:
+      driver: local
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - edge
+
+networks:
+  # Shared with the reverse proxy; created once with `docker network create edge` (deploy.sh does it if missing).
+  edge:
+    external: true

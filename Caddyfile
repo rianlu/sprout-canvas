@@ -1,3 +1,0 @@
-draw.sleepypie.top {
-    reverse_proxy sprout-canvas:8787
-}

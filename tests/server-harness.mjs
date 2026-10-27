@@ -54,7 +54,8 @@ export async function startHarness({ serveDist = false, imageMode = 'images', co
   await cp(path.join(ROOT, 'server'), path.join(directory, 'server'), { recursive: true });
   await cp(path.join(ROOT, 'shared'), path.join(directory, 'shared'), { recursive: true });
   await mkdir(path.join(directory, 'config'));
-  if (serveDist) await symlink(path.join(ROOT, 'dist'), path.join(directory, 'dist'), 'dir');
+  // A string serves that directory instead of the real build, for tests that need fixed file names.
+  if (serveDist) await symlink(typeof serveDist === 'string' ? serveDist : path.join(ROOT, 'dist'), path.join(directory, 'dist'), 'dir');
   const port = await freePort();
   const config = {
     host: '127.0.0.1', port, adminPassword: TEST_ADMIN_PASSWORD, cookieNamespace, dataDir: 'data', stateFile: 'data/runtime.sqlite', imageConcurrency: 1,

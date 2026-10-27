@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { mkdtemp, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
@@ -10,6 +10,25 @@ import { startHarness, until, TEST_ADMIN_PASSWORD } from './server-harness.mjs';
 import { submission } from './fixtures.mjs';
 import { secretHash } from '../server/credits-store.mjs';
 import { randomUUID } from 'node:crypto';
+
+test('static files cache hashed build output for a year and revalidate the page entry', async (t) => {
+  const dist = await mkdtemp(path.join(tmpdir(), 'sprout-static-cache-'));
+  for (const dir of ['assets/stitch', 'fonts']) await mkdir(path.join(dist, dir), { recursive: true });
+  for (const [file, body] of [['index.html', '<!doctype html><title>t</title>'], ['assets/index-AbC123.js', 'export {};'], ['assets/stitch/leaf.svg', '<svg/>'], ['fonts/inter.woff2', 'font']]) await writeFile(path.join(dist, file), body);
+  const app = await startHarness({ serveDist: dist });
+  t.after(() => app.close());
+  const cache = async (url) => {
+    const response = await fetch(app.base + url);
+    assert.equal(response.status, 200, url);
+    return response.headers.get('cache-control');
+  };
+  assert.equal(await cache('/assets/index-AbC123.js'), 'public, max-age=31536000, immutable');
+  // Files copied from public/ keep their names between releases, so they must expire.
+  assert.equal(await cache('/assets/stitch/leaf.svg'), 'public, max-age=86400');
+  assert.equal(await cache('/fonts/inter.woff2'), 'public, max-age=86400');
+  for (const url of ['/', '/index.html', '/gallery']) assert.equal(await cache(url), 'no-cache', url);
+  assert.equal((await app.api('/api/auth/status')).headers.get('cache-control'), 'no-store');
+});
 
 test('request origins reject other sites and ports without trusting forwarding headers', () => {
   const req = (headers) => ({ headers: { host: 'canvas.example', ...headers } });

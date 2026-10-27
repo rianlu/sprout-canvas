@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { createHash, randomUUID } from 'node:crypto';
-import { mkdtemp, mkdir, readFile, writeFile } from 'node:fs/promises';
+import { chmod, mkdtemp, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -22,6 +22,11 @@ await writeFile(path.join(directory, 'config/local.config.json'), JSON.stringify
   imageProviders: [{ id: 'fixture', name: '容器验证通道', baseUrl: 'http://127.0.0.1:19876', apiKey: 'fixture-container-image-key', imageModel: 'gpt-image-2', generationMode: 'images', capabilities: { outputFormats: ['png'], exactSize: false } }],
   textProviders: [{ id: 'fixture-text', name: '容器验证文本通道', baseUrl: 'http://127.0.0.1:19876', apiKey: 'fixture-container-text-key', model: 'fixture-text-model' }],
 }), { mode: 0o600 });
+// The container runs as uid 1000; let it read the config and write logs regardless of the host user that made the temp dir.
+await chmod(directory, 0o755);
+await chmod(path.join(directory, 'config'), 0o755);
+await chmod(path.join(directory, 'config/local.config.json'), 0o644);
+await chmod(path.join(directory, 'logs'), 0o777);
 const name = `sprout-canvas-verify-${process.pid}-${randomUUID().slice(0, 8)}`;
 const dataVolume = `${name}-data`;
 const restoredVolume = `${name}-restored`;
@@ -213,6 +218,8 @@ try {
   };
   const nodeVersion = await docker('exec', name, 'node', '--version');
   assert.match(nodeVersion, /^v22\./);
+  assert.equal(await docker('exec', name, 'id', '-u'), '1000', 'the service must not run as root');
+  await docker('exec', name, 'sh', '-c', '[ ! -w /app/server.mjs ] && [ ! -w /app/dist/index.html ]');
   await docker('restart', '--time', '10', name);
   base = await containerUrl();
   await waitFor(healthy, 'container ready after restart');
@@ -259,7 +266,8 @@ try {
     `);
   await stopContainer();
   await docker('volume', 'create', restoredVolume); restoredCreated = true;
-  await docker('run', '--rm', '-v', `${dataVolume}:/source:ro`, '-v', `${restoredVolume}:/restore`, image, 'node', '--input-type=module', '-e', "import { cpSync } from 'node:fs'; cpSync('/source', '/restore', { recursive: true });");
+  // Restoring is an operator step: copy as root, then hand the files back to the service user.
+  await docker('run', '--rm', '--user', '0:0', '-v', `${dataVolume}:/source:ro`, '-v', `${restoredVolume}:/restore`, image, 'sh', '-c', 'cp -a /source/. /restore/ && chown -R 1000:1000 /restore');
   await docker('run', '-d', '--rm', '--name', name, '-p', '127.0.0.1::8787', '-v', `${path.join(directory, 'config')}:/app/config:ro`, '-v', `${restoredVolume}:/app/data`, '-v', `${path.join(directory, 'logs')}:/app/logs`, image);
   started = true; base = await containerUrl(); await waitFor(healthy, 'restored container');
   await assertCredits();
@@ -268,7 +276,7 @@ try {
   assert.equal((await request('/api/auth/login', { cookie: '', method: 'POST', body: { code: accessCode.code } })).status, 429);
   assert.equal((await request('/api/auth/status', { cookie })).data.authenticated, true, 'container login throttling leaves existing sessions intact');
   const checks = ['生产环境启动与访问码鉴权, 首次启动不发码', '单 worker 与通道格式约束', '容器/本地 JS 与 CSS 哈希一致', '桌面页面与动态初始风格图片', 'SQLite 会话跨重启恢复与私有文件权限', 'Docker 健康检查', '管理权限隔离与增删改', '重建容器保留风格文本/图片且不恢复已删除种子', '风格备份预览与图片恢复', '图片与文字虚拟调用结算, 重启与重建保留账本/点值/停用状态', '停机复制完整数据卷后恢复访问码与账本', 'Docker 入口登录限流且保留已登录会话'];
-  checks.push('无限额度零余额图片/文字使用, 无限状态与删除标记跨重启/重建/整卷恢复保留');
+  checks.push('无限额度零余额图片/文字使用, 无限状态与删除标记跨重启/重建/整卷恢复保留', '服务以非 root 用户运行, 应用文件只读');
   await writeFile(path.join(output, 'docker-report.json'), JSON.stringify({ image, nodeVersion, passed: checks, assetHashes: hashes, directory, dataVolume }, null, 2));
   console.log(JSON.stringify({ passed: checks.length, nodeVersion, artifacts: output }));
 } finally {

@@ -60,7 +60,7 @@ sc_J3L9sv4YYnhv5lRbzgzA7PK4gwUbzZoc
 
 先将故事梗概或分镜剧本拆解为可编辑的提示词, 检查后再确认生图. 后续分镜通过首镜参考保持画面关联.
 
-[![系列策划: 故事梗概, 场景模板与待确认分镜](docs/images/series.webp)](docs/images/series.webp)
+[![系列策划: 创作需求, 参考图与待确认分镜](docs/images/series.webp)](docs/images/series.webp)
 
 ### 风格库
 
@@ -137,7 +137,7 @@ sc_J3L9sv4YYnhv5lRbzgzA7PK4gwUbzZoc
 
 ## 快速开始
 
-推荐使用 Docker Compose 部署, 并准备可用的图像与文本 API 通道.
+安装 Node.js 22.13 或更新版本 (推荐 Node.js 22 LTS 最新补丁版本), 并准备可用的图像与文本 API 通道.
 
 1. 获取代码并创建本地配置.
 
@@ -149,10 +149,11 @@ sc_J3L9sv4YYnhv5lRbzgzA7PK4gwUbzZoc
 
 2. 编辑 `config/local.config.json`, 按 [配置要求](docs/DEPLOY.md#1-配置要求) 填写图像通道, 文本通道和独立管理员密码.
 
-3. 构建并启动服务.
+3. 安装依赖并启动服务.
 
    ```sh
-   docker compose up -d --build
+   npm ci
+   npm start
    ```
 
 4. 先进入管理后台, 使用管理员密码登录, 在访问码管理中创建访问码并配置初始灵感点. 复制给使用者登录工作台, 无需注册账号.
@@ -161,42 +162,28 @@ sc_J3L9sv4YYnhv5lRbzgzA7PK4gwUbzZoc
 
 | 入口 | 地址 | 登录方式 |
 | --- | --- | --- |
-| 工作台 | [打开工作台](http://127.0.0.1:8888) | 管理员创建的访问码 |
-| 管理后台 | [打开管理后台](http://127.0.0.1:8888/#admin) | 独立管理员密码 |
+| 工作台 | [打开工作台](http://127.0.0.1:8787) | 管理员创建的访问码 |
+| 管理后台 | [打开管理后台](http://127.0.0.1:8787/#admin) | 独立管理员密码 |
 
-Docker 默认使用主机端口 `8888`. 持久化目录, 密码规则, HTTPS 与更新步骤见 [部署与配置](docs/DEPLOY.md#32-docker).
+本机手动测试也可使用 `npm run start:local`, 默认地址为 [http://127.0.0.1:8789](http://127.0.0.1:8789), 数据与管理员凭据单独保存. 具体规则见 [本地启动](docs/DEPLOY.md#2-本地启动).
 
-服务器有公网 IP 时, 按 [Caddy 直连公网入口](docs/DEPLOY.md#321-caddy-直连公网入口) 配置 HTTPS 域名, Caddy 自动申请并续期 Let's Encrypt 证书.
+### 部署到服务器
 
-<details>
-<summary>使用 Node.js 在本机运行</summary>
-
-安装 Node.js 22.13 或更新版本, 推荐 Node.js 22 LTS 最新补丁版本. 按上方步骤获取代码并填写配置后, 在项目目录运行:
-
-```sh
-npm ci
-npm start
-```
-
-默认打开 [http://127.0.0.1:8787](http://127.0.0.1:8787).
-
-已有 Docker 实例时, 本机手动测试改用 `npm run start:local`, 默认地址为 [http://127.0.0.1:8789](http://127.0.0.1:8789), 数据与管理员凭据单独保存. 具体规则见 [本地启动](docs/DEPLOY.md#2-本地启动).
-
-</details>
+生产使用单个 Docker 容器, 由服务器上独立部署, 多站共用的 Caddy 提供 HTTPS 入口. 在本机执行 `npm run deploy` 构建前端, 经 SSH 在服务器组装镜像并在健康检查通过后切换, 支持一键回滚. 首次准备服务器, 反向代理站点, 目录结构与备份见 [部署与配置](docs/DEPLOY.md#3-生产运行).
 
 ## 使用说明
 
 - **作品与草稿**: 生成作品, 参考图, 蒙版和草稿保存在当前浏览器, 并按网站地址隔离, 不会在不同设备或域名之间同步. 服务端仅短期中转生成结果, 需要长期保留的作品请下载.
 - **风格数据**: 管理员维护的风格文本与示例图持久保存到服务端, 更新部署后保留编辑结果. 使用后台备份功能导出完整风格库.
 - **灵感点**: 默认图片 10 点, 文字处理 1 点, 管理员可修改. 有限额度在提交时预占, 成功后扣除, 明确失败或执行前取消返还. 结果未知时保留预占供核实; 刷新或关闭浏览器不会重复提交或自动退点. 无限额度仅记录用量, 不扣减余额. 余额为零仍可登录, 浏览风格和下载已有作品.
-- **模型能力**: 支持 Images / Responses 图像接口和独立文本通道. 页面参数随通道能力调整, 请求尺寸作为目标画幅, 下载与查看器使用文件实际返回的格式和尺寸. 视频分镜只生成静态图片. 具体通道表现见 [真实通道能力验证](docs/REAL_API_VALIDATION.md).
+- **模型能力**: 支持 Images / Responses 图像接口和独立文本通道. 单图渲染精度与格式当前固定为自动/PNG, 系列按通道能力显示格式; 请求尺寸作为目标画幅, 下载与查看器使用文件实际返回的格式和尺寸. 视频分镜只生成静态图片. 具体通道表现见 [真实通道能力验证](docs/REAL_API_VALIDATION.md).
 
 ## 技术栈
 
 - **前端**: React 19, TypeScript 6, Vite 8, Tailwind CSS 3, 本地图标与字体.
 - **服务端**: Node.js 22, 同源 HTTP 服务, Images / Responses 适配, 单 worker 任务队列.
 - **数据**: 服务端使用内置 SQLite 保存任务元信息, 访问码, 点数账本, 会话和风格目录; 浏览器使用 IndexedDB 保存作品与草稿.
-- **部署**: Docker Compose, Node.js 直接运行或单实例 PM2; 服务器直连时由 Caddy 反向代理提供 HTTPS 入口.
+- **部署**: 单个非 root Docker 容器, 基础镜像按 digest 固定; 经 SSH 脚本发布与回滚, 由共享的 Caddy 反向代理提供 HTTPS 与压缩.
 
 API Key 只由服务端持有. 保持单个 Node 进程, 单个容器副本和 `imageConcurrency: 1`. 模块职责与数据流见 [功能清单与架构评估](docs/FEATURE_ARCHITECTURE_REVIEW.md).
 
@@ -242,7 +229,7 @@ npm run dev
 
 | 文档 | 阅读内容 |
 | --- | --- |
-| [部署与配置](docs/DEPLOY.md) | 配置字段, 运行方式, 更新与备份. |
+| [部署与配置](docs/DEPLOY.md) | 配置字段, 服务器部署, 发布回滚与备份. |
 | [产品需求](docs/PRD.md) | 功能定位, 使用流程与验收要求. |
 | [设计规范](docs/DESIGN.md) / [品牌与定位](docs/BRAND_AND_POSITIONING.md) | 界面布局, 字体配色与产品文案约定. |
 | [功能清单与架构评估](docs/FEATURE_ARCHITECTURE_REVIEW.md) | 功能实现情况, 模块边界与技术架构. |
