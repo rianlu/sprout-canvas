@@ -166,12 +166,14 @@ export async function readLocalConfig(providerId) {
     cookieNamespace: String(process.env.COOKIE_NAMESPACE ?? fileConfig.cookieNamespace ?? ''),
     authSessionDays: Math.max(1, Number(process.env.AUTH_SESSION_DAYS || fileConfig.authSessionDays || 7)),
     secureCookies: process.env.SECURE_COOKIES === undefined ? fileConfig.secureCookies === true : ['1', 'true'].includes(process.env.SECURE_COOKIES),
+    trustProxy: process.env.TRUST_PROXY === undefined ? fileConfig.trustProxy === true : ['1', 'true'].includes(process.env.TRUST_PROXY),
     logFile: String(process.env.LOG_FILE || fileConfig.logFile || path.join(ROOT, 'logs', 'server.log')).trim(),
   };
   if (Number(process.env.IMAGE_CONCURRENCY || fileConfig.imageConcurrency || 1) !== 1) throw new Error('imageConcurrency 必须为 1, 当前仅支持单 worker');
   if (!Number.isInteger(config.port) || config.port < 1 || config.port > 65535) throw new Error('PORT/port 必须是 1 到 65535 的整数');
   if (!Number.isFinite(config.authSessionDays)) throw new Error('AUTH_SESSION_DAYS/authSessionDays 必须是有效天数');
   if (process.env.SECURE_COOKIES !== undefined && !['0', '1', 'true', 'false'].includes(process.env.SECURE_COOKIES)) throw new Error('SECURE_COOKIES 仅支持 0/1/false/true');
+  if (process.env.TRUST_PROXY !== undefined && !['0', '1', 'true', 'false'].includes(process.env.TRUST_PROXY)) throw new Error('TRUST_PROXY 仅支持 0/1/false/true');
   if (config.adminPassword && (isPlaceholderSecret(config.adminPassword) || config.adminPassword.length < 12 || config.adminPassword.length > 256)) throw new Error('adminPassword 必须为 12 到 256 位, 不使用占位值');
   if (!/^[A-Za-z0-9_-]{0,64}$/.test(config.cookieNamespace)) throw new Error('cookieNamespace 只能包含最多 64 位英文字母, 数字, 下划线和短横线');
   validateProductionConfig(config);

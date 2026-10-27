@@ -1,4 +1,25 @@
+import { BlockList, isIP } from 'node:net';
 import { requestError } from '../shared/generation-contract.mjs';
+
+const proxyPeers = new BlockList();
+for (const [network, prefix] of [['127.0.0.0', 8], ['10.0.0.0', 8], ['172.16.0.0', 12], ['192.168.0.0', 16]]) proxyPeers.addSubnet(network, prefix, 'ipv4');
+proxyPeers.addAddress('::1', 'ipv6');
+proxyPeers.addSubnet('fc00::', 7, 'ipv6');
+
+function plainAddress(value) {
+  const text = String(value || '').trim();
+  return /^::ffff:\d+\.\d+\.\d+\.\d+$/i.test(text) ? text.slice(7) : text;
+}
+
+/** Login throttling key. Forwarded addresses count only from a loopback/private peer when trustProxy is set. */
+export function clientAddress(req, config) {
+  const peer = plainAddress(req.socket?.remoteAddress);
+  const family = isIP(peer);
+  if (!config?.trustProxy || !family || !proxyPeers.check(peer, family === 6 ? 'ipv6' : 'ipv4')) return peer || 'local';
+  // Caddy replaces untrusted values and Nginx appends, so the last entry is the address the proxy saw.
+  const forwarded = plainAddress(String(req.headers['x-forwarded-for'] || '').split(',').at(-1));
+  return isIP(forwarded) ? forwarded : peer;
+}
 
 export function requireSameOrigin(req) {
   const site = req.headers['sec-fetch-site'];

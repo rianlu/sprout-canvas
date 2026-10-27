@@ -3,7 +3,7 @@ import type { GenerationConfig, RefImage, ResultRecord } from '../types/generati
 import type { QueueJob } from '../types/queue';
 import type { ImageCapabilities } from '../types/provider';
 import { prepareImageFile } from '../lib/image/compress';
-import { buildGenerationPayload, resolveSize } from '../lib/api/generation';
+import { buildGenerationPayload, clampToCapabilities, resolveSize } from '../lib/api/generation';
 import { LOCK_UNSUPPORTED_IMAGE_OPTIONS, LOCKED_IMAGE_DEFAULTS } from '../lib/image/channel-limits';
 import type { QueueSubmitInput } from '../lib/api/queue';
 import { requestTextGeneration } from '../lib/api/text';
@@ -14,6 +14,7 @@ import { brushMaskToDataUrl, brushStrokeCount, hasEditableRegion, type BrushMask
 import { MaskEditor } from '../components/editor/MaskEditor';
 import { SplitToolDrawer } from '../components/tools/SplitToolDrawer';
 import { randomId } from '../lib/random/id';
+import { useToasts } from '../hooks/useToasts';
 import { readDraft, writeDraft } from '../lib/storage/drafts';
 import { copyRecordImage, downloadRecord } from '../lib/image/gallery';
 import { readWorkspaceDraft, writeWorkspaceDraft, registerWorkspaceSubmission, unconfirmedWorkspaceBatch } from '../lib/storage/gallery-db';
@@ -45,7 +46,7 @@ const STUDIO_PROMPT_DRAFT_KEY = 'studio_prompt';
  * 单图创作页 (照搬 Stitch 单图稿). DOM 类名原样, 逻辑层复用 v3.0.
  */
 export function CreativeStudio({ onOpenStyles, onOpenGallery, onSubmitBatch, onCancel, onUseRecipe, onRetry, results, jobs, imageCapabilities }: CreativeStudioProps) {
-  const [toasts, setToasts] = useState<{ id: string; type: 'info' | 'success' | 'error'; message: string }[]>([]);
+  const { toasts, pushToast } = useToasts();
   const [submitting, setSubmitting] = useState(false);
   const [retryingJobs, setRetryingJobs] = useState<Set<string>>(new Set());
   const submitLock = useRef(false);
@@ -79,16 +80,7 @@ export function CreativeStudio({ onOpenStyles, onOpenGallery, onSubmitBatch, onC
 
   useEffect(() => {
     if (!imageCapabilities || !draftLoaded) return;
-    setConfig((current) => {
-      if (current.mode === 'edit') return current;
-      const next = { ...current };
-      if (!imageCapabilities.formats.includes(current.outputFormat as 'png' | 'jpeg' | 'webp')) next.outputFormat = imageCapabilities.formats[0];
-      if (!imageCapabilities.customSizes && !['1:1', '3:2', '2:3', 'auto'].includes(current.aspectRatio)) {
-        const size = resolveSize('1:1');
-        next.aspectRatio = '1:1'; next.sizeTier = '1K'; next.requestSize = size.size; next.sizeHint = size.hint;
-      }
-      return next.outputFormat === current.outputFormat && next.aspectRatio === current.aspectRatio ? current : next;
-    });
+    setConfig((current) => current.mode === 'edit' ? current : clampToCapabilities(current, imageCapabilities));
   }, [imageCapabilities, draftLoaded]);
   const [fullscreen, setFullscreen] = useState<ResultRecord | null>(null);
   const [splitOpen, setSplitOpen] = useState(false);
@@ -98,7 +90,7 @@ export function CreativeStudio({ onOpenStyles, onOpenGallery, onSubmitBatch, onC
     return {
       mode: 'text',
       generationMode: 'images',
-      imageModel: 'gpt-image-2',
+      imageModel: '',
       prompt: readDraft(STUDIO_PROMPT_DRAFT_KEY),
       imageCount: 1,
       aspectRatio: '1:1',
@@ -112,12 +104,6 @@ export function CreativeStudio({ onOpenStyles, onOpenGallery, onSubmitBatch, onC
       refImages: [],
     };
   });
-
-  const pushToast = useCallback((type: 'info' | 'success' | 'error', message: string) => {
-    const id = randomId();
-    setToasts((current) => [...current, { id, type, message }]);
-    window.setTimeout(() => setToasts((current) => current.filter((t) => t.id !== id)), 3200);
-  }, []);
 
   useEffect(() => {
     let alive = true;

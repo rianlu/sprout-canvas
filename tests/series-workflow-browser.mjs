@@ -493,6 +493,37 @@ try {
     assert.equal((await rows(page)).length, 4);
   });
 
+  await scenario('排队更新回包丢失时, 本地配方与服务端保存的版本一致', async (page) => {
+    await fillPlan(page);
+    imageGate = gate();
+    await confirmation(page).getByRole('button', { name: /^确认并生成 4 张图片/ }).click();
+    const pending = await until(async () => (await jobs(page)).find((job) => job.status === 'pending' && job.clientContext.sceneIndex === 3), 'last scene pending');
+    await closeQueue(page);
+    const outboxPrompt = async () => (await rows(page, 'outbox')).find((row) => row.requestId === pending.requestId).input.clientContext.prompt;
+    const original = await outboxPrompt();
+    await cards(page).nth(3).getByTitle('修改尚未执行的分镜').click();
+    const dialog = page.getByRole('dialog', { name: '调整第 4 镜', exact: true });
+    const field = dialog.getByLabel('本镜画面提示词');
+    const attempt = async (prompt, reachServer) => {
+      await field.fill(prompt);
+      await page.route(`**/api/jobs/${pending.id}`, async (route) => {
+        if (route.request().method() !== 'PATCH') return route.continue();
+        if (reachServer) await route.fetch();
+        await route.abort('connectionreset');
+      });
+      await dialog.getByRole('button', { name: '更新排队任务', exact: true }).click();
+      await until(async () => !(await field.isDisabled()), 'failed update unlocks the dialog');
+      await page.unroute(`**/api/jobs/${pending.id}`);
+    };
+    await attempt('请求未送达的修改', false);
+    assert.equal((await jobs(page)).find((job) => job.id === pending.id).clientContext.prompt, original);
+    assert.equal(await outboxPrompt(), original, 'an update the server never saw is rolled back locally');
+    await attempt('服务端已保存但回包丢失', true);
+    assert.equal((await jobs(page)).find((job) => job.id === pending.id).clientContext.prompt, '服务端已保存但回包丢失');
+    assert.equal(await outboxPrompt(), '服务端已保存但回包丢失', 'the local recipe keeps the version the server holds');
+    imageGate.release(); await settled(page, 4);
+  });
+
   await scenario('领取失败停止动画, 重试只领取原图不重复生成', async (page) => {
     await fillPlan(page);
     await page.route(/\/api\/jobs\/[^/]+\/result$/, (route) => route.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ error: '图片传输暂时中断, 请重试领取原图' }) }));

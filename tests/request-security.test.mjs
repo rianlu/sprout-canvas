@@ -1,12 +1,12 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { mkdtemp } from 'node:fs/promises';
+import { mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { createStateStore } from '../server/state-store.mjs';
-import { createWindowLimiter, createTextLimiter, requireSameOrigin } from '../server/request-guards.mjs';
-import { startHarness, until } from './server-harness.mjs';
+import { clientAddress, createWindowLimiter, createTextLimiter, requireSameOrigin } from '../server/request-guards.mjs';
+import { startHarness, until, TEST_ADMIN_PASSWORD } from './server-harness.mjs';
 import { submission } from './fixtures.mjs';
 import { secretHash } from '../server/credits-store.mjs';
 import { randomUUID } from 'node:crypto';
@@ -58,6 +58,35 @@ test('text admission bounds concurrent work and both per-user and global frequen
   assert.throws(() => limiter.acquire('fresh'), { statusCode: 429 });
   clock += 60001;
   limiter.acquire('fresh')();
+});
+
+test('login throttling reads a forwarded address only from a trusted local proxy', () => {
+  const req = (remoteAddress, forwarded) => ({ socket: { remoteAddress }, headers: forwarded === undefined ? {} : { 'x-forwarded-for': forwarded } });
+  const trusted = { trustProxy: true };
+  assert.equal(clientAddress(req('172.18.0.3', '198.51.100.7'), {}), '172.18.0.3', 'forwarding is ignored unless enabled');
+  assert.equal(clientAddress(req('172.18.0.3', '198.51.100.7'), trusted), '198.51.100.7');
+  assert.equal(clientAddress(req('::ffff:127.0.0.1', '203.0.113.9, 198.51.100.7'), trusted), '198.51.100.7', 'a client-written prefix cannot choose the key');
+  assert.equal(clientAddress(req('203.0.113.50', '198.51.100.7'), trusted), '203.0.113.50', 'a public peer cannot forward for others');
+  assert.equal(clientAddress(req('::ffff:198.51.100.20', '10.0.0.1'), trusted), '198.51.100.20');
+  for (const forwarded of [undefined, '', 'unknown', '198.51.100.7:443']) assert.equal(clientAddress(req('127.0.0.1', forwarded), trusted), '127.0.0.1');
+  assert.equal(clientAddress({ socket: {}, headers: {} }, trusted), 'local');
+});
+
+test('behind a trusted proxy one client exhausting login attempts does not lock out other visitors', async () => {
+  const app = await startHarness();
+  try {
+    app.config.trustProxy = true;
+    await writeFile(path.join(app.directory, 'config/local.config.json'), JSON.stringify(app.config));
+    const from = (address) => ({ 'X-Forwarded-For': address });
+    for (let index = 0; index < 8; index++) {
+      assert.equal((await app.api('/api/auth/login', { method: 'POST', body: { code: 'incorrect' }, headers: from('198.51.100.7') })).status, 401);
+      assert.equal((await app.api('/api/admin/auth/login', { method: 'POST', body: { password: 'incorrect-admin-password' }, headers: from('198.51.100.7') })).status, 401);
+    }
+    assert.equal((await app.api('/api/auth/login', { method: 'POST', body: { code: app.accessCode }, headers: from('198.51.100.7') })).status, 429);
+    assert.equal((await app.api('/api/admin/auth/login', { method: 'POST', body: { password: TEST_ADMIN_PASSWORD }, headers: from('198.51.100.7') })).status, 429);
+    assert.equal((await app.api('/api/auth/login', { method: 'POST', body: { code: app.accessCode }, headers: from('198.51.100.8') })).status, 200);
+    assert.equal((await app.api('/api/admin/auth/login', { method: 'POST', body: { password: TEST_ADMIN_PASSWORD }, headers: from('198.51.100.8') })).status, 200);
+  } finally { await app.close(); }
 });
 
 test('legacy sessions preserve trusted task ownership without retaining shared-password authorization', async () => {

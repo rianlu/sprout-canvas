@@ -228,6 +228,27 @@ test('系列拆解先校验数量和完整分镜, 无效文字返还且成功只
   } finally { await app.close(); }
 });
 
+test('用户输入导致的无效拆解或润色结果不熔断文字通道, 其他用户继续使用主通道', async () => {
+  const app = await startHarness();
+  try {
+    app.config.textProviders.push({ ...app.config.textProviders[0], id: 'backup', name: 'backup', baseUrl: app.config.textProviders[0].baseUrl + '/backup' }); await saveConfig(app);
+    app.controls.respond = (_call, response) => sendJson(response, 200, { choices: [{ message: { content: 'not json' } }] });
+    const cookie = await app.login();
+    for (let index = 0; index < 4; index++) {
+      const failure = await app.api('/api/text', { cookie, method: 'POST', body: { ...app.textInput(cookie), kind: 'series', sceneCount: 4 } });
+      assert.equal(failure.status, 502); assert.equal(failure.data.credit.state, 'refunded');
+    }
+    assert.equal(app.calls.length, 8, 'each invalid plan may still try the backup channel');
+    app.controls.respond = (_call, response) => sendJson(response, 200, { choices: [{ message: { content: '   ' } }] });
+    assert.equal((await app.api('/api/text', { cookie, method: 'POST', body: app.textInput(cookie) })).status, 502);
+    app.controls.respond = null;
+    const other = await app.login('browser-two');
+    const recovered = await app.api('/api/text', { cookie: other, method: 'POST', body: app.textInput(other) });
+    assert.equal(recovered.status, 200); assert.equal(recovered.data.providerName, 'text');
+    assert.equal(app.calls.at(-1).path, '/v1/chat/completions');
+  } finally { await app.close(); }
+});
+
 test('JPEG 截断与连接中途断开不扣成功点数, 不重新调用', async (t) => {
   const photo = await readFile(new URL('../public/assets/stitch/studio-01.jpg', import.meta.url));
   for (const mode of ['truncated-jpeg', 'reset']) await t.test(mode, async () => {

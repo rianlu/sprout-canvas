@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Brush,
-  CircleCheck,
   Copy,
   Download,
   Eraser,
@@ -9,7 +8,6 @@ import {
   Leaf,
   Lightbulb,
   RefreshCw,
-  Sparkles,
   Undo2,
   Wand2,
   X,
@@ -19,7 +17,7 @@ import type { StudioStyleTemplate } from '../../lib/image/recipe';
 import { StudioTemplateCard } from './StudioTemplateCard';
 import { StitchIcon } from '../ui/StitchIcon';
 import { useImageMetadata } from '../../hooks/useImageMetadata';
-import { formatRequestSize, qualityLabel, resolveSize } from '../../lib/api/generation';
+import { formatRequestSize, qualityLabel, resolveSize, STANDARD_ASPECTS } from '../../lib/api/generation';
 import { LOCK_UNSUPPORTED_IMAGE_OPTIONS } from '../../lib/image/channel-limits';
 import { imageFileExtension } from '../../lib/image/format';
 import { RecordImage } from '../gallery/RecordImage';
@@ -80,7 +78,7 @@ function AspectRatioGrid({ value, onChange, customSizes = true, sizeTier, reques
     { id: '2:3', name: '2:3 竖图', box: 'w-3 h-4' },
     { id: 'auto', name: '自动画幅', box: 'w-4 h-4' },
   ];
-  const visible = customSizes ? ratios.filter((r, index) => index < 6 || r.id === value) : ratios.filter((r) => ['1:1', '3:2', '2:3', 'auto'].includes(r.id));
+  const visible = customSizes ? ratios.filter((r, index) => index < 6 || r.id === value) : ratios.filter((r) => STANDARD_ASPECTS.includes(r.id));
   return (
     <div className="grid grid-cols-3 gap-1.5">
       {visible.map((r) => {

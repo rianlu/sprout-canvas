@@ -3,7 +3,7 @@ import { readFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { ROOT, readLocalConfig, publicConfig } from './server/config.mjs';
-import { json, setBaseHeaders, logLine, initLogging, flushLogs, timeoutSignal, upstreamHeaders, stripHtml, readJson } from './server/http.mjs';
+import { json, setBaseHeaders, logLine, initLogging, flushLogs, timeoutSignal, upstreamHeaders, readJson } from './server/http.mjs';
 import { initAuth, sessionFromRequest, handleAuthStatus, handleAuthLogin, handleAuthLogout, requireApiAuth } from './server/auth.mjs';
 import { initText, stopText, handleTextGeneration, handleTextResult } from './server/text.mjs';
 import { getTextProviderCircuitState, isTextProviderCircuitOpen } from './server/text-routing.mjs';
@@ -37,7 +37,7 @@ const styleRoutes = createStyleRoutes({ store: styles, adminAuth, readConfig: re
 const creditRoutes = createCreditRoutes({ credits: state.credits, adminAuth, readConfig: readLocalConfig, revokeAccessCode: queue.revokeAccessCode });
 const adminOverviewRoute = createAdminOverviewRoute({ styles, credits: state.credits, adminAuth, readConfig: readLocalConfig });
 initAuth(state, bootConfig.cookieNamespace);
-queue.init({ readLocalConfig, upstreamHeaders, timeoutSignal, stripHtml, logLine });
+queue.init({ readLocalConfig, upstreamHeaders, timeoutSignal, logLine });
 queue.initializePersistence(state);
 initText(state);
 

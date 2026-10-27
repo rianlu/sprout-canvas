@@ -268,39 +268,6 @@ async function runForcedJob(provider, rawBody, fetchImpl) {
 }
 
 {
-  const rawBody = Buffer.from(JSON.stringify({ model: 'client-model', prompt: 'retry switches provider' }));
-  const { job, outcome } = await runForcedJob(providers[0], rawBody, async () => ({
-    ok: false,
-    status: 500,
-    statusText: 'Server Error',
-    headers: { get: () => 'application/json' },
-    arrayBuffer: async () => Buffer.from(JSON.stringify({ error: { message: 'server failed' } })),
-  }));
-  assert.equal(outcome.status, 500);
-
-  const fetchCalls = [];
-  globalThis.fetch = async (url, options = {}) => {
-    fetchCalls.push({ url, options });
-    return {
-      ok: true,
-      status: 200,
-      statusText: 'OK',
-      headers: { get: () => 'application/json' },
-      arrayBuffer: async () => Buffer.from(JSON.stringify({ data: [{ b64_json: PNG_BASE64 }] })),
-    };
-  };
-  const retry = queue.retryFailedJob(job.id, 'user-1');
-  assert.equal(retry.ok, true);
-  assert.equal(queue.retryFailedJob(job.id, 'user-1').status, 409);
-  assert.equal(retry.job.retryOf, job.id);
-  assert.notEqual(retry.job.clientContext.placeholderId, job.clientContext.placeholderId);
-  const retryOutcome = await waitForJob(retry.job.id);
-  assert.equal(retryOutcome.status, 200);
-  assert.equal(fetchCalls.length, 1);
-  assert.equal(fetchCalls[0].url, 'https://miaomiao.test/v1/images/generations');
-}
-
-{
   const rawBody = Buffer.from(JSON.stringify({ model: 'client-model', prompt: 'policy rejection does not trip circuit' }));
   for (let index = 0; index < 3; index += 1) {
     const { outcome } = await runForcedJob(providers[1], rawBody, async () => ({

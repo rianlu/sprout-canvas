@@ -1,5 +1,6 @@
 import { MAX_REFERENCE_BYTES, MAX_REFERENCE_IMAGES, type GenerationRequest } from '../../../shared/generation-contract.mjs';
 import type { GenerationConfig, ImageSizeTier, RefImage } from '../../types/generation';
+import type { ImageCapabilities } from '../../types/provider';
 import { prepareImageDataUrl } from '../image/compress';
 import { dataUrlToBlob } from '../image/data-url';
 
@@ -44,6 +45,22 @@ export function resolveSize(aspectRatio: string, sizeTier: ImageSizeTier = '1K')
   return tierMap[aspectRatio] || tierMap['1:1'];
 }
 
+/** Aspect ratios a channel without custom sizes can produce. */
+export const STANDARD_ASPECTS: readonly string[] = ['1:1', '3:2', '2:3', 'auto'];
+
+/** Moves a format or aspect ratio the channel cannot produce back to a supported default; returns `config` itself when nothing changes. */
+export function clampToCapabilities(config: GenerationConfig, capabilities: ImageCapabilities): GenerationConfig {
+  const format = capabilities.formats.includes(config.outputFormat as ImageCapabilities['formats'][number]) ? config.outputFormat : capabilities.formats[0];
+  const standard = capabilities.customSizes || STANDARD_ASPECTS.includes(config.aspectRatio);
+  if (format === config.outputFormat && standard) return config;
+  const next = { ...config, outputFormat: format };
+  if (!standard) {
+    const size = resolveSize('1:1');
+    Object.assign(next, { aspectRatio: '1:1', sizeTier: '1K', requestSize: size.size, sizeHint: size.hint });
+  }
+  return next;
+}
+
 export function sizePreset(size: string): Pick<GenerationConfig, 'aspectRatio' | 'sizeTier'> {
   for (const sizeTier of ['1K', '2K', '4K'] as const) {
     for (const [aspectRatio, preset] of Object.entries(SIZE_BY_TIER_AND_RATIO[sizeTier])) {
@@ -64,12 +81,6 @@ export function sizePreset(size: string): Pick<GenerationConfig, 'aspectRatio' |
 
 export function formatRequestSize(size: string) {
   return size === 'auto' ? '自动尺寸' : size.replace('x', '×');
-}
-
-export function sizeTierLabel(sizeTier: ImageSizeTier) {
-  if (sizeTier === '2K') return '高清 2K';
-  if (sizeTier === '4K') return '超清 4K';
-  return '标准 1K';
 }
 
 export function qualityLabel(quality: GenerationConfig['quality']) {

@@ -1,11 +1,6 @@
 import type { QueueResult } from '../../types/queue';
 import type { ImageOutputFormat } from '../../types/generation';
 
-export function formatBytes(bytes: number) {
-  const kb = bytes / 1024;
-  return kb > 1024 ? `${(kb / 1024).toFixed(1)} MB` : `${kb.toFixed(1)} KB`;
-}
-
 export function normalizeImageOutputFormat(format?: string): ImageOutputFormat {
   const value = String(format || '').toLowerCase();
   if (value === 'jpg' || value === 'jpeg') return 'jpeg';
@@ -74,5 +69,3 @@ export async function resultDataUrls(result: QueueResult): Promise<string[]> {
   }
   return output;
 }
-
-export async function resultDataUrl(result: QueueResult) { return (await resultDataUrls(result))[0]; }

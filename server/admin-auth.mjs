@@ -1,6 +1,6 @@
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import { requestError } from '../shared/generation-contract.mjs';
-import { createLoginLimiter, requireSameOrigin } from './request-guards.mjs';
+import { clientAddress, createLoginLimiter, requireSameOrigin } from './request-guards.mjs';
 
 const SESSION_SECONDS = 12 * 60 * 60;
 const digest = (value) => createHash('sha256').update(String(value)).digest();
@@ -26,7 +26,7 @@ export function createAdminAuth(store, namespace = '') {
     login(req, config, password) {
       requireSameOrigin(req);
       if (!config.adminPassword) throw requestError('管理员入口尚未启用', 503);
-      const address = req.socket.remoteAddress || 'local';
+      const address = clientAddress(req, config);
       const message = '尝试次数过多, 请 10 分钟后重试';
       attempts.check(address, message);
       if (typeof password !== 'string' || password.length > 256 || !timingSafeEqual(digest(password), digest(config.adminPassword))) {

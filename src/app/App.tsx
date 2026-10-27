@@ -16,9 +16,10 @@ import { writeDraft } from '../lib/storage/drafts';
 import type { QueueSubmitInput } from '../lib/api/queue';
 import type { GenerationConfig, RefImage, ResultRecord } from '../types/generation';
 import type { ServerConfig } from '../types/provider';
-import { getRecordDataUrl, writeWorkspaceDraft } from '../lib/storage/gallery-db';
+import { recordReference, writeWorkspaceDraft } from '../lib/storage/gallery-db';
 import { recipeDraft, sourceImageDraft, styleTemplateSnapshot, type StudioDraft } from '../lib/image/recipe';
 import type { StyleRecord } from '../../shared/style-contract.mjs';
+import { GENERATION_DEFAULTS } from '../../shared/generation-contract.mjs';
 import { sizePreset, resolveSize } from '../lib/api/generation';
 import { randomId } from '../lib/random/id';
 import type { SeriesCard } from '../lib/image/gallery';
@@ -127,10 +128,10 @@ export function App() {
       const config: GenerationConfig = {
         mode: 'reference', generationMode: 'images', imageModel: '', prompt: '', imageCount: 1,
         ...preset, requestSize: recipe?.size || '1280x720', sizeHint: resolveSize(preset.aspectRatio, preset.sizeTier).hint,
-        quality: recipe?.quality || 'medium', outputFormat: recipe?.outputFormat || 'png',
+        quality: recipe?.quality || GENERATION_DEFAULTS.quality, outputFormat: recipe?.outputFormat || GENERATION_DEFAULTS.outputFormat,
         background: recipe?.background || 'auto', outputCompression: recipe?.outputCompression ?? 90, refImages: [],
       };
-      const reference = { id: first.id, recordId: first.id, name: '原系列主体参考', dataUrl: await getRecordDataUrl(first), size: first.bytes || 0 };
+      const reference = await recordReference(first, '原系列主体参考');
       const overrides = Object.fromEntries(card.records.map((record, index) => [sceneIds[index], record.recipe ? { ...sizePreset(record.recipe.size), quality: record.recipe.quality, outputFormat: record.recipe.outputFormat, background: record.recipe.background, outputCompression: record.recipe.outputCompression } : {}]));
       const tasks = JSON.stringify(card.records.map((record, index) => ({ title: `分镜 ${index + 1}`, prompt: record.prompt })));
       await writeWorkspaceDraft('series', { version: 1, seriesId, references: [reference], sceneIds, shotIds: [], overrides, config, stagedIds: [], brief: card.masterPrompt, taskText: tasks, count: card.records.length });

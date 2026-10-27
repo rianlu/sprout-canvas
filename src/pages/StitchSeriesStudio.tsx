@@ -1,5 +1,5 @@
 import { useRef } from 'react';
-import { BookOpenText, Download, Minus, Plus, RefreshCw, Sparkles, Trash2, ZoomIn } from '../components/ui/icons';
+import { BookOpenText, Minus, Plus, Sparkles } from '../components/ui/icons';
 import type { ResultRecord } from '../types/generation';
 import type { QueueJob } from '../types/queue';
 import { resolveSize } from '../lib/api/generation';

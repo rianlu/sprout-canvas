@@ -11,12 +11,7 @@ import { randomUUID } from 'node:crypto';
 // multi-user fairness without external dependencies.
 
 let readLocalConfig = null;
-let upstreamHeaders = null;
-let timeoutSignal = null;
-let stripHtml = null;
 let logLine = null;
-let IMAGE_UPSTREAM_TIMEOUT_MS = 180_000;
-let RESPONSES_IMAGE_UPSTREAM_TIMEOUT_MS = 420_000;
 let JOB_TTL_MS = 30 * 60 * 1000;
 
 const pendingByUser = new Map();    // userId -> Job[]  (FIFO per user)
@@ -33,12 +28,15 @@ let workerPromise = null;
 let stopping = false;
 const MAX_QUEUED_JOBS = 128;
 const MAX_USER_QUEUED_JOBS = 32;
-const MAX_RETAINED_BYTES = 128 * 1024 * 1024;
+let MAX_RETAINED_BYTES = 128 * 1024 * 1024;
+let MAX_USER_RETAINED_BYTES = 96 * 1024 * 1024;
 const META_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const cleanupTimers = new Map();
 const persistenceRetries = new Map();
 
 function persist(job) {
+  // An upstream message that echoes an input image would otherwise fail every save attempt.
+  if (typeof job.error === 'string') job.error = job.error.replace(/data:image\/[^;]+;base64,[A-Za-z0-9+/=_-]*/gi, '[图片数据已省略]');
   stateStore?.saveJob(job);
   job.settlementPending = false;
   const pending = persistenceRetries.get(job.id);
@@ -68,15 +66,20 @@ function requestBytes(job) {
   return (job.originalBody?.length || 0) + (job.body !== job.originalBody ? job.body?.length || 0 : 0);
 }
 
-function retainedBytes() {
+function retainedBytes(userId = '') {
   let bytes = 0;
-  for (const job of imageJobs.values()) bytes += requestBytes(job) + (job.result?.body?.length || 0);
+  for (const job of imageJobs.values()) if (!userId || job.userId === userId) bytes += requestBytes(job) + (job.result?.body?.length || 0);
   return bytes;
+}
+
+function assertRetainedBytes(userId, bytes, message) {
+  // The per-user share keeps one browser from holding the whole budget that every user's submissions share.
+  if (retainedBytes() + bytes > MAX_RETAINED_BYTES || retainedBytes(userId) + bytes > MAX_USER_RETAINED_BYTES) throw requestError(message, 429);
 }
 
 function assertCapacity(userId, bytes = 0) {
   if (countGlobalQueued() >= MAX_QUEUED_JOBS || (pendingByUser.get(userId)?.length || 0) >= MAX_USER_QUEUED_JOBS) throw requestError('队列已满, 请等待部分任务完成后继续提交', 429);
-  if (retainedBytes() + bytes > MAX_RETAINED_BYTES) throw requestError('待处理图片较多, 请等待作品保存后再提交', 429);
+  assertRetainedBytes(userId, bytes, '待处理图片较多, 请等待作品保存后再提交');
 }
 
 export function initializePersistence(store) {
@@ -104,8 +107,16 @@ export function findSubmission(userId, requestId) {
   return [...imageJobs.values()].find((job) => job.userId === userId && job.requestId === requestId);
 }
 
-function retrySuccessor(job) {
-  return [...imageJobs.values()].find((candidate) => candidate.userId === job.userId && candidate.retryOf === job.id);
+function retrySuccessor(job, successors) {
+  if (successors) return successors.get(job.id);
+  for (const candidate of imageJobs.values()) if (candidate.userId === job.userId && candidate.retryOf === job.id) return candidate;
+  return undefined;
+}
+
+function retrySuccessors(userId) {
+  const successors = new Map();
+  for (const candidate of imageJobs.values()) if (candidate.userId === userId && candidate.retryOf && !successors.has(candidate.retryOf)) successors.set(candidate.retryOf, candidate);
+  return successors;
 }
 
 /** Identical request IDs are accepted once, including across process restarts. */
@@ -158,7 +169,7 @@ export function submitGenerations(inputs, userId, providers, session) {
   });
   const fresh = jobs.filter((job) => !imageJobs.has(job.id));
   if (countGlobalQueued() + fresh.length > MAX_QUEUED_JOBS || (pendingByUser.get(userId)?.length || 0) + fresh.length > MAX_USER_QUEUED_JOBS) throw requestError('队列容量不足以接收整个批次, 请等待部分任务完成', 429);
-  if (retainedBytes() + fresh.reduce((total, job) => total + requestBytes(job), 0) > MAX_RETAINED_BYTES) throw requestError('批次参考图片过多, 请等待作品保存后再提交', 429);
+  assertRetainedBytes(userId, fresh.reduce((total, job) => total + requestBytes(job), 0), '批次参考图片过多, 请等待作品保存后再提交');
   if (session && fresh.length) stateStore.acceptImageJobs(fresh, session);
   else if (fresh.length) stateStore?.transaction(() => { for (const job of fresh) persist(job); });
   for (const job of fresh) enqueue(job, { persisted: Boolean(stateStore), start: false });
@@ -208,7 +219,7 @@ export function updatePendingGeneration(jobId, userId, input, provider, session)
   const cfg = provider || { id: job.providerId, name: job.providerName, imageModel: job.recipe.model, generationMode: job.recipe.generationMode };
   if (!providerSupportsRequest(cfg, job.upstreamPath, job.contentType, Buffer.from(JSON.stringify(toImagesPayload(input))))) throw requestError('当前通道不支持这些生成参数');
   const extra = Buffer.byteLength(JSON.stringify(input)) - requestBytes(job);
-  if (extra > 0 && retainedBytes() + extra > MAX_RETAINED_BYTES) throw requestError('参考图片过大, 请稍后再试', 429);
+  if (extra > 0) assertRetainedBytes(userId, extra, '参考图片过大, 请稍后再试');
   const next = { ...job, submission: input, clientContext: input.clientContext, requestHash: submissionHash(input), recipe: generationRecipe(input, { id: job.providerId, name: job.providerName, imageModel: job.recipe.model, generationMode: job.recipe.generationMode }) };
   persist(next);
   Object.assign(job, next);
@@ -225,12 +236,19 @@ export function prioritize(jobId, userId) {
   return publicJob(job, userId);
 }
 
+function activeReferenceIds() {
+  const ids = new Set();
+  for (const item of imageJobs.values()) if (item.referenceJobId && ['pending', 'running'].includes(item.status)) ids.add(item.referenceJobId);
+  return ids;
+}
+
 function hasActiveDependent(jobId) {
-  return [...imageJobs.values()].some((item) => item.referenceJobId === jobId && ['pending', 'running'].includes(item.status));
+  return activeReferenceIds().has(jobId);
 }
 
 function releaseClaimedResults() {
-  for (const job of imageJobs.values()) if (job.acknowledgedAt && !hasActiveDependent(job.id)) job.result = null;
+  const referenced = activeReferenceIds();
+  for (const job of imageJobs.values()) if (job.acknowledgedAt && !referenced.has(job.id)) job.result = null;
 }
 
 export function acknowledge(jobId, userId) {
@@ -287,13 +305,10 @@ export async function stopWorker() {
 export function init(deps) {
   initProviderAdapter(deps);
   readLocalConfig = deps.readLocalConfig;
-  upstreamHeaders = deps.upstreamHeaders;
-  timeoutSignal = deps.timeoutSignal;
-  stripHtml = deps.stripHtml;
   logLine = deps.logLine;
-  if (deps.IMAGE_UPSTREAM_TIMEOUT_MS) IMAGE_UPSTREAM_TIMEOUT_MS = deps.IMAGE_UPSTREAM_TIMEOUT_MS;
-  if (deps.RESPONSES_IMAGE_UPSTREAM_TIMEOUT_MS) RESPONSES_IMAGE_UPSTREAM_TIMEOUT_MS = deps.RESPONSES_IMAGE_UPSTREAM_TIMEOUT_MS;
   if (deps.JOB_TTL_MS) JOB_TTL_MS = deps.JOB_TTL_MS;
+  if (deps.MAX_RETAINED_BYTES) MAX_RETAINED_BYTES = deps.MAX_RETAINED_BYTES;
+  if (deps.MAX_USER_RETAINED_BYTES) MAX_USER_RETAINED_BYTES = deps.MAX_USER_RETAINED_BYTES;
 }
 
 export function nextJobId() {
@@ -310,33 +325,6 @@ export function enqueue(job, { persisted = false, start = true } = {}) {
   logLine('INFO', `[image-job] queued ${job.id} user=${job.userId} provider=${job.providerName || job.providerId || 'auto'} path=${job.upstreamPath}`);
   if (start) runWorker();
   return publicJob(job, job.userId);
-}
-
-export function retryFailedJob(jobId, viewerUserId) {
-  const source = imageJobs.get(jobId);
-  if (!source || source.userId !== viewerUserId) return { ok: false, status: 404, error: '任务不存在或已过期' };
-  if (retrySuccessor(source)) return { ok: false, status: 409, error: '此任务已重新提交, 请查看最新任务' };
-  if (source.status !== 'failed' || !source.originalBody?.length) return { ok: false, status: 400, error: '请从浏览器中的原始配方重新提交' };
-  const retryJob = {
-    ...source,
-    id: nextJobId(),
-    status: 'pending',
-    body: source.originalBody || source.body,
-    originalBody: source.originalBody || source.body,
-    autoProviderRouting: true,
-    excludeProviderId: retryExcludeProviderIds(source),
-    queuedAt: Date.now(),
-    startedAt: 0,
-    finishedAt: 0,
-    error: '',
-    result: null,
-    attemptedProviderIds: [],
-    retryOf: source.id,
-    providerId: '',
-    providerName: '自动调度',
-    clientContext: source.clientContext ? { ...source.clientContext, placeholderId: nextJobId() } : source.clientContext,
-  };
-  return { ok: true, job: enqueue(retryJob) };
 }
 
 export function cancel(jobId, viewerUserId) {
@@ -393,8 +381,9 @@ export function getJobsForUser(userId, { cursor = '', limit = 30, requestIds = [
   const last = page.at(-1);
   const selected = new Map([...visible.filter(essential), ...page, ...own.filter((job) => requestIds.includes(job.requestId))].map((job) => [job.id, job]));
   const serverNow = Date.now();
+  const successors = retrySuccessors(userId);
   return {
-    jobs: [...selected.values()].map((job) => publicJob(job, userId, serverNow)),
+    jobs: [...selected.values()].map((job) => publicJob(job, userId, serverNow, successors)),
     serverNow,
     historyCursor: hasMore ? Buffer.from(JSON.stringify([last.queuedAt, last.id])).toString('base64url') : '',
     historyTotal: history.length,
@@ -435,9 +424,9 @@ function terminalLabel(status) {
   return status;
 }
 
-function publicJob(job, viewerUserId, serverNow = Date.now()) {
+function publicJob(job, viewerUserId, serverNow = Date.now(), successors) {
   const userQueue = pendingByUser.get(viewerUserId) || [];
-  const supersededBy = retrySuccessor(job)?.id || '';
+  const supersededBy = retrySuccessor(job, successors)?.id || '';
   const yourPosition = job.status === 'pending' && job.userId === viewerUserId
     ? userQueue.indexOf(job) + 1
     : 0;
@@ -610,6 +599,8 @@ async function processImageJob(job) {
       const retryable = isRetryableJobResult(jobResult);
       if (retryable || jobResult.outcomeUnknown) recordProviderFailure(config.id, jobResult.error);
       if (!retryable || index === providers.length - 1) break;
+      // A fallback could outlive the shutdown grace period and turn a definite rejection into an unknown outcome.
+      if (stopping) { logLine('WARN', `[image-job] skip fallback during shutdown ${job.id} provider=${config.name}`); break; }
       logLine('WARN', `[image-job] retryable ${job.id} provider=${config.name} status=${jobResult.status} error=${jobResult.error}`);
     }
     job.finishedAt = Date.now();
@@ -639,7 +630,8 @@ async function processImageJob(job) {
       ok: false, outcomeUnknown,
     };
   } finally {
-    if (job.status === 'succeeded') { job.submission = null; job.body = null; job.originalBody = null; }
+    // Retries resubmit from the browser's local recipe, so a finished request no longer needs its images in memory.
+    job.submission = null; job.body = null; job.originalBody = null;
     try { persist(job); } catch (error) { persistEventually(job); logLine('ERROR', `任务状态保存失败: ${error.message}`); }
     cleanupJobLater(job.id);
   }

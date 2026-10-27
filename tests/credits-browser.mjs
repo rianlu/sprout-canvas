@@ -196,8 +196,18 @@ try {
   dialog = admin.getByRole('dialog', { name: '用量明细', exact: true });
   assert.equal(await admin.getByRole('dialog', { name: '管理访问码', exact: true }).count(), 0, '用量图标不触发卡片编辑');
   await screenshot(admin, 'usage-review');
+  const resolutions = []; let loseResolution = true;
+  await admin.route('**/api/admin/credit-operations/*/resolve', async (route) => {
+    resolutions.push(route.request().postDataJSON().requestId);
+    if (!loseResolution) return route.continue();
+    loseResolution = false; assert.equal((await route.fetch()).status(), 200); await route.abort('failed');
+  });
+  await dialog.getByRole('button', { name: '返还点数', exact: true }).click();
+  await dialog.getByRole('alert').waitFor();
   await dialog.getByRole('button', { name: '返还点数', exact: true }).click();
   await dialog.getByText('核实结果已保存', { exact: true }).waitFor();
+  await admin.unroute('**/api/admin/credit-operations/*/resolve');
+  assert.equal(resolutions.length, 2); assert.equal(resolutions[0], resolutions[1], 'a retry after a lost response reuses the original request');
   assert.equal((await api(a, `/api/text/${textId}`)).data.credit.state, 'refunded');
   await dialog.getByLabel('关闭访问码弹窗').click();
   const record = (await api(admin, `/api/admin/access-codes/${sharedId}`)).data.accessCode;

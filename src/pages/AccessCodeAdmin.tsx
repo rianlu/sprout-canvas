@@ -69,7 +69,7 @@ export function AccessCodeManager({ active, reviewCodeId, onReviewOpened }: { ac
   const [danger, setDanger] = useState<{ kind: 'reset' | 'delete'; requestId: string } | null>(null);
   const [prices, setPrices] = useState<CreditPrices | null>(null); const [priceError, setPriceError] = useState('');
   const [priceRequestId, setPriceRequestId] = useState(randomId);
-  const lock = useRef(false); const sequence = useRef(0);
+  const lock = useRef(false); const sequence = useRef(0); const settlementRequests = useRef(new Map<string, string>());
   const refresh = useCallback(async () => {
     const version = ++sequence.current; setLoading(true);
     try { const result = await listAccessCodes(search, status); if (version === sequence.current) { setCodes(result.codes); setTotal(result.total); setNextCursor(result.nextCursor); } }
@@ -119,8 +119,13 @@ export function AccessCodeManager({ active, reviewCodeId, onReviewOpened }: { ac
   function settleUnknown(id: string, decision: 'charge' | 'refund') {
     const codeId = usageRecord?.id;
     if (!codeId) return;
+    // A retry after a lost response must replay the same decision, not look like a second settlement.
+    const key = `${id}:${decision}`;
+    const requestId = settlementRequests.current.get(key) || randomId();
+    settlementRequests.current.set(key, requestId);
     void run(async () => {
-      await resolveCredits(id, { requestId: randomId(), decision });
+      await resolveCredits(id, { requestId, decision });
+      settlementRequests.current.delete(key);
       await loadUsage(codeId);
       await refresh();
       setMessage('核实结果已保存');

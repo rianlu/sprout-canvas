@@ -1,14 +1,21 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { archiveQueueJob, archiveQueueJobs, cancelQueueJob, listQueueJobs, prioritizeQueueJob, resumeQueueJob, submitQueueJob, submitQueueBatch, updateQueueJob, type QueueSubmitInput } from '../lib/api/queue';
+import { archiveQueueJob, archiveQueueJobs, cancelQueueJob, getQueueJob, listQueueJobs, prioritizeQueueJob, resumeQueueJob, submitQueueJob, submitQueueBatch, updateQueueJob, type QueueSubmitInput } from '../lib/api/queue';
 import { ApiError } from '../lib/api/client';
 import { attachLocalReference, getOutboxInput, isJobConsumed, listOutbox, removeOutbox, saveOutbox, saveOutboxBatch, markOutboxAccepted, collectUnusedReferences, replaceWorkspaceRequest } from '../lib/storage/gallery-db';
 import { randomId } from '../lib/random/id';
-import { validateGenerationSubmission } from '../../shared/generation-contract.mjs';
-import type { ResultRecord } from '../types/generation';
+import { generationRecipe, validateGenerationSubmission } from '../../shared/generation-contract.mjs';
+import type { GenerationRecipe, ResultRecord } from '../types/generation';
 import type { QueueActivity, QueueJob } from '../types/queue';
 import { bindCreditQuote, getCreditQuote } from '../lib/credits';
 import { needsNewCreditIdentity, recoverSubmissionBatch } from '../lib/queue-recovery';
 import { useQueueDelivery } from './useQueueDelivery';
+
+/** Whether a pending job already carries an edit whose response was lost. */
+function sameEdit(job: QueueJob, input: QueueSubmitInput) {
+  // Provider fields come from the server, so only the browser's intent is compared.
+  const intent = ({ model: _model, providerId: _id, providerName: _name, generationMode: _mode, referenceImage: _reference, ...recipe }: GenerationRecipe) => JSON.stringify(recipe);
+  return Boolean(job.recipe && JSON.stringify(job.clientContext) === JSON.stringify(input.clientContext) && intent(job.recipe) === intent(generationRecipe(input)));
+}
 
 function localJob(input: QueueSubmitInput, savedAt: number, jobId?: string, submitting = false): QueueJob {
   return { id: jobId || `local_${input.requestId}`, requestId: input.requestId, status: submitting ? 'submitting' : jobId ? 'interrupted' : 'unsubmitted', localOnly: true, outcomeUnknown: Boolean(jobId), clientContext: input.clientContext, error: submitting ? '' : jobId ? '服务端任务记录已过期, 可从本地配方重新生成' : '尚未确认提交, 可继续提交', canRetry: !submitting, retryOf: input.retryOf || '', providerId: '', providerName: '', yourPosition: 0, yourQueued: 0, globalActive: 0, globalQueued: 0, averageMs: 0, estimatedWaitMs: 0, serverNow: 0, queuedAt: savedAt, startedAt: 0, finishedAt: 0, elapsedMs: 0 };
@@ -213,15 +220,14 @@ export function useQueue(onResult: (records: ResultRecord[], jobId: string) => P
     const input = await getOutboxInput(source.requestId);
     if (!input) throw new Error('本地原始配方不存在, 请回到创作页重新填写');
     const quote = getCreditQuote();
-    const changedOwner = needsNewCreditIdentity(input, quote);
-    if (changedOwner) {
+    if (needsNewCreditIdentity(input, quote)) {
       const recovered = await recoverSubmissionBatch([input], quote);
       const job = await submit(recovered.inputs[0]);
       await tick();
       return job;
     }
-    if (source.status === 'unsubmitted' && !changedOwner) return submit({ ...input, creditQuote: bindCreditQuote(input.creditQuote, quote, true) });
-    if (source.interruptionReason === 'pending-restart' && !source.outcomeUnknown && !changedOwner) {
+    if (source.status === 'unsubmitted') return submit({ ...input, creditQuote: bindCreditQuote(input.creditQuote, quote, true) });
+    if (source.interruptionReason === 'pending-restart' && !source.outcomeUnknown) {
       const restored = await attachLocalReference({ ...input, creditQuote: bindCreditQuote(input.creditQuote, quote) });
       const job = await resumeQueueJob(jobId, restored);
       await markOutboxAccepted([job]);
@@ -230,13 +236,13 @@ export function useQueue(onResult: (records: ResultRecord[], jobId: string) => P
     }
     const settlement = source.credit?.unlimited ? '原任务使用无限额度, 未占用点数' : source.credit?.state === 'charged' ? '原占用点数已扣除' : source.credit?.state === 'refunded' ? '原占用点数已返还' : '占用点数待管理员核实';
     const nextCharge = quote.unlimited ? '当前为无限额度, 重新生成不扣减余额' : '重新生成会作为新任务扣点';
-    if (source.outcomeUnknown && !changedOwner && !window.confirm(`上一次生成的结果未知, ${settlement}. ${nextCharge}, 是否继续?`)) throw new Error('已取消重新生成');
+    if (source.outcomeUnknown && !window.confirm(`上一次生成的结果未知, ${settlement}. ${nextCharge}, 是否继续?`)) throw new Error('已取消重新生成');
     const queuedRetry = (await listOutbox()).find((row) => row.input.retryOf === jobId);
-    if (queuedRetry && !changedOwner) {
+    if (queuedRetry) {
       const retryInput = await getOutboxInput(queuedRetry.requestId);
       if (retryInput) return submit(retryInput);
     }
-    const next = { ...input, creditQuote: quote, requestId: randomId(), providerId: input.request.mask ? input.providerId : undefined, retryOf: source.localOnly || changedOwner ? undefined : jobId, clientContext: { ...input.clientContext, placeholderId: randomId(), parentId: input.clientContext.placeholderId, version: (input.clientContext.version || 1) + 1 } };
+    const next = { ...input, creditQuote: quote, requestId: randomId(), providerId: input.request.mask ? input.providerId : undefined, retryOf: source.localOnly ? undefined : jobId, clientContext: { ...input.clientContext, placeholderId: randomId(), parentId: input.clientContext.placeholderId, version: (input.clientContext.version || 1) + 1 } };
     if (next.referenceJobId && input.clientContext.kind === 'series') {
       const original = jobsRef.current.find((job) => job.id === next.referenceJobId || job.requestId === next.referenceJobId);
       if (original && ['failed', 'canceled', 'interrupted'].includes(original.status)) {
@@ -247,7 +253,7 @@ export function useQueue(onResult: (records: ResultRecord[], jobId: string) => P
         delete next.referenceImage;
       }
     }
-    if ((source.localOnly || changedOwner) && next.referenceJobId) {
+    if (source.localOnly && next.referenceJobId) {
       const restored = await attachLocalReference(next);
       if (!restored.referenceImage) throw new Error('原参考任务已过期, 请从本地作品重新选择参考图');
       if (next.clientContext.kind === 'series') next.referenceImage = restored.referenceImage;
@@ -270,11 +276,15 @@ export function useQueue(onResult: (records: ResultRecord[], jobId: string) => P
   const update = useCallback(async (jobId: string, input: QueueSubmitInput) => {
     input = { ...input, creditQuote: bindCreditQuote(input.creditQuote) };
     const previous = await getOutboxInput(input.requestId);
-    await saveOutbox(validateGenerationSubmission(input), jobId);
+    const next = validateGenerationSubmission(input);
+    await saveOutbox(next, jobId);
     let job;
     try { job = await updateQueueJob(jobId, input); }
     catch (cause) {
-      if (previous && cause instanceof ApiError && cause.status >= 400 && cause.status < 500) await saveOutbox(previous, jobId);
+      // The outbox must keep the intent the server holds under this request ID, or recovery would be rejected as a different request.
+      const rejected = cause instanceof ApiError && cause.status >= 400 && cause.status < 500;
+      const applied = !rejected && await getQueueJob(jobId).then((current) => sameEdit(current, next)).catch(() => false);
+      if (previous && !applied) await saveOutbox(previous, jobId);
       throw cause;
     }
     await tick();

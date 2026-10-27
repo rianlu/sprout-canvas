@@ -34,5 +34,5 @@ export function useAuth() {
     const timer = window.setInterval(() => { if (session?.authenticated && !document.hidden) void refresh(); }, 5000);
     return () => { window.removeEventListener('sprout:auth-expired', expired); window.removeEventListener('sprout:credits-refresh', changed); window.clearInterval(timer); };
   }, [apply, refresh, session?.authenticated]);
-  return { loading, required: true, authenticated: Boolean(session?.authenticated), userId: session?.userId || '', canGenerate: Boolean(session?.canGenerate), signIn, signOut, refresh, error };
+  return { loading, authenticated: Boolean(session?.authenticated), userId: session?.userId || '', canGenerate: Boolean(session?.canGenerate), signIn, signOut, refresh, error };
 }

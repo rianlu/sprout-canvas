@@ -5,12 +5,13 @@ import type { AspectRatio, GenerationConfig, RefImage, ResultRecord } from '../t
 import type { QueueJob } from '../types/queue';
 import type { ImageCapabilities } from '../types/provider';
 import type { QueueSubmitInput } from '../lib/api/queue';
-import { buildGenerationPayload, resolveSize, sizePreset } from '../lib/api/generation';
+import { buildGenerationPayload, clampToCapabilities, resolveSize, sizePreset } from '../lib/api/generation';
 import { requestTextGeneration } from '../lib/api/text';
 import { getCreditQuote } from '../lib/credits';
 import { recoverSubmissionBatch } from '../lib/queue-recovery';
-import { getOutboxInput, getRecordDataUrl, readWorkspaceDraft, writeWorkspaceDraft, registerWorkspaceSubmission } from '../lib/storage/gallery-db';
+import { getOutboxInput, recordReference, readWorkspaceDraft, writeWorkspaceDraft, registerWorkspaceSubmission } from '../lib/storage/gallery-db';
 import { randomId } from '../lib/random/id';
+import { useToasts } from './useToasts';
 import { readDraft, writeDraft } from '../lib/storage/drafts';
 import { downloadRecords, latestSceneVersions } from '../lib/image/gallery';
 import { prepareImageFile } from '../lib/image/compress';
@@ -64,7 +65,7 @@ function parseTaskLines(text: string): BatchTask[] {
 export function useSeriesStudio({ onSubmit, onSubmitBatch, onUpdate, results, jobs, imageCapabilities }: SeriesActions) {
   const [brief, setBrief] = useState(() => readDraft('batch_brief'));
   const [taskText, setTaskText] = useState(() => readDraft('batch_tasks'));
-  const [count, rawSetCount] = useState(() => Math.min(8, Math.max(3, Number(readDraft('batch_count') || '4') || 4)));
+  const [count, rawSetCount] = useState(() => Math.min(MAX_BATCH_COUNT, Math.max(MIN_BATCH_COUNT, Number(readDraft('batch_count') || '4') || 4)));
   const [config, setConfig] = useState<GenerationConfig>(() => {
     const aspectRatio = (readDraft('batch_aspect_ratio') || '16:9') as AspectRatio;
     const size = resolveSize(aspectRatio);
@@ -86,7 +87,7 @@ export function useSeriesStudio({ onSubmit, onSubmitBatch, onUpdate, results, jo
   const [editing, setEditing] = useState<SceneEdit | null>(null);
   const [view, setView] = useState<'grid' | 'timeline'>('grid');
   const [preview, setPreview] = useState<ResultRecord | null>(null);
-  const [toasts, setToasts] = useState<{ id: string; type: 'info' | 'success' | 'error'; message: string }[]>([]);
+  const { toasts, pushToast } = useToasts(5000);
   const lock = useRef(false);
   const alive = useRef(true);
   const referenceSequence = useRef(0);
@@ -94,14 +95,8 @@ export function useSeriesStudio({ onSubmit, onSubmitBatch, onUpdate, results, jo
   useEffect(() => { alive.current = true; return () => { alive.current = false; referenceSequence.current++; }; }, []);
   useEffect(() => {
     if (!imageCapabilities || !ready) return;
-    setConfig((current) => {
-      const next = { ...current };
-      if (!imageCapabilities.formats.includes(current.outputFormat as 'png' | 'jpeg' | 'webp')) next.outputFormat = imageCapabilities.formats[0];
-      if (!imageCapabilities.customSizes && !['1:1', '3:2', '2:3', 'auto'].includes(current.aspectRatio)) next.aspectRatio = '1:1';
-      return next.outputFormat === current.outputFormat && next.aspectRatio === current.aspectRatio ? current : next;
-    });
+    setConfig((current) => clampToCapabilities(current, imageCapabilities));
   }, [imageCapabilities, ready]);
-  function pushToast(type: 'info' | 'success' | 'error', message: string) { const id = randomId(); setToasts((old) => [...old, { id, type, message }]); window.setTimeout(() => setToasts((old) => old.filter((item) => item.id !== id)), 5000); }
   const tasks = useMemo(() => { const parsed = parseTaskLines(taskText); return Array.from({ length: count }, (_, index) => parsed[index] || { title: `分镜 ${index + 1}`, prompt: '' }); }, [taskText, count]);
   const allSeriesResults = useMemo(() => results.filter((record) => record.kind === 'series' && record.seriesId === seriesId), [results, seriesId]);
   const seriesResults = useMemo(() => latestSceneVersions(allSeriesResults).filter((record) => !sceneIds.length || !record.sceneId || sceneIds.includes(record.sceneId)), [allSeriesResults, sceneIds]);
@@ -267,7 +262,7 @@ export function useSeriesStudio({ onSubmit, onSubmitBatch, onUpdate, results, jo
         let continuityReference: RefImage | undefined;
         if (index > 0 && !redraw && shots[0]?.record) {
           const record = shots[0].record;
-          continuityReference = { id: record.id, recordId: record.id, name: '首镜主体参考.png', dataUrl: await getRecordDataUrl(record), size: record.bytes || 0 };
+          continuityReference = await recordReference(record, '首镜主体参考.png');
           anchor = undefined;
         }
         inputs.push({ ...await createInput(index, task, { seriesId: nextSeriesId, sceneId: nextSceneIds[index], placeholderId: nextShotIds[index], requestId: requestIds[index] }, anchor, undefined, continuityReference), creditQuote: quote });
@@ -301,7 +296,7 @@ export function useSeriesStudio({ onSubmit, onSubmitBatch, onUpdate, results, jo
       const anchor = shot.record || shots[0]?.record;
       const referenceJobId = !anchor && index > 0 && ['waiting', 'generating'].includes(shots[0]?.kind) ? shots[0].job?.id : undefined;
       if (index > 0 && !anchor && !referenceJobId) throw new Error('请先生成或重试首镜, 再绘制后续分镜');
-      const continuityReference = anchor ? { id: anchor.id, recordId: anchor.id, name: '分镜衔接参考.png', dataUrl: await getRecordDataUrl(anchor), size: anchor.bytes || 0 } : undefined;
+      const continuityReference = anchor ? await recordReference(anchor, '分镜衔接参考.png') : undefined;
       const input: QueueSubmitInput = await createInput(index, { ...shot.task, prompt: promptOverride ?? shot.task.prompt }, identity, referenceJobId, settings, continuityReference);
       if (shot.kind === 'failed' && shot.job && !shot.job.localOnly) input.retryOf = shot.job.id;
       const nextSceneIds = tasks.map((_, i) => i === index ? nextSceneId : sceneIds[i] || randomId());

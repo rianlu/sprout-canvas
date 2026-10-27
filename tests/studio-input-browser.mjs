@@ -310,6 +310,32 @@ try {
   assert.equal(app.calls.length, beforeImages);
   checks.push('手动更换仍可用, 图片读取期间拦截重复输入, 拖拽顺序追加且保留已有图片, 格式错误可恢复');
 
+  await page.locator('.studio-rail input[type=file]').setInputFiles({ name: '大图参考.jpg', mimeType: 'image/jpeg', buffer: photo });
+  await reference.waitFor();
+  await until(async () => (await stored(page)).data.refImage?.name === '大图参考.jpg', 'large reference saved');
+  assert.deepEqual(Object.keys((await stored(page)).data.refImage.dataUrl), ['draftImage'], 'the draft record keeps a reference instead of the image');
+  await page.evaluate(() => {
+    const put = IDBObjectStore.prototype.put;
+    window.draftPuts = []; window.restorePut = () => { IDBObjectStore.prototype.put = put; };
+    IDBObjectStore.prototype.put = function (value, key) { if (this.name === 'drafts') window.draftPuts.push(String(key)); return put.apply(this, arguments); };
+  });
+  await input(page).focus(); await page.keyboard.type('逐字输入不重写参考图');
+  await savedPrompt(page, '逐字输入不重写参考图');
+  const puts = await page.evaluate(() => { window.restorePut(); return window.draftPuts; });
+  assert.ok(puts.filter((key) => key === 'studio').length >= 1);
+  assert.deepEqual(puts.filter((key) => key.startsWith('draft-image:')), [], 'typing writes only the small draft record');
+  const shownSource = await reference.getAttribute('src');
+  await page.reload(); await ready(page); await reference.waitFor();
+  assert.equal(await input(page).inputValue(), '逐字输入不重写参考图');
+  assert.equal(await reference.getAttribute('src'), shownSource, 'the reference image is restored from its own entry');
+  await newCreation(page);
+  const imageKeys = await page.evaluate(() => new Promise((resolve, reject) => {
+    const open = indexedDB.open('img-gen-gallery'); open.onerror = () => reject(open.error);
+    open.onsuccess = () => { const db = open.result, read = db.transaction('drafts').objectStore('drafts').getAllKeys(); read.onsuccess = () => { resolve(read.result.map(String)); db.close(); }; };
+  }));
+  assert.deepEqual(imageKeys.filter((key) => key.startsWith('draft-image:studio:')), [], 'clearing the draft removes its image entries');
+  checks.push('输入提示词只写入草稿文本, 参考图单独保存且刷新恢复, 清空草稿同时清理图片');
+
   await fill(page, '生成后清理这份润色历史'); textOutput = '绘制一只安静看书的小熊, 柔和自然的水彩风格.';
   await polish(page).click(); await savedPrompt(page, textOutput); await undo(page).waitFor();
   await page.getByRole('button', { name: /^开始绘制/ }).click();

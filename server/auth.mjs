@@ -1,7 +1,7 @@
 import { readLocalConfig } from './config.mjs';
 import { json, readJson } from './http.mjs';
 import { requestError } from '../shared/generation-contract.mjs';
-import { createLoginLimiter } from './request-guards.mjs';
+import { clientAddress, createLoginLimiter } from './request-guards.mjs';
 
 let stateStore;
 let cookieName = 'img_auth_max';
@@ -41,7 +41,8 @@ function status(session) {
 }
 export async function handleAuthStatus(req, res) { json(res, 200, status(sessionFromRequest(req))); }
 export async function handleAuthLogin(req, res) {
-  const address = req.socket.remoteAddress || 'local';
+  const config = await readLocalConfig();
+  const address = clientAddress(req, config);
   const message = '尝试次数过多, 请 10 分钟后重试';
   loginFailures.check(address, message);
   let input;
@@ -49,7 +50,6 @@ export async function handleAuthLogin(req, res) {
     input = await readJson(req, 16 * 1024);
     if (!input || typeof input !== 'object' || Array.isArray(input) || Object.keys(input).some((key) => key !== 'code')) throw requestError('请使用访问码登录');
   } catch (error) { loginFailures.take(address, message); throw error; }
-  const config = await readLocalConfig();
   const values = cookies(req);
   let created;
   try {

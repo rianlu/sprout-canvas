@@ -15,7 +15,7 @@ import {
   type SeriesCard,
 } from '../lib/image/gallery';
 import { useImageMetadata } from '../hooks/useImageMetadata';
-import { randomId } from '../lib/random/id';
+import { useToasts } from '../hooks/useToasts';
 import { RecordImage } from '../components/gallery/RecordImage';
 
 interface GalleryProps {
@@ -76,16 +76,10 @@ export function GalleryGrid({ records, onClear, onDeleteMany, onUseRecipe, onUse
   const [viewer, setViewer] = useState<{ cards: GalleryCard[]; index: number } | null>(null);
   const [splitRecord, setSplitRecord] = useState<ResultRecord | null>(null);
   const [working, setWorking] = useState(false);
-  const [toasts, setToasts] = useState<{ id: string; type: 'info' | 'success' | 'error'; message: string }[]>([]);
+  const { toasts, pushToast } = useToasts();
   const searchRef = useRef<HTMLInputElement>(null);
   const confirmRef = useFocusTrap<HTMLDivElement>(confirming);
   const metadata = useImageMetadata(records);
-  const pushToast = useCallback((type: 'info' | 'success' | 'error', message: string) => {
-    const id = randomId();
-    setToasts((current) => [...current, { id, type, message }]);
-    window.setTimeout(() => setToasts((current) => current.filter((toast) => toast.id !== id)), 3200);
-  }, []);
-
   const exitSelect = useCallback(() => {
     setSelecting(false);
     setSelected(new Set());

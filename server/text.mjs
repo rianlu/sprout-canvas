@@ -202,13 +202,15 @@ async function generateText(payload, op, session, execution) {
       execution.outcomeUnknown = true;
       const data = await callJsonUpstream(textProvider, '/v1/chat/completions', chatPayload);
       let text = extractChatText(data);
-      if (!text || text.length > 128000) throw Object.assign(new Error('文字通道未返回可用内容'), { definiteFailure: true });
+      // Model output that misses the contract depends on the user's input, so only a malformed reply counts against the channel circuit.
+      const replied = data?.choices?.[0]?.message?.content != null;
+      if (!text || text.length > 128000) throw Object.assign(new Error('文字通道未返回可用内容'), { definiteFailure: true, contentFailure: replied });
       if (payload.kind === 'series') {
         try { text = JSON.stringify(parseSeriesPlan(text, payload.sceneCount)); }
-        catch { throw Object.assign(new Error(`分镜拆解未返回 ${payload.sceneCount} 幕完整分镜`), { definiteFailure: true }); }
+        catch { throw Object.assign(new Error(`分镜拆解未返回 ${payload.sceneCount} 幕完整分镜`), { definiteFailure: true, contentFailure: true }); }
       } else {
         try { text = validatePolishedPrompt(text); }
-        catch (error) { throw Object.assign(error, { definiteFailure: true }); }
+        catch (error) { throw Object.assign(error, { definiteFailure: true, contentFailure: true }); }
       }
       recordTextProviderSuccess(textProvider.id);
       if (errors.length) logLine('INFO', `[text-provider] fallback success provider=${textProvider.name} mode=chat_completions`);
@@ -219,7 +221,7 @@ async function generateText(payload, op, session, execution) {
       errors.push(`${textProvider.name} Chat Completions: ${message}`);
       attempts.push({ providerName: textProvider.name, mode: 'chat_completions', timeout: Boolean(error.isTextTimeout), error: message.slice(0, 180) });
       logLine('WARN', `[text-provider] failed provider=${textProvider.name} mode=chat_completions error=${message.slice(0, 240)}`);
-      recordTextProviderFailure(textProvider.id, message, logLine);
+      if (!error.contentFailure) recordTextProviderFailure(textProvider.id, message, logLine);
       if (execution.outcomeUnknown) return unknownTextResult(attempts);
     }
   }

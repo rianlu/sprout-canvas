@@ -6,7 +6,7 @@ import { isDefiniteConnectionFailure } from '../server/upstream-outcome.mjs';
 import { PNG_BASE64, submission } from './fixtures.mjs';
 import { until } from './server-harness.mjs';
 
-async function fixture(t, { fakeTimers = false, timeout = false } = {}) {
+async function fixture(t, { fakeTimers = false, timeout = false, respond, limits = {} } = {}) {
   const queue = await import('../server/queue.mjs?settlement=' + randomUUID());
   const store = createStateStore(':memory:');
   const access = store.credits.create({ requestId: randomUUID(), initialPoints: 100, note: '结算测试' }).codes[0];
@@ -15,6 +15,7 @@ async function fixture(t, { fakeTimers = false, timeout = false } = {}) {
   const calls = [];
   t.mock.method(globalThis, 'fetch', async (url, options) => {
     calls.push(url);
+    if (respond) return await respond(url, options);
     if (timeout) return await new Promise((_, reject) => { options.signal.addEventListener('abort', () => reject(options.signal.reason), { once: true }); });
     return new Response(JSON.stringify({ data: [{ b64_json: PNG_BASE64 }] }), { headers: { 'Content-Type': 'application/json' } });
   });
@@ -22,7 +23,7 @@ async function fixture(t, { fakeTimers = false, timeout = false } = {}) {
   queue.init({
     readLocalConfig: async () => ({ ...provider, providers: [provider, { ...provider, id: 'backup' }] }),
     upstreamHeaders: () => ({}), timeoutSignal: () => timeout ? AbortSignal.timeout(25) : undefined,
-    stripHtml: (text) => text, logLine: () => {}, JOB_TTL_MS: 1000,
+    logLine: () => {}, JOB_TTL_MS: 1000, ...limits,
   });
   queue.initializePersistence(store);
   const input = { ...submission(randomUUID()), creditQuote: { accessCodeId: access.id, userId: session.userId, version: 1 } };
@@ -121,4 +122,48 @@ test('图片请求本机等待超时只保留预占, 不自动调用备用通道
   assert.equal(f.calls.length, 1);
   const balance = f.store.credits.balance(f.access.id);
   assert.deepEqual([balance.available, balance.reserved, balance.spent], [90, 10, 0]);
+});
+
+const rejection = (message) => new Response(JSON.stringify({ error: { message } }), { status: 400, headers: { 'Content-Type': 'application/json' } });
+const failedJob = (f, id, userId) => until(() => { const value = f.queue.getJobStatus(id, userId); return value?.status === 'failed' && value; }, 'failed ' + id);
+
+test('单个浏览器不能占满全站待处理图片预算, 失败任务立即释放参考素材', async (t) => {
+  let release;
+  const gate = new Promise((resolve) => { release = resolve; });
+  const probe = { ...submission(randomUUID(), { prompt: 'x'.repeat(4000) }), creditQuote: { accessCodeId: '', userId: randomUUID(), version: 1 } };
+  const size = Buffer.byteLength(JSON.stringify(probe));
+  const f = await fixture(t, { respond: async () => { await gate; return rejection('content_policy_violation'); }, limits: { MAX_USER_RETAINED_BYTES: Math.floor(size * 2.5), MAX_RETAINED_BYTES: size * 10 } });
+  const other = { ...f.session, userId: randomUUID() };
+  const submit = (session) => f.queue.submitGeneration({ ...submission(randomUUID(), { prompt: 'x'.repeat(4000) }), creditQuote: { accessCodeId: f.access.id, userId: session.userId, version: 1 } }, session.userId, { id: 'fixture', name: 'fixture' }, session);
+  const first = submit(f.session), second = submit(f.session);
+  try {
+    assert.throws(() => submit(f.session), { statusCode: 429 }, 'one browser stops at its share of the budget');
+    const neighbour = submit(other);
+    release();
+    for (const [job, session] of [[first, f.session], [second, f.session], [neighbour, other]]) assert.equal((await failedJob(f, job.id, session.userId)).credit.state, 'refunded');
+    // Failed work keeps no images in memory, so the same browser can submit again before the result TTL.
+    submit(f.session); submit(f.session);
+    assert.equal(f.store.credits.balance(f.access.id).available, 80);
+  } finally { release(); }
+});
+
+test('关闭服务时不再切换备用通道, 明确拒绝按失败返还', async (t) => {
+  let release;
+  const gate = new Promise((resolve) => { release = resolve; });
+  const f = await fixture(t, { respond: async () => { await gate; return new Response(JSON.stringify({ error: { message: 'fixture capacity reached' } }), { status: 429, headers: { 'Content-Type': 'application/json' } }); } });
+  const accepted = f.start();
+  await until(() => f.calls.length === 1, 'first provider attempt');
+  const closing = f.queue.stopWorker();
+  release(); await closing;
+  const job = f.queue.getJobStatus(accepted.id, f.session.userId);
+  assert.equal(job.status, 'failed'); assert.equal(job.outcomeUnknown, false); assert.equal(job.credit.state, 'refunded');
+  assert.equal(f.calls.length, 1, 'the backup provider is not called after shutdown starts');
+});
+
+test('上游错误回显图片数据时脱敏保存, 不进入无限重试', async (t) => {
+  const f = await fixture(t, { respond: async () => rejection(`rejected data:image/png;base64,${PNG_BASE64}`) });
+  const job = await failedJob(f, f.start().id, f.session.userId);
+  assert.equal(job.settlementPending, false);
+  assert.match(job.error, /\[图片数据已省略\]/); assert.doesNotMatch(job.error, /base64,/);
+  assert.equal(job.credit.state, 'refunded');
 });

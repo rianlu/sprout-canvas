@@ -4,15 +4,6 @@ export type Theme = 'light' | 'dark';
 
 const STORAGE_KEY = 'sprout_canvas_theme';
 
-function readSavedTheme(): Theme | null {
-  try {
-    const value = localStorage.getItem(STORAGE_KEY);
-    return value === 'light' || value === 'dark' ? value : null;
-  } catch {
-    return null;
-  }
-}
-
 function readInitialTheme(): Theme {
   // 内联脚本已写入 class (缺省 light), 这里读回并归一化
   return document.documentElement.classList.contains('dark') ? 'dark' : 'light';

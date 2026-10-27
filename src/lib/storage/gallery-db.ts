@@ -1,4 +1,4 @@
-import type { ResultRecord } from '../../types/generation';
+import type { RefImage, ResultRecord } from '../../types/generation';
 import type { GenerationSubmission } from '../../../shared/generation-contract.mjs';
 import { dataUrlToBlob, imageFromDataUrl } from '../image/data-url';
 import { dataUrlFormat, normalizeImageOutputFormat } from '../image/format';
@@ -26,13 +26,84 @@ function queueDraftWrite<T>(key: string, operation: () => Promise<T>): Promise<T
   return next;
 }
 
-function sameDraftData(left: unknown, right: unknown): boolean {
+// Large images in drafts live in their own entries, so typing rewrites only the small draft record.
+type DraftImage = { draftImage: string };
+const DRAFT_IMAGE_MIN_LENGTH = 16 * 1024;
+const draftImages = new Map<string, Map<string, string>>(); // draft key -> image entry key -> data URL
+
+const isDraftImage = (value: unknown): value is DraftImage => Boolean(value) && typeof value === 'object' && !Array.isArray(value) && Object.keys(value as object).length === 1 && typeof (value as DraftImage).draftImage === 'string';
+const isLargeDataUrl = (value: unknown): value is string => typeof value === 'string' && value.length >= DRAFT_IMAGE_MIN_LENGTH && value.startsWith('data:image/');
+const draftImageRange = (key: string) => IDBKeyRange.bound(`draft-image:${key}:`, `draft-image:${key}:￿`);
+
+function mapDraft(value: unknown, replace: (item: unknown) => unknown | undefined): unknown {
+  const replaced = replace(value);
+  if (replaced !== undefined) return replaced;
+  if (Array.isArray(value)) return value.map((item) => mapDraft(item, replace));
+  if (value && typeof value === 'object' && Object.getPrototypeOf(value) === Object.prototype) return Object.fromEntries(Object.entries(value).map(([name, item]) => [name, mapDraft(item, replace)]));
+  return value;
+}
+
+function visitDraft(value: unknown, visit: (item: unknown) => boolean) {
+  if (visit(value)) return;
+  if (Array.isArray(value)) value.forEach((item) => visitDraft(item, visit));
+  else if (value && typeof value === 'object') Object.values(value).forEach((item) => visitDraft(item, visit));
+}
+
+/** Replace large data URLs with entry references. A dry run resolves references without writing. */
+async function dehydrateDraft(store: IDBObjectStore, key: string, data: unknown, previous: unknown, dry = false) {
+  const sources = new Set<string>();
+  visitDraft(data, (item) => { if (isLargeDataUrl(item)) { sources.add(item); return true; } return isDraftImage(item); });
+  const pairs = new Map<string, string>(), byUrl = new Map<string, string>();
+  if (!sources.size) return { data, pairs };
+  const known = [...(draftImages.get(key) || [])];
+  const stored: string[] = [];
+  visitDraft(previous, (item) => { if (isDraftImage(item)) { stored.push(item.draftImage); return true; } return false; });
+  for (const url of sources) {
+    let entry = known.find(([, value]) => value === url)?.[0];
+    if (entry && !dry && await request(store.getKey(entry)) === undefined) store.put({ version: 1, data: { draftImage: url } }, entry);
+    // Another tab may have written the same image under its own entry.
+    for (const candidate of stored) {
+      if (entry) break;
+      const value: WorkspaceEntry | undefined = await request(store.get(candidate));
+      if ((value?.data as DraftImage | undefined)?.draftImage === url) entry = candidate;
+    }
+    if (!entry) {
+      entry = `draft-image:${key}:${randomId()}`;
+      if (!dry) store.put({ version: 1, data: { draftImage: url } }, entry);
+    }
+    pairs.set(entry, url); byUrl.set(url, entry);
+  }
+  return { data: mapDraft(data, (item) => isLargeDataUrl(item) ? { draftImage: byUrl.get(item)! } : undefined), pairs };
+}
+
+async function hydrateDraft(store: IDBObjectStore, key: string, data: unknown) {
+  const entries = new Set<string>();
+  visitDraft(data, (item) => { if (isDraftImage(item)) { entries.add(item.draftImage); return true; } return false; });
+  if (!entries.size) return data;
+  const pairs = new Map<string, string>();
+  for (const entry of entries) {
+    const value: WorkspaceEntry | undefined = await request(store.get(entry));
+    pairs.set(entry, (value?.data as DraftImage | undefined)?.draftImage || '');
+  }
+  draftImages.set(key, pairs);
+  return mapDraft(data, (item) => isDraftImage(item) ? pairs.get(item.draftImage) : undefined);
+}
+
+async function pruneDraftImages(store: IDBObjectStore, key: string, data: unknown) {
+  const used = new Set<string>();
+  visitDraft(data, (item) => { if (isDraftImage(item)) { used.add(item.draftImage); return true; } return false; });
+  for (const entry of await request(store.getAllKeys(draftImageRange(key)))) if (!used.has(String(entry))) store.delete(entry);
+}
+
+/** Compare a stored draft with a dehydrated one; drafts saved before images moved out may still hold the data URL inline. */
+function sameDraftData(left: unknown, right: unknown, pairs = new Map<string, string>()): boolean {
   if (Object.is(left, right)) return true;
+  if (typeof left === 'string' && isDraftImage(right)) return pairs.get(right.draftImage) === left;
   if (!left || !right || typeof left !== 'object' || typeof right !== 'object' || Array.isArray(left) !== Array.isArray(right)) return false;
-  if (Array.isArray(left) && Array.isArray(right)) return left.length === right.length && left.every((item, index) => sameDraftData(item, right[index]));
+  if (Array.isArray(left) && Array.isArray(right)) return left.length === right.length && left.every((item, index) => sameDraftData(item, right[index], pairs));
   const a = left as Record<string, unknown>, b = right as Record<string, unknown>;
   const keys = Object.keys(a).filter((key) => a[key] !== undefined);
-  return keys.length === Object.keys(b).filter((key) => b[key] !== undefined).length && keys.every((key) => Object.hasOwn(b, key) && sameDraftData(a[key], b[key]));
+  return keys.length === Object.keys(b).filter((key) => b[key] !== undefined).length && keys.every((key) => Object.hasOwn(b, key) && sameDraftData(a[key], b[key], pairs));
 }
 
 function emptyWorkspaceContent(key: string, data: unknown) {
@@ -190,6 +261,10 @@ export async function blobDataUrl(blob: Blob): Promise<string> {
 }
 
 export async function getRecordDataUrl(record: ResultRecord) { return blobDataUrl(await getRecordBlob(record)); }
+/** A saved work as a reference image that keeps its record identity for later verification. */
+export async function recordReference(record: ResultRecord, name: string): Promise<RefImage> {
+  return { id: record.id, recordId: record.id, name, dataUrl: await getRecordDataUrl(record), size: record.bytes || 0 };
+}
 
 export async function attachLocalReference(input: GenerationSubmission): Promise<GenerationSubmission> {
   if (!input.referenceJobId || input.referenceImage) return input;
@@ -312,8 +387,6 @@ export async function clearGalleryRecords(): Promise<void> {
   const ids = await request(db.transaction('records').objectStore('records').getAllKeys());
   await deleteGalleryRecords(ids.map(String));
 }
-export function deleteGalleryRecord(id: string) { return deleteGalleryRecords([id]); }
-export function saveGalleryRecord(record: ResultRecord) { return saveGalleryRecords([record], record.jobId); }
 
 export async function saveOutbox(input: GenerationSubmission, jobId?: string) {
   return saveOutboxBatch([{ input, jobId }]);
@@ -428,16 +501,20 @@ async function collectReferencesInTransaction(tx: IDBTransaction) {
 export async function readWorkspaceDraft<T>(key: string): Promise<T | undefined> {
   await draftWrites.get(key);
   const db = await openGalleryDb();
-  const value = await request(db.transaction('drafts').objectStore('drafts').get(key));
-  return value?.version === 1 ? value.data as T : undefined;
+  const store = db.transaction('drafts').objectStore('drafts');
+  const value = await request(store.get(key));
+  return value?.version === 1 ? await hydrateDraft(store, key, value.data) as T : undefined;
 }
 
 /** Reuse the same batch after a lost response, including after a page refresh. */
 export async function unconfirmedWorkspaceBatch(key: 'studio' | 'series', data: unknown): Promise<GenerationSubmission[]> {
   await draftWrites.get(key);
   const db = await openGalleryDb();
-  const entry: WorkspaceEntry | undefined = await request(db.transaction('drafts').objectStore('drafts').get(key));
-  if (!entry?.submission || entry.revision !== entry.submission.revision || !sameDraftData(entry.data, data)) return [];
+  const store = db.transaction('drafts').objectStore('drafts');
+  const entry: WorkspaceEntry | undefined = await request(store.get(key));
+  if (!entry?.submission || entry.revision !== entry.submission.revision) return [];
+  const current = await dehydrateDraft(store, key, data, entry.data, true);
+  if (!sameDraftData(entry.data, current.data, current.pairs)) return [];
   const outbox = await listOutbox();
   const rows = entry.submission.requestIds.map((id) => outbox.find((row) => row.requestId === id)).filter((row): row is Outbox => Boolean(row));
   if (!rows.some((row) => row.submissionConfirmed === false || !row.jobId)) return [];
@@ -448,15 +525,22 @@ export async function unconfirmedWorkspaceBatch(key: 'studio' | 'series', data: 
 export function writeWorkspaceDraft(key: string, data: unknown, options: { expected?: unknown } = {}): Promise<string | undefined> {
   return queueDraftWrite(key, async () => {
     const db = await openGalleryDb();
-    return transact(db, ['drafts'], async (tx) => {
+    const saved = await transact(db, ['drafts'], async (tx) => {
       const drafts = tx.objectStore('drafts');
-      if (data === undefined) { drafts.delete(key); return; }
+      if (data === undefined) { drafts.delete(key); drafts.delete(draftImageRange(key)); return { pairs: new Map<string, string>() }; }
       const previous: WorkspaceEntry | undefined = await request(drafts.get(key));
-      if (Object.hasOwn(options, 'expected') && !sameDraftData(previous?.data, options.expected)) return;
-      const revision = previous?.revision && sameDraftData(previous.data, data) ? previous.revision : randomId();
-      drafts.put({ ...previous, version: 1, data, revision }, key);
-      return revision;
+      if (Object.hasOwn(options, 'expected')) {
+        const expected = await dehydrateDraft(drafts, key, options.expected, previous?.data, true);
+        if (!sameDraftData(previous?.data, expected.data, expected.pairs)) return;
+      }
+      const next = await dehydrateDraft(drafts, key, data, previous?.data);
+      const revision = previous?.revision && sameDraftData(previous.data, next.data, next.pairs) ? previous.revision : randomId();
+      drafts.put({ ...previous, version: 1, data: next.data, revision }, key);
+      await pruneDraftImages(drafts, key, next.data);
+      return { revision, pairs: next.pairs };
     });
+    if (saved) draftImages.set(key, saved.pairs);
+    return saved?.revision;
   });
 }
 
@@ -468,7 +552,9 @@ export function registerWorkspaceSubmission(key: 'studio' | 'series', data: unkn
     const cleared = await transact(db, ['drafts', 'records'], async (tx) => {
       const drafts = tx.objectStore('drafts');
       const entry: WorkspaceEntry | undefined = await request(drafts.get(key));
-      if (!entry?.revision || !sameDraftData(entry.data, data) || options.revision && entry.revision !== options.revision) return;
+      if (!entry?.revision || options.revision && entry.revision !== options.revision) return;
+      const current = await dehydrateDraft(drafts, key, data, entry.data, true);
+      if (!sameDraftData(entry.data, current.data, current.pairs)) return;
       const scope = (data as Record<string, unknown>).seriesId;
       const previous = options.append && entry.submission?.scope === scope ? entry.submission : undefined;
       if (previous && options.previousRevision && previous.revision !== options.previousRevision) return;
@@ -478,6 +564,7 @@ export function registerWorkspaceSubmission(key: 'studio' | 'series', data: unkn
       for (const id of ids) if (await request(tx.objectStore('records').index('requestId').getKey(id)) !== undefined) completed.add(id);
       const settled = settleWorkspaceSubmission(key, { ...entry, submission: { revision: entry.revision, scope, requestIds: ids, completedIds: [...completed] } });
       drafts.put(settled.entry, key);
+      if (settled.cleared) await pruneDraftImages(drafts, key, settled.entry.data);
       return settled.cleared;
     });
     if (cleared) clearLegacyWorkspaceContent(key);
@@ -509,6 +596,7 @@ export async function completeWorkspaceRequest(requestId: string) {
       const completedIds = [...new Set([...submission.completedIds, requestId])];
       const settled = settleWorkspaceSubmission(key, { ...entry, submission: { ...submission, completedIds } });
       drafts.put(settled.entry, key);
+      if (settled.cleared) await pruneDraftImages(drafts, key, settled.entry.data);
       return settled.cleared;
     });
     if (cleared) clearLegacyWorkspaceContent(key);

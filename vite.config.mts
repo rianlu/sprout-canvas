@@ -6,6 +6,12 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     emptyOutDir: true,
+    rolldownOptions: {
+      output: {
+        // React rarely changes between releases, so a separate chunk stays cached across app updates.
+        codeSplitting: { groups: [{ name: 'vendor', test: /node_modules[\\/](react|react-dom|scheduler)[\\/]/ }] },
+      },
+    },
   },
   server: {
     proxy: {
