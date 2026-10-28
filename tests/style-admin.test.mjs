@@ -3,9 +3,10 @@ import test from 'node:test';
 import { readFile, writeFile, readdir } from 'node:fs/promises';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
+import { DatabaseSync } from 'node:sqlite';
 import { startHarness, TEST_PASSWORD, TEST_ADMIN_PASSWORD } from './server-harness.mjs';
 import { png } from './fixtures.mjs';
-import { STYLE_LIMITS } from '../shared/style-contract.mjs';
+import { STYLE_CATEGORIES, STYLE_LIMITS } from '../shared/style-contract.mjs';
 
 const input = (extra = {}) => ({ prompt: '  A small forest house.\n保留作者的原文和换行.  ', author: '示例作者', imageDataUrl: `data:image/png;base64,${png(32, 24).toString('base64')}`, ...extra });
 const editable = (record, extra = {}) => Object.assign(Object.fromEntries(['name', 'prompt', 'author', 'category', 'sourceUrl', 'published', 'sortOrder', 'version'].map((key) => [key, record[key]])), extra);
@@ -33,6 +34,7 @@ test('style management authorization, persistence, assets and archive transactio
       assert.equal((await api('', { method: 'POST', headers: { Origin: 'https://other.invalid' }, body: input() })).status, 403);
       assert.equal((await list()).styles.length, 36);
       assert.equal((await list(false)).styles.length, 36);
+      assert.deepEqual((await list(false)).categories, STYLE_CATEGORIES.map(({ name }) => name), 'seed covers every fixed category in decision order');
     });
     let first, duplicate;
     await t.test('simple creation preserves the original prompt and deduplicates image files', async () => {
@@ -60,7 +62,7 @@ test('style management authorization, persistence, assets and archive transactio
       first = result.data.style;
       assert.equal(first.version, 2);
       assert.equal((await list(false)).styles.length, 37);
-      assert.ok((await list()).categories.includes('自定义分类'));
+      assert.equal((await list()).categories.at(-1), '自定义分类', 'categories from older backups follow the fixed ones');
       assert.ok(!(await list(false)).categories.includes('自定义分类'));
       assert.equal((await api(`/${first.id}`, { method: 'DELETE', body: { version: 1 } })).status, 409);
     });
@@ -117,6 +119,19 @@ test('style management authorization, persistence, assets and archive transactio
       const stale = structuredClone(archive);
       stale.styles[0].name = '旧预览不覆盖新修改';
       assert.equal((await api('/import', { method: 'POST', body: { archive: stale, revision: before.revision - 1 } })).status, 409);
+    });
+    await t.test('retired thumbnail fields from an earlier build neither leak into exports nor block importing them', async () => {
+      const db = new DatabaseSync(path.join(app.directory, 'data/styles/library.sqlite'));
+      const row = db.prepare('SELECT id, data FROM styles LIMIT 1').get();
+      db.prepare('UPDATE styles SET data=? WHERE id=?').run(JSON.stringify({ ...JSON.parse(row.data), thumbFile: `${'a'.repeat(64)}.webp`, thumbBytes: 10 }), row.id);
+      db.close();
+      const exported = (await api('/export')).data;
+      assert.ok(exported.styles.every((style) => !('thumbFile' in style) && !('thumbBytes' in style)));
+      const legacy = structuredClone(archive);
+      Object.assign(legacy.styles[0], { thumbFile: `${'b'.repeat(64)}.webp`, thumbBytes: 10 });
+      const preview = await api('/import?preview=1', { method: 'POST', body: { archive: legacy } });
+      assert.equal(preview.status, 200, JSON.stringify(preview.data));
+      assert.deepEqual({ added: preview.data.added, updated: preview.data.updated, unchanged: preview.data.unchanged }, { added: 0, updated: 0, unchanged: 37 });
     });
     await t.test('a fresh isolated service imports content without affecting the source', async () => {
       second = await startHarness();

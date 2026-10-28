@@ -58,7 +58,11 @@ async function save(dialog) {
   await dialog.waitFor({ state: 'hidden' });
 }
 async function options(dialog, values) {
-  for (const [name, value] of Object.entries(values)) await dialog.getByLabel(name, { exact: true }).fill(String(value));
+  for (const [name, value] of Object.entries(values)) {
+    const field = dialog.getByLabel(name, { exact: true });
+    if (await field.evaluate((element) => element.tagName === 'SELECT')) await field.selectOption(String(value));
+    else await field.fill(String(value));
+  }
 }
 async function screenshot(page, name) {
   await page.evaluate(async () => document.fonts.ready);
@@ -146,7 +150,9 @@ try {
   await dialog.getByLabel('上传风格示例图').setInputFiles({ name: 'street.jpg', mimeType: 'image/jpeg', buffer: photoTwo });
   await dialog.getByRole('img', { name: '示例图预览' }).waitFor();
   await dialog.getByLabel('风格提示词').fill('街角胶片摄影, 午后的光线.');
-  await options(dialog, { 名称: '胶片街景', 分类: '自建风格', 来源链接: 'https://example.org/style-source', '排序 (越小越靠前)': 1 });
+  const categoryChoices = await dialog.getByLabel('分类', { exact: true }).locator('option').allTextContents();
+  assert.equal(categoryChoices.length, 8); assert.equal(categoryChoices[0], '未分类'); assert.equal(categoryChoices[5], '写实摄影 · 像照片: 人像, 胶片, 棚拍');
+  await options(dialog, { 名称: '胶片街景', 分类: '写实摄影', 来源链接: 'https://example.org/style-source', '排序 (越小越靠前)': 1 });
   await dialog.getByLabel('在风格库上架').uncheck();
   await save(dialog);
   let uploaded = (await list(page)).styles.find((style) => style.name === '胶片街景');
@@ -158,7 +164,7 @@ try {
   await until(async () => (await list(user, false)).styles.some((style) => style.id === uploaded.id), 'published uploaded template');
   assert.equal(await page.getByRole('dialog').count(), 0, '上下架按钮不打开编辑弹窗');
   await page.getByLabel('上架状态').selectOption('all');
-  checks.push('图片上传, 可选分类与来源, 上下架及状态筛选');
+  checks.push('图片上传, 固定分类选项与来源, 上下架及状态筛选');
 
   dialog = await openEditor(page);
   await dialog.getByLabel('风格提示词').fill('拖拽图片测试, 保留已填写内容.');
@@ -180,7 +186,7 @@ try {
   dialog = await openEditor(page, pasted.name);
   const editedPrompt = 'A hand-painted watercolor forest.\n保留作者原文, 展示与发送完全一致.';
   await dialog.getByLabel('风格提示词').fill(editedPrompt);
-  await options(dialog, { 名称: '手工水彩模板', 分类: '自建风格', '排序 (越小越靠前)': 2 });
+  await options(dialog, { 名称: '手工水彩模板', 分类: '写实摄影', '排序 (越小越靠前)': 2 });
   let saveStarted;
   const started = new Promise((resolve) => { saveStarted = resolve; });
   const gate = new Promise((resolve) => { releaseSave = resolve; });
@@ -201,19 +207,19 @@ try {
 
   await user.getByRole('navigation', { name: '主导航', exact: true }).getByRole('link', { name: '风格库', exact: true }).click();
   assert.deepEqual(await titleStyle(page), await titleStyle(user), 'admin and library use the same heading typography');
-  await user.getByRole('button', { name: '自建风格 2', exact: true }).click();
-  assert.deepEqual(await user.locator('main article h3').allTextContents(), ['胶片街景', '手工水彩模板']);
+  await user.getByRole('button', { name: '写实摄影 7', exact: true }).click();
+  assert.deepEqual((await user.locator('main article h3').allTextContents()).slice(0, 2), ['胶片街景', '手工水彩模板']);
   await page.bringToFront();
   await card(page, uploaded.name).getByRole('button', { name: '下架', exact: true }).click();
   await card(page, uploaded.name).getByRole('button', { name: '上架', exact: true }).waitFor();
   await user.bringToFront();
-  await user.getByRole('button', { name: '自建风格 1', exact: true }).waitFor({ timeout: 35000 });
+  await user.getByRole('button', { name: '写实摄影 6', exact: true }).waitFor({ timeout: 35000 });
   await page.bringToFront();
   await card(page, uploaded.name).getByRole('button', { name: '上架', exact: true }).click();
   await card(page, uploaded.name).getByRole('button', { name: '下架', exact: true }).waitFor();
   await user.bringToFront();
   await user.evaluate(() => window.dispatchEvent(new Event('focus')));
-  await user.getByRole('button', { name: '自建风格 2', exact: true }).waitFor();
+  await user.getByRole('button', { name: '写实摄影 7', exact: true }).waitFor();
   const publicCard = user.locator('main article').filter({ has: user.getByRole('heading', { name: pasted.name, exact: true }) });
   await publicCard.getByRole('button', { name: '复制模板', exact: true }).click();
   assert.equal(await user.evaluate(() => navigator.clipboard.readText()), editedPrompt);

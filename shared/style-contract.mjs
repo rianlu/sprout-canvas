@@ -4,6 +4,17 @@ export const STYLE_LIMITS = Object.freeze({ prompt: MAX_PROMPT_LENGTH, imageByte
 export const STYLE_ARCHIVE_FORMAT = 'sprout-canvas-styles';
 export const STYLE_ID = /^[a-zA-Z0-9_-]{1,128}$/;
 export const STYLE_IMAGE_FILE = /^[a-f0-9]{64}\.(png|jpg|webp)$/;
+// Fixed choices for the admin form, in decision order: layout first, then visual texture; the first match wins.
+// Stored values stay plain text so backups carrying older category names still import unchanged.
+export const STYLE_CATEGORIES = Object.freeze([
+  { name: '角色与分镜', hint: '多格, 多视图, 表情包或宫格' },
+  { name: '商品广告', hint: '产品, 包装, 品牌或电商宣传' },
+  { name: '知识图鉴', hint: '标注, 拆解, 信息图或地图' },
+  { name: '立体造型', hint: '黏土, 手办, 微缩, 纸雕或 3D' },
+  { name: '写实摄影', hint: '像照片: 人像, 胶片, 棚拍' },
+  { name: '平面设计', hint: '色块, 网点, 拼贴, 故障或排版' },
+  { name: '绘画插画', hint: '笔触颜料: 水彩, 水墨, 动漫' },
+]);
 
 function text(value, label, limit, required = false) {
   if (value === undefined && !required) return '';

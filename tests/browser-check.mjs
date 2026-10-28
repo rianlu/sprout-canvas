@@ -523,8 +523,9 @@ try {
   await nav(page, '风格库');
   await page.getByRole('button', { name: /全部 36/ }).waitFor();
   assert.equal(await page.locator('main article').count(), 36);
-  await page.getByRole('button', { name: /摄影与光影 6/ }).click();
-  assert.equal(await page.locator('main article').count(), 6);
+  assert.deepEqual(await page.locator('[aria-label="风格分类"] button').allTextContents().then((labels) => labels.map((label) => label.replace(/\s*\d+$/, ''))), ['全部', '角色与分镜', '商品广告', '知识图鉴', '立体造型', '写实摄影', '平面设计', '绘画插画']);
+  await page.getByRole('button', { name: /写实摄影 5/ }).click();
+  assert.equal(await page.locator('main article').count(), 5);
   await page.getByRole('button', { name: /全部 36/ }).click();
   await page.getByLabel('搜索风格').fill('水彩');
   assert.ok(await page.locator('main article').count() > 0);

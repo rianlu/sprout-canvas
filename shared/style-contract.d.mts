@@ -35,4 +35,5 @@ export const STYLE_LIMITS: Readonly<{ prompt: number; imageBytes: number; archiv
 export const STYLE_ARCHIVE_FORMAT: 'sprout-canvas-styles';
 export const STYLE_ID: RegExp;
 export const STYLE_IMAGE_FILE: RegExp;
+export const STYLE_CATEGORIES: ReadonlyArray<Readonly<{ name: string; hint: string }>>;
 export function validateStyleInput(input: unknown): Required<Pick<StyleInput, 'name' | 'prompt' | 'author' | 'category' | 'sourceUrl' | 'published' | 'sortOrder'>>;

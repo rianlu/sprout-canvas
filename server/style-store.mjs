@@ -4,11 +4,14 @@ import path from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
 import { imageInfo } from './image-result.mjs';
 import { requestError } from '../shared/generation-contract.mjs';
-import { STYLE_ARCHIVE_FORMAT, STYLE_ID, STYLE_IMAGE_FILE, STYLE_LIMITS, validateStyleInput } from '../shared/style-contract.mjs';
+import { STYLE_ARCHIVE_FORMAT, STYLE_CATEGORIES, STYLE_ID, STYLE_IMAGE_FILE, STYLE_LIMITS, validateStyleInput } from '../shared/style-contract.mjs';
 
 const EDITABLE = ['name', 'prompt', 'author', 'category', 'sourceUrl', 'published', 'sortOrder'];
 const STORED = [...EDITABLE, 'id', 'imageFile', 'imageBytes', 'imageWidth', 'imageHeight', 'license', 'licenseUrl', 'collectionUrl', 'version', 'createdAt', 'updatedAt'];
+// Left by an earlier thumbnail build; the files are gone and nothing reads them, so reads drop them and older backups may still carry them.
+const RETIRED = ['thumbFile', 'thumbBytes'];
 const hash = (value) => createHash('sha256').update(value).digest('hex');
+const CATEGORY_ORDER = new Map(STYLE_CATEGORIES.map(({ name }, index) => [name, index]));
 const mimeForFile = (file) => file.endsWith('.jpg') ? 'image/jpeg' : file.endsWith('.png') ? 'image/png' : 'image/webp';
 
 function archiveEnvelope(records, images) {
@@ -64,8 +67,9 @@ export function createStyleStore(directory, { seedDirectory = new URL('./style-s
     PRAGMA user_version = 1;
     COMMIT;`);
   const put = db.prepare('INSERT INTO styles VALUES (?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET data=excluded.data, published=excluded.published, sort_order=excluded.sort_order, updated_at=excluded.updated_at');
-  const all = () => db.prepare('SELECT data FROM styles ORDER BY sort_order, updated_at DESC, id').all().map((row) => JSON.parse(row.data));
-  const get = (id) => { const row = db.prepare('SELECT data FROM styles WHERE id=?').get(id); return row ? JSON.parse(row.data) : null; };
+  const parse = (data) => { const record = JSON.parse(data); for (const key of RETIRED) delete record[key]; return record; };
+  const all = () => db.prepare('SELECT data FROM styles ORDER BY sort_order, updated_at DESC, id').all().map((row) => parse(row.data));
+  const get = (id) => { const row = db.prepare('SELECT data FROM styles WHERE id=?').get(id); return row ? parse(row.data) : null; };
   const revision = () => db.prepare("SELECT value FROM library_meta WHERE key='revision'").get().value;
   const saveRow = (record) => put.run(record.id, JSON.stringify(record), Number(record.published), record.sortOrder, record.updatedAt);
   const serialize = (record, admin = false) => {
@@ -124,7 +128,7 @@ export function createStyleStore(directory, { seedDirectory = new URL('./style-s
     const ids = new Set();
     let added = 0, updated = 0, unchanged = 0;
     const records = archive.styles.map((item) => {
-      if (!item || !STYLE_ID.test(item.id) || ids.has(item.id) || Object.keys(item).some((key) => !STORED.includes(key))) throw requestError('备份风格编号无效, 重复或含未知字段');
+      if (!item || !STYLE_ID.test(item.id) || ids.has(item.id) || Object.keys(item).some((key) => !STORED.includes(key) && !RETIRED.includes(key))) throw requestError('备份风格编号无效, 重复或含未知字段');
       ids.add(item.id);
       const value = validateStyleInput(Object.fromEntries(EDITABLE.map((key) => [key, item[key]])));
       const image = files.get(item.imageFile);
@@ -169,14 +173,18 @@ export function createStyleStore(directory, { seedDirectory = new URL('./style-s
     overview() {
       const { total, published } = db.prepare('SELECT count(*) AS total, coalesce(sum(published),0) AS published FROM styles').get();
       const recent = db.prepare('SELECT data FROM styles ORDER BY updated_at DESC,id LIMIT 4').all().map(({ data }) => {
-        const { id, name, author, image, published, updatedAt } = serialize(JSON.parse(data), true);
+        const { id, name, author, image, published, updatedAt } = serialize(parse(data), true);
         return { id, name, author, image, published, updatedAt };
       });
       return { total, published, hidden: total - published, recent };
     },
     catalog(admin = false) {
       const records = all().filter((record) => admin || record.published);
-      return { styles: records.map((record) => serialize(record, admin)), categories: [...new Set(records.map((record) => record.category).filter(Boolean))], revision: revision() };
+      // Fixed categories follow the decision order; names from older backups follow in first-seen order.
+      const categories = [...new Set(records.map((record) => record.category).filter(Boolean))]
+        .map((name, index) => ({ name, rank: CATEGORY_ORDER.get(name) ?? STYLE_CATEGORIES.length + index }))
+        .sort((a, b) => a.rank - b.rank).map(({ name }) => name);
+      return { styles: records.map((record) => serialize(record, admin)), categories, revision: revision() };
     },
     image(file, admin = false) {
       if (!STYLE_IMAGE_FILE.test(file) || !all().some((record) => record.imageFile === file && (admin || record.published))) throw requestError('示例图不存在', 404);

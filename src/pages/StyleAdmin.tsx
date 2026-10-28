@@ -5,7 +5,7 @@ import { useFocusTrap } from '../hooks/useFocusTrap';
 import { useStyleCatalog } from '../hooks/useStyleCatalog';
 import { getStyles, saveStyle, deleteStyle, exportStyles, previewStylesImport, importStyles } from '../lib/api/styles';
 import { prepareStylePreview } from '../lib/image/style-preview';
-import { STYLE_LIMITS, type StyleInput, type StyleRecord, type StyleImportPreview } from '../../shared/style-contract.mjs';
+import { STYLE_CATEGORIES, STYLE_LIMITS, type StyleInput, type StyleRecord, type StyleImportPreview } from '../../shared/style-contract.mjs';
 
 type Editor = { record: StyleRecord | null; input: StyleInput };
 const button = adminButton;
@@ -143,9 +143,13 @@ export function StyleManager({ active, editStyleId, onStyleOpened }: { active: b
             <div className="md:col-span-2 flex flex-col gap-4">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <label className="flex flex-col gap-1.5 font-body-sm text-body-sm">名称<input className={field} maxLength={100} value={editor.input.name || ''} onChange={(event) => update({ name: event.target.value })} placeholder="不填时取提示词开头" /></label>
-                <label className="flex flex-col gap-1.5 font-body-sm text-body-sm">分类<input className={field} list="admin-style-categories" maxLength={60} value={editor.input.category || ''} onChange={(event) => update({ category: event.target.value })} placeholder="未分类, 可选择或输入分类" /></label>
-                <datalist id="admin-style-categories">{catalog.categories.map((category) => <option value={category} key={category} />)}</datalist>
+                <label className="flex flex-col gap-1.5 font-body-sm text-body-sm">分类<select aria-label="分类" className={field} value={editor.input.category || ''} onChange={(event) => update({ category: event.target.value })}>
+                  <option value="">未分类</option>
+                  {editor.input.category && !STYLE_CATEGORIES.some(({ name }) => name === editor.input.category) && <option value={editor.input.category}>{editor.input.category} (旧分类)</option>}
+                  {STYLE_CATEGORIES.map(({ name, hint }) => <option value={name} key={name}>{name} · {hint}</option>)}
+                </select></label>
               </div>
+              <p className="-mt-2 font-meta-sm text-meta-sm text-on-surface-variant">从上往下选第一个符合的: 先看版式, 换掉主体后结构仍在就按版式归类; 否则看画面质感. 按可复用的风格判断, 不看示例画了什么.</p>
               <label className="flex flex-col gap-2 font-body-sm text-body-sm font-medium"><span>提示词 <span className="text-primary">*</span></span><textarea aria-label="风格提示词" className={`${field} resize-y leading-relaxed min-h-44`} rows={7} required maxLength={STYLE_LIMITS.prompt} value={editor.input.prompt} onChange={(event) => update({ prompt: event.target.value })} placeholder="粘贴收集到的完整提示词, 保留原文即可." /></label>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <label className="flex flex-col gap-1.5 font-body-sm text-body-sm">作者<input className={field} maxLength={200} value={editor.input.author || ''} onChange={(event) => update({ author: event.target.value })} placeholder="原作者名称" /></label>
