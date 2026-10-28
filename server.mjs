@@ -56,7 +56,16 @@ async function configResponse(req, res) {
     const state = getTextProviderCircuitState(provider.id);
     return { id: provider.id, name: provider.name, status: open ? 'cooldown' : state.lastError ? 'degraded' : state.lastSuccessAt ? 'available' : 'untested', failures: state.failures, openUntil: state.openUntil, lastSuccessAt: state.lastSuccessAt || 0 };
   });
-  json(res, 200, { ...publicConfig(config), imageChannels, textChannels, imageCapabilities: { customSizes: config.imageProviders.some((provider) => provider.generationMode === 'images' && /^gpt-image-2(?:-|$)/.test(provider.imageModel)), formats: [...new Set(config.imageProviders.flatMap((provider) => provider.capabilities.outputFormats))], exactSize: config.imageProviders.every((provider) => provider.capabilities.exactSize), maxReferences: MAX_REFERENCE_IMAGES } });
+  json(res, 200, { ...publicConfig(config), imageChannels, textChannels, imageCapabilities: { customSizes: config.imageProviders.some((provider) => provider.capabilities.customSizes), formats: [...new Set(config.imageProviders.flatMap((provider) => provider.capabilities.outputFormats))], exactSize: config.imageProviders.every((provider) => provider.capabilities.exactSize), maxReferences: MAX_REFERENCE_IMAGES } });
+}
+
+function chooseProvider(config, payload, modelName) {
+  try {
+    return queue.chooseImageProvider(config, '/v1/images/generations', 'application/json', '', payload);
+  } catch (error) {
+    if (modelName && error.statusCode === 503) throw requestError('所选模型暂时不可用, 请稍后重试或切换为自动', 503);
+    throw error;
+  }
 }
 
 async function submit(req, res, batch = false) {
@@ -67,10 +76,12 @@ async function submit(req, res, batch = false) {
   const providers = await Promise.all(inputs.map(async (input) => {
     state.credits.checkQuote(session, input.creditQuote, !queue.findSubmission(session.userId, input.requestId));
     if (queue.findSubmission(session.userId, input.requestId)) return undefined;
-    const config = await readLocalConfig(input.providerId);
+    // A pinned channel (local edits) wins over the model choice; otherwise only the chosen model's channels are eligible.
+    const config = input.providerId ? await readLocalConfig(input.providerId) : queue.modelScope(await readLocalConfig(), input.modelName);
+    if (!config.imageProviders.length) throw requestError('所选模型暂未提供, 请切换为自动后重试');
     const payload = Buffer.from(JSON.stringify(toImagesPayload(input)));
-    if (!config.imageProviders.some((provider) => queue.providerSupportsRequest(provider, '/v1/images/generations', 'application/json', payload))) throw requestError('当前通道不支持这些生成参数');
-    const selected = input.providerId ? config : queue.chooseImageProvider(config, '/v1/images/generations', 'application/json', '', payload);
+    if (!config.imageProviders.some((provider) => queue.providerSupportsRequest(provider, '/v1/images/generations', 'application/json', payload))) throw requestError(input.modelName && !input.providerId ? '所选模型不支持这些生成参数, 请调整画幅或背景' : '当前通道不支持这些生成参数');
+    const selected = input.providerId ? config : chooseProvider(config, payload, input.modelName);
     if (!queue.providerSupportsRequest(selected, '/v1/images/generations', 'application/json', payload)) throw requestError('当前通道不支持这些生成参数');
     return selected;
   }));

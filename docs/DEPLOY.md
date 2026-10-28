@@ -37,15 +37,19 @@
 | `baseUrl` | HTTP(S) API 地址, 末尾 `/v1` 自动移除 | 同左 |
 | `apiKey` | 服务端密钥 | 服务端密钥 |
 | `imageModel` | Images 使用图像模型; Responses 使用调用图片工具的模型 | 不使用 |
+| `modelName` | 可选, 1 到 40 字. 页面模型选择的显示与分组名, 同名通道视为同一模型并互为备用. 默认按 imageModel 推导, 如 `gpt-image-2.5` 显示为 `GPT Image 2.5` | 不使用 |
 | `model` / `textModel` | `model` 可作为 imageModel 的输入别名 | 文本模型, 走 `/v1/chat/completions` |
 | `generationMode` | `images` 或 `responses`, 默认 images | 不使用 |
 | `capabilities.outputFormats` | 非空数组, 可选 png/jpeg/webp, 默认三种. 按实际通道验证收敛 | 不使用 |
 | `capabilities.exactSize` | 布尔值, 默认 false. 只有验证输出严格遵守请求像素后才设 true | 不使用 |
 | `capabilities.transparent` | 布尔值, 默认 false. 只有真实返回带透明通道的 PNG/WebP 后才设 true | 不使用 |
+| `capabilities.customSizes` | 布尔值. 是否接受 1:1, 3:2, 2:3 以外的画幅 (如 16:9, 3:4, 21:9). 默认 Images 模式且 imageModel 属于 gpt-image-2 系列 (含 2.5) 时为 true, 其他为 false | 不使用 |
 | `requestHeaders` | 可选请求头对象, 支持 `{{timestamp}}` 和 `{{sessionId}}` 替换 | 同左 |
 
-- 当前已测 default 通道使用 `outputFormats: ["png"]`, `exactSize: false`, `transparent: false`. 该选择来自真实文件检查, 不是按文件扩展名猜测. 透明底仅在对应通道 `transparent: true` 时启用.
-- `exactSize` 控制尺寸说明, 不改变上游实际能力. gpt-image-2 的 Images 模式支持自定义目标尺寸; 其他模式使用标准尺寸.
+- 当前两个图像通道均按真实文件检查设为 `outputFormats: ["png"]`, `exactSize: false`, `transparent: true`, 实测记录见 `docs/REAL_API_VALIDATION.md`. 透明底仅在对应通道 `transparent: true` 时启用.
+- `exactSize` 控制尺寸说明, 不改变上游实际能力. 自定义画幅只路由到 `customSizes: true` 的通道.
+- 页面在存在两个以上 `modelName` 时显示模型选择, 默认自动. 选定模型后只在该模型的通道间调度与切换; 自动则在全部通道间调度. 参数按所选模型中单个通道能同时满足的组合启用, 例如透明背景与 16:9 需由同一通道同时支持. 局部重绘固定原作品通道.
+- 新增与已有模型相同的通道时使用相同 `modelName`, 页面不新增选项, 只增加该模型的备用通道.
 - 新配置只使用 `imageProviders[]` 和 `textProviders[]`. 旧单通道/`providers` 字段仅供已有配置读取, 不新增第二套配置方式.
 - 图像/文本通道 ID 分别保持唯一. 不在 requestHeaders 中下发浏览器需要持有的凭据.
 

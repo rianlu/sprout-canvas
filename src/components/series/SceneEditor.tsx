@@ -5,6 +5,8 @@ import { StitchIcon } from '../ui/StitchIcon';
 import type { ImageCapabilities } from '../../types/provider';
 import { CreditCost } from '../ui/CreditCost';
 import { MAX_SCENE_PROMPT_LENGTH } from '../../../shared/series-planning.mjs';
+import { qualityLabel } from '../../lib/api/generation';
+import { LOCK_UNSUPPORTED_IMAGE_OPTIONS } from '../../lib/image/channel-limits';
 
 export function SceneEditor({ value, onChange, onSave, onClose, actionLabel, imageCapabilities, estimatedPoints = 0 }: { value: SceneEdit; onChange: (value: SceneEdit) => void; onSave: () => Promise<void>; onClose: () => void; actionLabel: string; imageCapabilities?: ImageCapabilities; estimatedPoints?: number }) {
   const ref = useFocusTrap<HTMLDivElement>(true);
@@ -22,7 +24,7 @@ export function SceneEditor({ value, onChange, onSave, onClose, actionLabel, ima
           <label className="block text-body-sm">画面提示词<textarea aria-label="本镜画面提示词" rows={5} maxLength={MAX_SCENE_PROMPT_LENGTH} value={value.prompt} onChange={(event) => onChange({ ...value, prompt: event.target.value })} className="mt-1 w-full p-3 rounded-xl bg-surface-container-low border border-outline-variant/30 disabled:opacity-60" /></label>
           <div className="grid grid-cols-3 gap-space-sm text-body-sm">
             <label className="min-w-0">画幅<select aria-label="本镜画幅" value={value.aspectRatio} onChange={(event) => onChange({ ...value, aspectRatio: event.target.value as SceneEdit['aspectRatio'] })} className="w-full mt-1 p-2 rounded-lg bg-surface-container-low">{seriesAspects(imageCapabilities?.customSizes, value.aspectRatio).map((aspect) => <option key={aspect.id} value={aspect.id}>{aspect.label}</option>)}</select></label>
-            <label className="min-w-0">质量<select aria-label="本镜质量" value={value.quality} onChange={(event) => onChange({ ...value, quality: event.target.value as SceneEdit['quality'] })} className="w-full mt-1 p-2 rounded-lg bg-surface-container-low"><option value="auto">自动</option><option value="low">快速</option><option value="medium">标准</option><option value="high">精细</option></select></label>
+            <label className="min-w-0">质量{LOCK_UNSUPPORTED_IMAGE_OPTIONS ? <span aria-label="本镜质量" title="上游暂不支持修改, 将使用默认值" className="block mt-1 p-2 rounded-lg bg-surface-container-low">{qualityLabel(value.quality)}</span> : <select aria-label="本镜质量" value={value.quality} onChange={(event) => onChange({ ...value, quality: event.target.value as SceneEdit['quality'] })} className="w-full mt-1 p-2 rounded-lg bg-surface-container-low"><option value="auto">自动</option><option value="low">快速</option><option value="medium">标准</option><option value="high">精细</option></select>}</label>
             <label className="min-w-0">格式{formats.length === 1 ? <span aria-label="本镜格式" className="block mt-1 p-2 rounded-lg bg-surface-container-low">{formats[0].toUpperCase()}</span> : <select aria-label="本镜格式" value={value.outputFormat} onChange={(event) => onChange({ ...value, outputFormat: event.target.value as SceneEdit['outputFormat'] })} className="w-full mt-1 p-2 rounded-lg bg-surface-container-low">{formats.map((format) => <option key={format} value={format}>{format.toUpperCase()}</option>)}</select>}</label>
           </div>
         </fieldset>

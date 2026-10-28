@@ -49,6 +49,13 @@ function id(value, name, required = false) {
   return result;
 }
 
+/** A model the browser chose; absent means automatic routing across every channel. */
+function modelName(value) {
+  const result = text(value, '模型', 40, true);
+  if (result !== result.trim() || /[\u0000-\u001f]/.test(result)) throw requestError('模型名称格式无效');
+  return result;
+}
+
 function image(value, name) {
   const result = text(value, name, Math.ceil(MAX_REFERENCE_BYTES * 4 / 3) + 128, true);
   if (!/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/]+={0,2}$/.test(result)) throw requestError(`${name} 必须是 PNG, JPEG 或 WebP 图片`);
@@ -69,7 +76,7 @@ function onlyKeys(value, keys, name) {
 /** Keep one validated domain contract for browser requests and provider adapters. */
 export function validateGenerationSubmission(value) {
   const input = object(value, '请求');
-  onlyKeys(input, ['requestId', 'request', 'clientContext', 'providerId', 'referenceJobId', 'referenceImage', 'retryOf', 'creditQuote'], '请求');
+  onlyKeys(input, ['requestId', 'request', 'clientContext', 'providerId', 'modelName', 'referenceJobId', 'referenceImage', 'retryOf', 'creditQuote'], '请求');
   const request = object(input.request, '生成参数');
   onlyKeys(request, ['prompt', 'size', 'quality', 'outputFormat', 'background', 'outputCompression', 'references', 'mask'], '生成参数');
   const references = request.references ?? [];
@@ -116,6 +123,7 @@ export function validateGenerationSubmission(value) {
     requestId: id(input.requestId, '请求 ID', true), request: normalized, clientContext,
     ...(input.creditQuote ? { creditQuote: validateCreditQuote(input.creditQuote) } : {}),
     ...(input.providerId ? { providerId: id(input.providerId, '通道 ID') } : {}),
+    ...(input.modelName ? { modelName: modelName(input.modelName) } : {}),
     ...(input.referenceJobId ? { referenceJobId: id(input.referenceJobId, '参考任务 ID') } : {}),
     ...(input.referenceImage ? { referenceImage: reference(input.referenceImage, '首镜参考图片') } : {}),
     ...(input.retryOf ? { retryOf: id(input.retryOf, '原任务 ID') } : {}),
@@ -127,6 +135,7 @@ export function generationRecipe(input, provider = {}) {
   return {
     version: 1, ...parameters, model: provider.imageModel || '', providerId: provider.id || '',
     providerName: provider.name || '', generationMode: provider.generationMode || '',
+    ...(input.modelName ? { modelName: input.modelName } : {}),
     styleId: input.clientContext.styleId || '', styleName: input.clientContext.styleName || '', tone: input.clientContext.tone || '',
     references: references.map(({ dataUrl: _image, ...ref }) => ref), hasMask: Boolean(mask),
     ...(input.referenceJobId ? { referenceJobId: input.referenceJobId } : {}),

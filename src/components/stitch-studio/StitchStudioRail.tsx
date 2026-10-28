@@ -17,7 +17,7 @@ import type { StudioStyleTemplate } from '../../lib/image/recipe';
 import { StudioTemplateCard } from './StudioTemplateCard';
 import { StitchIcon } from '../ui/StitchIcon';
 import { useImageMetadata } from '../../hooks/useImageMetadata';
-import { formatRequestSize, qualityLabel, resolveSize, STANDARD_ASPECTS } from '../../lib/api/generation';
+import { formatRequestSize, qualityLabel, resolveSize, STANDARD_ASPECTS, supportsRequest } from '../../lib/api/generation';
 import { LOCK_UNSUPPORTED_IMAGE_OPTIONS } from '../../lib/image/channel-limits';
 import { imageFileExtension } from '../../lib/image/format';
 import { RecordImage } from '../gallery/RecordImage';
@@ -63,11 +63,15 @@ export interface StitchStudioRailProps {
   submitting: boolean;
   onRemoveRef: (referenceId?: string) => void;
   imageCapabilities?: ImageCapabilities;
+  /** Models to choose from; the selector stays hidden with fewer than two. */
+  models: string[];
+  /** Model a local edit stays on, shown in the inherited parameters. */
+  editModelLabel?: string;
 }
 
-/** 画幅比例选择格 (稿: grid-cols-3 六格) */
-function AspectRatioGrid({ value, onChange, customSizes = true, sizeTier, requestSize }: { value: AspectRatio; onChange: (v: AspectRatio) => void; customSizes?: boolean; sizeTier: GenerationConfig['sizeTier']; requestSize: string }) {
-  const ratios: { id: AspectRatio; name: string; box: string }[] = [
+/** 画幅比例选择格 (稿: grid-cols-3; 自定义尺寸通道九格, 标准通道四格). 只标比例, 实际像素以生成文件为准. */
+function AspectRatioGrid({ value, onChange, customSizes = true, unavailable }: { value: AspectRatio; onChange: (v: AspectRatio) => void; customSizes?: boolean; unavailable: (ratio: AspectRatio) => string }) {
+  const ratios: { id: AspectRatio; name: string; box: string; title?: string }[] = [
     { id: '1:1', name: '1:1 方图', box: 'w-4 h-4' },
     { id: '3:4', name: '3:4 竖图', box: 'w-3 h-4' },
     { id: '4:3', name: '4:3 横图', box: 'w-4 h-3' },
@@ -76,22 +80,25 @@ function AspectRatioGrid({ value, onChange, customSizes = true, sizeTier, reques
     { id: '21:9', name: '21:9 超宽', box: 'w-5 h-2' },
     { id: '3:2', name: '3:2 横图', box: 'w-4 h-3' },
     { id: '2:3', name: '2:3 竖图', box: 'w-3 h-4' },
-    { id: 'auto', name: '自动画幅', box: 'w-4 h-4' },
+    { id: 'auto', name: '自动画幅', box: 'w-4 h-4 border-dashed', title: '由模型按提示词内容决定横竖' },
   ];
-  const visible = customSizes ? ratios.filter((r, index) => index < 6 || r.id === value) : ratios.filter((r) => STANDARD_ASPECTS.includes(r.id));
+  const visible = customSizes ? ratios : ratios.filter((r) => STANDARD_ASPECTS.includes(r.id) || r.id === value);
   return (
-    <div className="grid grid-cols-3 gap-1.5">
+    <div role="group" aria-label="画面画幅比例" className="grid grid-cols-3 gap-1.5">
       {visible.map((r) => {
         const active = value === r.id;
+        const reason = active ? '' : unavailable(r.id);
         return (
           <button
             key={r.id}
             type="button"
             aria-pressed={active}
+            disabled={Boolean(reason)}
+            title={reason || r.title}
             className={
               active
                 ? 'flex flex-col items-start p-2 rounded-xl bg-surface-container-high shadow-[0_0_0_2px_#597445] text-on-surface transition-all text-left'
-                : 'flex flex-col items-start p-2 rounded-xl bg-surface-container-low hover:bg-surface-container text-on-surface-variant transition-all text-left'
+                : 'flex flex-col items-start p-2 rounded-xl bg-surface-container-low hover:bg-surface-container text-on-surface-variant transition-all text-left disabled:opacity-45 disabled:cursor-not-allowed disabled:hover:bg-surface-container-low'
             }
             onClick={() => onChange(r.id)}
           >
@@ -106,7 +113,6 @@ function AspectRatioGrid({ value, onChange, customSizes = true, sizeTier, reques
               )}
             </div>
             <span className="font-meta-sm text-[11px] font-medium text-on-surface leading-tight">{r.name}</span>
-            <span className="font-meta-sm text-[10px] text-outline">{formatRequestSize(active ? requestSize : resolveSize(r.id, sizeTier).size)}</span>
           </button>
         );
       })}
@@ -192,6 +198,15 @@ export function StitchStudioRail(props: StitchStudioRailProps) {
   }
   const outputFormats = props.imageCapabilities?.formats ?? [];
   const sourceRecipe = props.sourceRecord?.recipe;
+  const capabilities = props.imageCapabilities;
+  // Options are checked against the other current settings, since a request must fit a single channel.
+  const ratioUnavailable = (ratio: AspectRatio) => {
+    if (!capabilities || supportsRequest(capabilities, { ...config, requestSize: resolveSize(ratio, config.sizeTier).size })) return '';
+    return config.background === 'transparent' && supportsRequest(capabilities, { ...config, background: 'auto', requestSize: resolveSize(ratio, config.sizeTier).size }) ? '当前模型开启透明背景时不支持此画幅' : '当前模型不支持此画幅';
+  };
+  const transparentUnavailable = !capabilities || config.background === 'transparent' || supportsRequest(capabilities, { ...config, background: 'transparent' }) ? ''
+    : capabilities.channels?.some((channel) => channel.transparent) ? '当前画幅不支持透明背景, 可改用 1:1, 3:2, 2:3 或自动' : '当前模型不支持透明背景';
+  const blockedRatios = config.background === 'transparent' && !isEdit ? (['1:1', '3:4', '4:3', '9:16', '16:9', '21:9', '3:2', '2:3', 'auto'] as AspectRatio[]).filter((ratio) => (capabilities?.customSizes || STANDARD_ASPECTS.includes(ratio)) && ratioUnavailable(ratio)) : [];
   const referenceSlots = <ReferenceImageSlots references={props.referenceImages} maxReferences={props.maxReferences} disabled={imagesDisabled} busy={props.imageBusy} onAdd={() => chooseFiles()} onUpload={(files) => props.onUploadRefs(files)} onReplace={chooseFiles} onRemove={props.onRemoveRef} />;
 
   return (
@@ -344,6 +359,7 @@ export function StitchStudioRail(props: StitchStudioRailProps) {
               ['输出格式', (config.outputFormat === 'auto' ? 'png' : config.outputFormat).toUpperCase()],
               ['背景', config.background === 'transparent' ? '透明' : config.background === 'opaque' ? '不透明' : '自动'],
               ['生成数量', '1 张'],
+              ...(props.editModelLabel ? [['模型', props.editModelLabel]] : []),
               ['画风', sourceRecipe?.styleName || '沿用原图'],
               ...(config.outputFormat === 'jpeg' || config.outputFormat === 'webp' ? [['压缩质量', `${config.outputCompression}%`]] : []),
               ...(props.sourceRecord?.width && props.sourceRecord?.height ? [['原图像素', `${props.sourceRecord.width}×${props.sourceRecord.height}`]] : []),
@@ -363,16 +379,30 @@ export function StitchStudioRail(props: StitchStudioRailProps) {
           <span className="font-meta-sm text-[11px] text-outline">图像生成</span>
         </div>
 
+        {/* 模型: 两个以上模型时显示, 默认自动 */}
+        {props.models.length > 1 && (
+          <div role="group" aria-label="生成模型" className="bg-surface-container-low p-2.5 rounded-xl flex flex-col gap-1.5">
+            <div className="flex items-center justify-between">
+              <span className="font-meta-sm text-meta-sm text-on-surface font-medium">生成模型</span>
+              <span className="font-meta-sm text-[10px] text-outline">model</span>
+            </div>
+            <SegmentedControl
+              columns={Math.min(4, props.models.length + 1)}
+              value={config.modelName || ''}
+              onChange={(modelName) => onConfigChange({ modelName })}
+              options={[{ id: '', label: '自动' }, ...props.models.map((model) => ({ id: model, label: model }))]}
+            />
+            <p className="font-meta-sm text-[10px] text-outline">{config.modelName ? '只使用所选模型, 下方参数按该模型可用项显示' : '按通道负载自动选择, 失败时可换用其他模型'}</p>
+          </div>
+        )}
+
         {/* 画幅 */}
         <div className="flex flex-col gap-1.5">
-          <div className="flex items-center justify-between">
-            <span className="font-meta-sm text-meta-sm text-on-surface-variant font-medium">
-              画面画幅比例 (aspect_ratio)
-            </span>
-            <span className="font-meta-sm text-[11px] text-outline">{formatRequestSize(config.requestSize)}</span>
-          </div>
-          <AspectRatioGrid value={config.aspectRatio} onChange={(v) => onConfigChange({ aspectRatio: v })} customSizes={props.imageCapabilities?.customSizes} sizeTier={config.sizeTier} requestSize={config.requestSize} />
-          <p className="font-meta-sm text-[10px] text-outline">目标画幅, 实际尺寸以生成文件为准</p>
+          <span className="font-meta-sm text-meta-sm text-on-surface-variant font-medium">
+            画面画幅比例 (aspect_ratio)
+          </span>
+          <AspectRatioGrid value={config.aspectRatio} onChange={(v) => onConfigChange({ aspectRatio: v })} customSizes={props.imageCapabilities?.customSizes} unavailable={ratioUnavailable} />
+          <p className="font-meta-sm text-[10px] text-outline">{blockedRatios.length ? `开启透明背景时, 当前模型不支持 ${blockedRatios.join(', ')}. ` : ''}按比例生成, 实际像素以生成文件为准</p>
         </div>
 
         <div className="bg-surface-container-low p-2.5 rounded-xl flex flex-col gap-1.5">
@@ -398,17 +428,19 @@ export function StitchStudioRail(props: StitchStudioRailProps) {
             <div className="flex items-center justify-between">
               <div>
                 <p className="font-meta-sm text-meta-sm text-on-surface font-medium">透明背景</p>
-                <p className="font-meta-sm text-[10px] text-outline">开启后走支持透明底的通道</p>
+                <p id="studio-transparent-hint" className="font-meta-sm text-[10px] text-outline">{transparentUnavailable || '开启后走支持透明底的通道'}</p>
               </div>
-              <label className="relative inline-flex items-center cursor-pointer">
+              <label className={`relative inline-flex items-center ${transparentUnavailable ? 'cursor-not-allowed' : 'cursor-pointer'}`}>
                 <input
                   className="sr-only peer"
                   type="checkbox"
                   aria-label="透明背景"
+                  aria-describedby="studio-transparent-hint"
+                  disabled={Boolean(transparentUnavailable)}
                   checked={config.background === 'transparent'}
                   onChange={(event) => onConfigChange({ background: event.target.checked ? 'transparent' : 'auto' })}
                 />
-                <div className="w-9 h-5 bg-surface-container-highest peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-primary" />
+                <div className="w-9 h-5 bg-surface-container-highest peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-primary peer-disabled:opacity-50" />
               </label>
             </div>
           </div>
@@ -449,15 +481,16 @@ export function StitchStudioRail(props: StitchStudioRailProps) {
                   <Layers className="text-primary" size={18} aria-hidden />
                   <span className="font-body-sm text-body-sm font-medium text-on-surface">画布背景透光 (background)</span>
                 </div>
-                <label className="relative inline-flex items-center cursor-pointer">
+                <label className={`relative inline-flex items-center ${transparentUnavailable ? 'cursor-not-allowed' : 'cursor-pointer'}`} title={transparentUnavailable || undefined}>
                   <input
                     className="sr-only peer"
                     type="checkbox"
                     aria-label="透明背景"
+                    disabled={Boolean(transparentUnavailable)}
                     checked={config.background === 'transparent'}
                     onChange={(event) => onConfigChange({ background: event.target.checked ? 'transparent' : 'auto' })}
                   />
-                  <div className="w-9 h-5 bg-surface-container-highest peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-primary" />
+                  <div className="w-9 h-5 bg-surface-container-highest peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-primary peer-disabled:opacity-50" />
                 </label>
               </div>
               <div className="flex items-center justify-between text-outline font-meta-sm text-[10px]">

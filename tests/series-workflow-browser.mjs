@@ -398,11 +398,11 @@ try {
   await scenario('分镜设置读取原任务参数, 不跟随后来修改的默认值', async (page) => {
     await completePlan(page);
     await page.getByRole('button', { name: '1:1 方形插画', exact: true }).click();
-    await page.getByLabel('系列生成质量').selectOption('high');
+    assert.equal(await page.getByLabel('系列生成质量').innerText(), '自动');
     await cards(page).nth(1).getByRole('button', { name: /^调整并重绘/ }).click();
     const dialog = page.getByRole('dialog', { name: '调整第 2 镜', exact: true });
     assert.equal(await dialog.getByLabel('本镜画幅').inputValue(), '16:9');
-    assert.equal(await dialog.getByLabel('本镜质量').inputValue(), 'auto');
+    assert.equal(await dialog.getByLabel('本镜质量').innerText(), '自动');
     await dialog.getByLabel('关闭本镜设置').click();
   });
 
@@ -417,7 +417,7 @@ try {
     await closeQueue(page);
     const original = (await rows(page, 'outbox')).find((row) => row.requestId === pending.requestId).input;
     assert.ok(original.referenceImage, 'redraw has a separate continuity reference');
-    assert.ok(await page.getByLabel('系列生成质量').isDisabled(), 'global parameters must not misrepresent queued tasks');
+    assert.ok(await page.getByRole('button', { name: '1:1 方形插画', exact: true }).isDisabled(), 'global parameters must not misrepresent queued tasks');
     await cards(page).nth(1).getByTitle('修改尚未执行的分镜').click();
     const dialog = page.getByRole('dialog', { name: '调整第 2 镜', exact: true });
     await dialog.getByLabel('本镜画面提示词').fill('小熊停在瀑布旁边');
@@ -575,12 +575,12 @@ try {
     await cards(page).nth(1).getByRole('button', { name: '调整并重试', exact: true }).click();
     const dialog = page.getByRole('dialog', { name: '调整第 2 镜', exact: true });
     await dialog.getByLabel('本镜画面提示词').fill('小熊站在彩虹桥上');
-    await dialog.getByLabel('本镜质量').selectOption('high');
+    await dialog.getByLabel('本镜画幅').selectOption('3:4');
     await dialog.getByRole('button', { name: /^保存并重新生成/ }).click();
     await settled(page, 5);
     const latest = (await rows(page)).sort((a, b) => b.version - a.version)[0];
     assert.equal(latest.version, 3, 'successful and failed attempts have distinct versions');
-    assert.equal(latest.recipe.quality, 'high');
+    assert.equal(latest.recipe.size, '768x1024');
     assert.ok(latest.recipe.prompt.includes('小熊站在彩虹桥上'));
   });
 

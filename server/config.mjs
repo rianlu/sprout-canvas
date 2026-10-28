@@ -22,26 +22,40 @@ function normalizeProviderId(input, fallback) {
   return id || fallback;
 }
 
+// The GPT Image 2 family (2, 2.5 and their dated or suffixed variants) accepts any size within the documented limits.
+const CUSTOM_SIZE_MODEL = /^gpt-image-2(?:[.-]|$)/;
+
+/** Display and grouping name for the model selector; channels with the same name are interchangeable. */
+function defaultModelName(imageModel) {
+  const family = /^gpt-image-(\d+(?:\.\d+)?)(?:-|$)/.exec(imageModel);
+  return family ? `GPT Image ${family[1]}` : imageModel;
+}
+
 function normalizeImageProvider(provider, index) {
   const id = normalizeProviderId(provider.id || provider.name, `image-provider-${index + 1}`);
   const name = String(provider.name || provider.id || `生图服务商 ${index + 1}`).trim();
+  const imageModel = String(provider.imageModel || provider.model || 'gpt-image-2').trim();
+  const generationMode = String(provider.generationMode || 'images').trim();
   const config = {
     id,
     name,
     baseUrl: normalizeBaseUrl(provider.baseUrl || 'https://api.openai.com'),
     apiKey: String(provider.apiKey || '').trim(),
-    imageModel: String(provider.imageModel || provider.model || 'gpt-image-2').trim(),
-    generationMode: String(provider.generationMode || 'images').trim(),
+    imageModel,
+    modelName: String(provider.modelName ?? defaultModelName(imageModel)).trim(),
+    generationMode,
     capabilities: {
       outputFormats: provider.capabilities?.outputFormats ?? ['png', 'jpeg', 'webp'],
       exactSize: provider.capabilities?.exactSize ?? false,
       transparent: provider.capabilities?.transparent === true,
+      customSizes: provider.capabilities?.customSizes ?? (generationMode === 'images' && CUSTOM_SIZE_MODEL.test(imageModel)),
     },
     requestHeaders: provider.requestHeaders && typeof provider.requestHeaders === 'object' ? provider.requestHeaders : {},
   };
   if (!config.apiKey) throw new Error(`生图服务商 ${name} 缺少 apiKey. 请检查 ${path.relative(ROOT, LOCAL_CONFIG_PATH)}`);
   if (!['images', 'responses'].includes(config.generationMode)) throw new Error(`生图服务商 ${name} 的 generationMode 只能是 images 或 responses`);
-  if (!Array.isArray(config.capabilities.outputFormats) || !config.capabilities.outputFormats.length || config.capabilities.outputFormats.some((format) => !['png', 'jpeg', 'webp'].includes(format)) || typeof config.capabilities.exactSize !== 'boolean' || typeof config.capabilities.transparent !== 'boolean') throw new Error(`生图服务商 ${name} 的 capabilities 配置无效`);
+  if (!Array.isArray(config.capabilities.outputFormats) || !config.capabilities.outputFormats.length || config.capabilities.outputFormats.some((format) => !['png', 'jpeg', 'webp'].includes(format)) || typeof config.capabilities.exactSize !== 'boolean' || typeof config.capabilities.transparent !== 'boolean' || typeof config.capabilities.customSizes !== 'boolean') throw new Error(`生图服务商 ${name} 的 capabilities 配置无效`);
+  if (!config.modelName || config.modelName.length > 40) throw new Error(`生图服务商 ${name} 的 modelName 必须为 1 到 40 个字符`);
   return config;
 }
 
@@ -200,6 +214,7 @@ export function publicConfig(config) {
       id: provider.id,
       name: provider.name,
       imageModel: provider.imageModel,
+      modelName: provider.modelName,
       generationMode: provider.generationMode,
       capabilities: provider.capabilities,
       textModel: config.textModel,

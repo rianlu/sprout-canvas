@@ -16,9 +16,11 @@ export interface GenerationContext {
   seriesId?: string; masterPrompt?: string; sceneId?: string; sceneIndex?: number; version?: number;
   parentId?: string; template?: SeriesTemplate; styleId?: string; styleName?: string; tone?: string; batchId?: string;
 }
-export interface GenerationSubmission { requestId: string; request: GenerationRequest; clientContext: GenerationContext; providerId?: string; referenceJobId?: string; referenceImage?: GenerationReference; retryOf?: string; creditQuote?: CreditQuote }
+export interface GenerationSubmission { requestId: string; request: GenerationRequest; clientContext: GenerationContext; providerId?: string; modelName?: string; referenceJobId?: string; referenceImage?: GenerationReference; retryOf?: string; creditQuote?: CreditQuote }
 export interface GenerationRecipe extends Omit<GenerationRequest, 'references' | 'mask'> {
   version: 1; model: string; providerId: string; providerName: string; generationMode: string;
+  /** The model the user chose; absent when routing was automatic. */
+  modelName?: string;
   styleId: string; styleName: string; tone: string;
   references: Omit<GenerationReference, 'dataUrl'>[]; hasMask: boolean; referenceJobId?: string;
   referenceImage?: Omit<GenerationReference, 'dataUrl'>;

@@ -392,7 +392,8 @@ try {
   await page.getByTitle('设置本镜画幅, 质量和格式').first().click();
   const planEditor = page.getByRole('dialog', { name: '调整第 1 镜', exact: true });
   await planEditor.getByLabel('本镜画面提示词').fill(reviewedPrompt);
-  await planEditor.getByLabel('本镜质量').selectOption('high');
+  assert.equal(await planEditor.getByLabel('本镜质量').innerText(), '自动', 'quality stays read-only while the channels ignore it');
+  await planEditor.getByLabel('本镜画幅').selectOption('1:1');
   await planEditor.getByRole('button', { name: '保存本镜设置', exact: true }).click();
   await planEditor.waitFor({ state: 'hidden' });
   assert.equal(submissions, 0, 'saving a draft scene must not generate an image');
@@ -449,7 +450,8 @@ try {
   assert.doesNotMatch(JSON.stringify(splitCall.json), /紫色机器人旧主体/);
   assert.ok(scenes.every((record) => record.recipe.prompt.includes(seriesBrief)));
   assert.ok(scenes.find((record) => record.sceneIndex === 0).recipe.prompt.includes(reviewedPrompt));
-  assert.equal(scenes.find((record) => record.sceneIndex === 0).recipe.quality, 'high');
+  assert.equal(scenes.find((record) => record.sceneIndex === 0).recipe.size, '1024x1024');
+  assert.ok(scenes.every((record) => record.recipe.quality === 'auto'));
   assert.ok(scenes.every((record) => !record.recipe.prompt.includes('紫色机器人旧主体')));
   assert.ok((await rows(page, 'drafts')).every((draft) => !Object.hasOwn(draft.data, 'characterBrief')));
   await closeQueue(page);
@@ -461,11 +463,11 @@ try {
   await page.getByRole('button', { name: /^调整并重绘/ }).first().click();
   const editor = page.getByRole('dialog', { name: '调整第 1 镜', exact: true });
   await editor.getByLabel('本镜画面提示词').fill('小棕熊在晴朗的河边散步');
-  await editor.getByLabel('本镜质量').selectOption('high');
+  await editor.getByLabel('本镜画幅').selectOption('3:4');
   await editor.getByRole('button', { name: /^保存并重绘本镜/ }).click();
   await waitRecords(page, 8); await closeQueue(page);
   await waitEmptyWorkspace(page, 'series');
-  assert.ok((await rows(page)).some((record) => record.version === 3 && record.recipe.quality === 'high'));
+  assert.ok((await rows(page)).some((record) => record.version === 3 && record.recipe.size === '768x1024'));
   await page.getByTitle('全屏预览大图', { exact: true }).first().click();
   await page.getByLabel('本镜版本', { exact: true }).waitFor();
   assert.equal(await page.getByLabel('本镜版本').locator('option').count(), 3);
@@ -728,7 +730,7 @@ try {
   await op.locator('#series-story-prompt').fill(commerceBrief);
   assert.equal(await op.getByTitle('在风格库选择基底风格').count(), 0);
   assert.equal(await op.locator('#series-story-prompt').inputValue(), commerceBrief, 'removing the library style selector keeps the story');
-  await op.getByLabel('系列生成质量').selectOption('high');
+  assert.equal(await op.getByLabel('系列生成质量').innerText(), '自动');
   holdImage = new Promise((resolve) => { releaseImage = resolve; });
   await op.getByRole('button', { name: /^智能拆解分镜/ }).click();
   await until(() => op.getByRole('button', { name: /^确认并生成 4 张图片/ }).isEnabled(), 'commerce plan ready for review');
@@ -748,7 +750,7 @@ try {
   await op.getByTitle('修改尚未执行的分镜').first().click();
   const pendingEditor = op.getByRole('dialog', { name: '调整第 2 镜', exact: true });
   await pendingEditor.getByLabel('本镜画面提示词').fill('陶瓷杯置于森林木桌上, 展示杯壁上的绿色叶纹');
-  await pendingEditor.getByLabel('本镜质量').selectOption('medium');
+  await pendingEditor.getByLabel('本镜画幅').selectOption('1:1');
   await pendingEditor.getByRole('button', { name: '更新排队任务', exact: true }).click();
   await pendingEditor.waitFor({ state: 'hidden' });
   const lastSceneJob = (await jobs(op)).find((job) => job.status === 'pending' && job.clientContext.sceneIndex === 3);
@@ -758,11 +760,11 @@ try {
   releaseImage(); holdImage = undefined;
   const opRecords = await waitRecords(op, 8);
   await waitEmptyWorkspace(op, 'series');
-  assert.ok(opRecords.some((record) => record.sceneIndex === 1 && record.recipe.quality === 'medium' && record.recipe.prompt.includes('绿色叶纹')));
-  assert.ok(app.calls.some((call) => call.path.endsWith('/images/edits') && call.body.includes(Buffer.from('绿色叶纹')) && /name="quality"\r\n\r\nmedium/.test(call.body.toString())));
+  assert.ok(opRecords.some((record) => record.sceneIndex === 1 && record.recipe.size === '1024x1024' && record.recipe.prompt.includes('绿色叶纹')));
+  assert.ok(app.calls.some((call) => call.path.endsWith('/images/edits') && call.body.includes(Buffer.from('绿色叶纹')) && /name="size"\r\n\r\n1024x1024/.test(call.body.toString())));
   const originalSceneIds = opRecords.filter((record) => record.kind === 'series').map((record) => record.sceneId);
   const originalSeriesId = opRecords.find((record) => record.kind === 'series').seriesId;
-  await op.getByLabel('系列生成质量').selectOption('medium');
+  await op.getByRole('button', { name: '1:1 方形插画', exact: true }).click();
   await op.getByLabel('系列输出格式').selectOption('webp');
   assert.equal(await op.getByRole('button', { name: '品牌 IP 延展', exact: true }).count(), 0);
   await nav(op, '展馆');
@@ -770,7 +772,7 @@ try {
   await op.getByRole('button', { name: /检视系列:/ }).first().click();
   await op.getByRole('button', { name: '基于此系列继续衍生分镜', exact: true }).click();
   await op.locator('#series-story-prompt').waitFor();
-  assert.equal(await op.getByLabel('系列生成质量').inputValue(), 'high');
+  assert.equal(await op.getByRole('button', { name: '16:9 宽景分镜', exact: true }).getAttribute('aria-pressed'), 'true', 'deriving restores the original frame');
   assert.equal(await op.getByLabel('系列输出格式').inputValue(), 'png');
   assert.equal(await op.getByTitle('在风格库选择基底风格').count(), 0);
   assert.equal(await op.locator('img[alt="系列参考图 1"]').count(), 1);

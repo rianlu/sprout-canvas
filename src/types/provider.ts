@@ -1,11 +1,24 @@
 export type GenerationMode = 'images' | 'responses';
-export interface ImageCapabilities { customSizes: boolean; formats: Array<'png' | 'jpeg' | 'webp'>; exactSize: boolean; maxReferences: number }
+export type ImageFormat = 'png' | 'jpeg' | 'webp';
+/** What one channel accepts; a request must fit a single channel, never a mix of several. */
+export interface ChannelCapabilities { customSizes: boolean; transparent: boolean; formats: ImageFormat[] }
+export interface ImageCapabilities {
+  customSizes: boolean;
+  formats: ImageFormat[];
+  exactSize: boolean;
+  maxReferences: number;
+  /** Channels in the current model scope; absent before the provider list is known. */
+  channels?: ChannelCapabilities[];
+}
 
 export interface ImageProvider {
   id: string;
   name: string;
   imageModel: string;
+  /** Selector group; channels sharing it serve the same model. */
+  modelName?: string;
   generationMode: GenerationMode;
+  capabilities?: { outputFormats: ImageFormat[]; exactSize: boolean; transparent: boolean; customSizes?: boolean };
 }
 
 export interface ServerConfig {

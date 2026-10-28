@@ -56,4 +56,14 @@ const largestScene = scenePrompt({ brief: '需'.repeat(MAX_SERIES_BRIEF_LENGTH),
 assert.ok(largestScene.length <= 24000, 'accepted planning text fits the generation request limit');
 const series = validateGenerationSubmission({ ...submission('free-series'), clientContext: { ...input.clientContext, kind: 'series', seriesId: 'series', sceneId: 'scene' } });
 assert.equal(series.clientContext.template, undefined);
+// The model choice routes the job but never reaches the upstream body; automatic routing leaves no trace in the recipe.
+const chosen = validateGenerationSubmission({ ...submission('model'), modelName: 'GPT Image 2.5' });
+assert.equal(chosen.modelName, 'GPT Image 2.5');
+assert.equal(generationRecipe(chosen, { id: 'p', imageModel: 'gpt-image-2.5' }).modelName, 'GPT Image 2.5');
+assert.equal(toImagesPayload(chosen).model, undefined);
+assert.equal(Object.hasOwn(generationRecipe(input, {}), 'modelName'), false);
+for (const modelName of ['', ' GPT', 'a'.repeat(41), 'line\nbreak', 3]) {
+  if (modelName === '') assert.equal(validateGenerationSubmission({ ...submission('blank-model'), modelName }).modelName, undefined);
+  else assert.throws(() => validateGenerationSubmission({ ...submission('bad-model'), modelName }), /模型/);
+}
 console.log('generation contract, image validation and series planning passed');

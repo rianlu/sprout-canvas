@@ -56,17 +56,45 @@ export function nearestAspect(width: number, height: number, customSizes: boolea
   return candidates.reduce((best, value) => distance(value) < distance(best) ? value : best) as GenerationConfig['aspectRatio'];
 }
 
-/** Moves a format or aspect ratio the channel cannot produce back to a supported default; returns `config` itself when nothing changes. */
+/** Sizes every channel accepts; anything else needs a channel with custom sizes. Mirrors the server routing. */
+const STANDARD_SIZES: readonly string[] = ['auto', '1024x1024', '1536x1024', '1024x1536'];
+
+/** Whether one channel in scope accepts this size, background and format together. */
+export function supportsRequest(capabilities: ImageCapabilities, settings: Pick<GenerationConfig, 'requestSize' | 'background' | 'outputFormat'>) {
+  const format = settings.outputFormat === 'auto' ? 'png' : settings.outputFormat;
+  const custom = !STANDARD_SIZES.includes(settings.requestSize);
+  const transparent = settings.background === 'transparent';
+  if (!capabilities.channels) return capabilities.formats.includes(format) && (!custom || capabilities.customSizes);
+  return capabilities.channels.some((channel) => channel.formats.includes(format) && (!custom || channel.customSizes) && (!transparent || channel.transparent));
+}
+
+/**
+ * Fits a draft to the channels in scope: format first, then keeps the chosen frame over transparency,
+ * and falls back to 1:1 only when the frame itself is unavailable. Returns `config` itself when it already fits.
+ */
 export function clampToCapabilities(config: GenerationConfig, capabilities: ImageCapabilities): GenerationConfig {
-  const format = capabilities.formats.includes(config.outputFormat as ImageCapabilities['formats'][number]) ? config.outputFormat : capabilities.formats[0];
-  const standard = capabilities.customSizes || STANDARD_ASPECTS.includes(config.aspectRatio);
-  if (format === config.outputFormat && standard) return config;
-  const next = { ...config, outputFormat: format };
-  if (!standard) {
-    const size = resolveSize('1:1');
-    Object.assign(next, { aspectRatio: '1:1', sizeTier: '1K', requestSize: size.size, sizeHint: size.hint });
-  }
-  return next;
+  const fits = (candidate: GenerationConfig) => supportsRequest(capabilities, candidate);
+  const formatSupported = capabilities.formats.includes((config.outputFormat === 'auto' ? 'png' : config.outputFormat) as ImageCapabilities['formats'][number]);
+  const base = formatSupported ? config : { ...config, outputFormat: capabilities.formats[0] };
+  if (fits(base)) return base;
+  const square = resolveSize('1:1');
+  const standard = { aspectRatio: '1:1' as const, sizeTier: '1K' as const, requestSize: square.size, sizeHint: square.hint };
+  const candidates: GenerationConfig[] = [
+    { ...base, background: 'auto' },
+    { ...base, ...standard },
+    { ...base, ...standard, background: 'auto' },
+  ];
+  return candidates.find(fits) || candidates[candidates.length - 1];
+}
+
+/** What a clamp changed, for the notice shown after switching models. */
+export function describeClamp(before: GenerationConfig, after: GenerationConfig): string[] {
+  const changes: string[] = [];
+  if (before.aspectRatio !== after.aspectRatio) changes.push(`画幅改为 ${after.aspectRatio === 'auto' ? '自动' : after.aspectRatio}`);
+  else if (before.requestSize !== after.requestSize) changes.push('画幅改用标准尺寸');
+  if (before.background === 'transparent' && after.background !== 'transparent') changes.push('已关闭透明背景');
+  if (before.outputFormat !== after.outputFormat) changes.push(`格式改为 ${(after.outputFormat === 'auto' ? 'png' : after.outputFormat).toUpperCase()}`);
+  return changes;
 }
 
 export function sizePreset(size: string): Pick<GenerationConfig, 'aspectRatio' | 'sizeTier'> {

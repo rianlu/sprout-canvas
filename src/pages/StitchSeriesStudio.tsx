@@ -2,7 +2,7 @@ import { useRef } from 'react';
 import { BookOpenText, Minus, Plus, Sparkles } from '../components/ui/icons';
 import type { ResultRecord } from '../types/generation';
 import type { QueueJob } from '../types/queue';
-import { resolveSize } from '../lib/api/generation';
+import { qualityLabel, resolveSize } from '../lib/api/generation';
 import { StitchIcon } from '../components/ui/StitchIcon';
 import { StitchGalleryViewer } from '../components/gallery/StitchGalleryViewer';
 import { ToastStack } from '../components/shell/QueueDrawer';
@@ -10,6 +10,7 @@ import { SceneEditor } from '../components/series/SceneEditor';
 import { SeriesReferences } from '../components/series/SeriesReferences';
 import { RecordImage } from '../components/gallery/RecordImage';
 import { useSeriesStudio, seriesAspects, MIN_BATCH_COUNT, MAX_BATCH_COUNT, type SeriesActions } from '../hooks/useSeriesStudio';
+import { LOCK_UNSUPPORTED_IMAGE_OPTIONS } from '../lib/image/channel-limits';
 import { MAX_SERIES_BRIEF_LENGTH, MAX_SCENE_PROMPT_LENGTH } from '../../shared/series-planning.mjs';
 import { useCredits } from '../lib/credits';
 import { CreditStatus } from '../components/ui/CreditStatus';
@@ -29,7 +30,7 @@ export interface SeriesStudioProps extends SeriesActions {
 export function SeriesStudio(props: SeriesStudioProps) {
   const { prices } = useCredits();
   const { onEditRecord, onUseRecipe, onRetry, onCancel, onPrioritize } = props;
-  const { ready, brief, setBrief, count, setCount, config, setConfig, busy, submitting, referenceBusy, toasts, pushToast, seriesId, seriesResults, allSeriesResults, activeJobs, canContinue, submissionCount, metadata, view, setView, preview, setPreview, shots, shotIds, splitStory, submitBatch, exportSeries, updateTask, removeShot, resetSeries, redrawShot, references, maxReferences, removeReference, uploadReferences, editing, setEditing, beginEdit, saveEdit } = useSeriesStudio(props);
+  const { models, imageCapabilities, ready, brief, setBrief, count, setCount, config, setConfig, busy, submitting, referenceBusy, toasts, pushToast, seriesId, seriesResults, allSeriesResults, activeJobs, canContinue, submissionCount, metadata, view, setView, preview, setPreview, shots, shotIds, splitStory, submitBatch, exportSeries, updateTask, removeShot, resetSeries, redrawShot, references, maxReferences, removeReference, uploadReferences, editing, setEditing, beginEdit, saveEdit } = useSeriesStudio(props);
   const storyboardRef = useRef<HTMLElement>(null);
   const shotLabel = '分镜看板';
   const plannedTotal = shots.length;
@@ -40,7 +41,7 @@ export function SeriesStudio(props: SeriesStudioProps) {
   const receiptErrorCount = shots.filter((shot) => shot.job?.status === 'succeeded' && shot.job.delivery?.phase === 'error').length;
   const missingFirst = shots[0]?.kind === 'failed' && !shots[0]?.record;
   const planLocked = busy || submitting || referenceBusy || activeJobs || canContinue;
-  const formats = props.imageCapabilities?.formats || ['png', 'jpeg', 'webp'];
+  const formats = imageCapabilities?.formats || ['png', 'jpeg', 'webp'];
   const activityLabel = shots.some((shot) => shot.kind === 'submitting') ? '分镜正在提交' : shots.some((shot) => shot.kind === 'generating') ? '分镜正在绘制' : shots.some((shot) => shot.kind === 'waiting') ? '分镜正在排队, 轮到后自动开始' : '正在领取分镜作品';
   async function planStory() {
     if (await splitStory()) {
@@ -177,7 +178,7 @@ export function SeriesStudio(props: SeriesStudioProps) {
                     <span className="font-meta-sm text-meta-sm text-outline">可逐镜单独调整</span>
                   </div>
                   <div className="grid grid-cols-4 gap-1.5">
-                    {seriesAspects(props.imageCapabilities?.customSizes, config.aspectRatio).map((aspect) => {
+                    {seriesAspects(imageCapabilities?.customSizes, config.aspectRatio).map((aspect) => {
                       const active = config.aspectRatio === aspect.id;
                       return (
                         <button
@@ -217,11 +218,22 @@ export function SeriesStudio(props: SeriesStudioProps) {
             {/* 底部动作栏 */}
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-space-sm pt-space-xs border-t border-outline-variant/20">
               <div className="flex flex-wrap items-center gap-space-xs text-on-surface-variant font-meta-sm text-meta-sm">
+                {models.length > 1 && <>
+                  <span title={config.modelName ? '只使用所选模型' : '按通道负载自动选择, 失败时可换用其他模型'}>
+                    生成模型:{' '}
+                    <strong className="text-on-surface font-medium">
+                      <select aria-label="系列生成模型" disabled={planLocked} className="bg-transparent disabled:opacity-60" value={config.modelName || ''} onChange={(event) => setConfig((current) => ({ ...current, modelName: event.target.value }))}><option value="">自动</option>{models.map((model) => <option key={model} value={model}>{model}</option>)}</select>
+                    </strong>
+                  </span>
+                  <span className="text-outline">·</span>
+                </>}
                 <span className="flex items-center gap-1">
                   <StitchIcon name="verified" size={16} className="text-primary" />
                   默认质量:{' '}
                   <strong className="text-on-surface font-medium">
-                    <select aria-label="系列生成质量" disabled={planLocked} className="bg-transparent disabled:opacity-60" value={config.quality} onChange={(event) => setConfig((current) => ({ ...current, quality: event.target.value as typeof current.quality }))}><option value="auto">自动</option><option value="low">快速</option><option value="medium">标准</option><option value="high">精细</option></select>
+                    {LOCK_UNSUPPORTED_IMAGE_OPTIONS
+                      ? <span aria-label="系列生成质量" title="上游暂不支持修改, 将使用默认值">{qualityLabel(config.quality)}</span>
+                      : <select aria-label="系列生成质量" disabled={planLocked} className="bg-transparent disabled:opacity-60" value={config.quality} onChange={(event) => setConfig((current) => ({ ...current, quality: event.target.value as typeof current.quality }))}><option value="auto">自动</option><option value="low">快速</option><option value="medium">标准</option><option value="high">精细</option></select>}
                   </strong>
                 </span>
                 <span className="text-outline">·</span>
@@ -587,7 +599,7 @@ export function SeriesStudio(props: SeriesStudioProps) {
           </section>
         </div>
       </div>
-      {editing && <SceneEditor estimatedPoints={(shots[editing.index]?.record || shots[editing.index]?.kind === 'failed') && shots[editing.index]?.job?.status !== 'pending' ? prices?.image : 0} value={editing} onChange={setEditing} onClose={() => setEditing(null)} onSave={saveEdit} imageCapabilities={props.imageCapabilities} actionLabel={shots[editing.index]?.job?.status === 'pending' ? '更新排队任务' : shots[editing.index]?.kind === 'failed' ? '保存并重新生成' : shots[editing.index]?.record ? '保存并重绘本镜' : '保存本镜设置'} />}
+      {editing && <SceneEditor estimatedPoints={(shots[editing.index]?.record || shots[editing.index]?.kind === 'failed') && shots[editing.index]?.job?.status !== 'pending' ? prices?.image : 0} value={editing} onChange={setEditing} onClose={() => setEditing(null)} onSave={saveEdit} imageCapabilities={imageCapabilities} actionLabel={shots[editing.index]?.job?.status === 'pending' ? '更新排队任务' : shots[editing.index]?.kind === 'failed' ? '保存并重新生成' : shots[editing.index]?.record ? '保存并重绘本镜' : '保存本镜设置'} />}
       {preview && (
         <StitchGalleryViewer
           cards={[{ kind: 'series', seriesId, masterPrompt: brief, records: seriesResults, versions: allSeriesResults, latestAt: Math.max(...seriesResults.map((record) => record.createdAt)) }]}

@@ -70,6 +70,25 @@ try {
   assert.equal((await readLocalConfig()).cookieNamespace, 'local_test');
   process.env.COOKIE_NAMESPACE = 'bad;namespace';
   await assert.rejects(readLocalConfig(), /cookieNamespace/);
+  delete process.env.COOKIE_NAMESPACE;
+
+  // Custom sizes follow the model family, including 2.5, unless a channel states otherwise.
+  const [primary, secondary] = (await readLocalConfig()).imageProviders;
+  assert.deepEqual([primary.modelName, primary.capabilities.customSizes], ['GPT Image 2', true]);
+  assert.deepEqual([secondary.modelName, secondary.capabilities.customSizes], ['gpt-5', false], 'responses channels never assume custom sizes');
+  const writeProviders = (providers) => writeFile(path.join(directory, 'config/local.config.json'), JSON.stringify({ ...config, imageProviders: providers }));
+  const provider = (changes) => ({ id: 'primary', baseUrl: 'https://primary.invalid', apiKey: 'fixture-primary', ...changes });
+  for (const key of ['DEFAULT_IMAGE_PROVIDER', 'OPENAI_BASE_URL', 'OPENAI_API_KEY', 'IMAGE_MODEL', 'GENERATION_MODE']) delete process.env[key];
+  await writeProviders([provider({ imageModel: 'gpt-image-2.5' }), provider({ id: 'dated', imageModel: 'gpt-image-2-2026-04-21' }), provider({ id: 'legacy', imageModel: 'gpt-image-1' }), provider({ id: 'named', imageModel: 'gpt-image-2', modelName: '自定义模型', capabilities: { customSizes: false } })]);
+  const models = (await readLocalConfig()).imageProviders.map((item) => [item.modelName, item.capabilities.customSizes]);
+  assert.deepEqual(models, [['GPT Image 2.5', true], ['GPT Image 2', true], ['GPT Image 1', false], ['自定义模型', false]]);
+  assert.match(JSON.stringify(publicConfig(await readLocalConfig())), /"modelName":"GPT Image 2.5"/);
+  await writeProviders([provider({ capabilities: { customSizes: 'yes' } })]);
+  await assert.rejects(readLocalConfig(), /capabilities 配置无效/);
+  await writeProviders([provider({ modelName: 'x'.repeat(41) })]);
+  await assert.rejects(readLocalConfig(), /modelName/);
+  await writeProviders([provider({ modelName: ' ' })]);
+  await assert.rejects(readLocalConfig(), /modelName/);
   console.log('Provider-specific environment overrides and configuration validation passed');
 } finally {
   for (const [key, value] of Object.entries(previous)) {

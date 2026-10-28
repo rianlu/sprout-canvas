@@ -78,6 +78,6 @@ export async function recipeDraft(record: ResultRecord) {
     maskDataUrl = await blobDataUrl(blob);
   }
   const { aspectRatio, sizeTier } = sizePreset(recipe.size);
-  const config: Partial<GenerationConfig> = { prompt: record.mode === 'edit' ? record.prompt : recipe.prompt, quality: recipe.quality, outputFormat: recipe.outputFormat, background: recipe.background, outputCompression: recipe.outputCompression, requestSize: recipe.size, aspectRatio, sizeTier, sizeHint: resolveSize(aspectRatio, sizeTier).hint, refImages, imageCount: 1, mode: record.mode };
+  const config: Partial<GenerationConfig> = { modelName: recipe.modelName || '', prompt: record.mode === 'edit' ? record.prompt : recipe.prompt, quality: recipe.quality, outputFormat: recipe.outputFormat, background: recipe.background, outputCompression: recipe.outputCompression, requestSize: recipe.size, aspectRatio, sizeTier, sizeHint: resolveSize(aspectRatio, sizeTier).hint, refImages, imageCount: 1, mode: record.mode };
   return { config, styleId: 'default', styleName: '', styleTemplate: null, refImage: refImages[0] || null, sourceRecord: null, mask: null, maskDataUrl, tone: 'none' as const };
 }

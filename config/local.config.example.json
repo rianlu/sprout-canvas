@@ -7,11 +7,13 @@
       "baseUrl": "https://api.openai.com",
       "apiKey": "sk-your-default-api-key",
       "imageModel": "gpt-image-2",
+      "modelName": "GPT Image 2",
       "generationMode": "images",
       "capabilities": {
         "outputFormats": ["png", "jpeg", "webp"],
         "exactSize": false,
-        "transparent": false
+        "transparent": false,
+        "customSizes": true
       }
     },
     {

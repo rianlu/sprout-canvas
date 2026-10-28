@@ -31,6 +31,8 @@ export interface GenerationConfig {
   outputFormat: ImageOutputFormat;
   outputCompression: number;
   refImages: RefImage[];
+  /** Model chosen in the selector; empty or absent routes automatically across all channels. */
+  modelName?: string;
 }
 
 export type ResultKind = 'single' | 'series';

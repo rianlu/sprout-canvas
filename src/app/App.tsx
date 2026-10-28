@@ -16,7 +16,8 @@ import { writeDraft } from '../lib/storage/drafts';
 import type { QueueSubmitInput } from '../lib/api/queue';
 import type { GenerationConfig, RefImage, ResultRecord } from '../types/generation';
 import type { ServerConfig } from '../types/provider';
-import { recordReference, writeWorkspaceDraft } from '../lib/storage/gallery-db';
+import { readWorkspaceDraft, recordReference, writeWorkspaceDraft } from '../lib/storage/gallery-db';
+import { modelCapabilities } from '../lib/image/models';
 import { recipeDraft, sourceImageDraft, styleTemplateSnapshot, type StudioDraft } from '../lib/image/recipe';
 import type { StyleRecord } from '../../shared/style-contract.mjs';
 import { GENERATION_DEFAULTS } from '../../shared/generation-contract.mjs';
@@ -108,8 +109,9 @@ export function App() {
   }, [setPage]);
 
   const useStyle = useCallback(async (style: StyleRecord) => {
-    // Match the frame to the example; standard ratios stay safe until the channel capabilities have loaded.
-    const aspectRatio = nearestAspect(style.imageWidth, style.imageHeight, serverConfig?.imageCapabilities?.customSizes ?? false);
+    // Match the frame to the example within the model the draft already uses; standard ratios stay safe until the channel capabilities have loaded.
+    const stored = await readWorkspaceDraft<StudioDraft>('studio').catch(() => undefined);
+    const aspectRatio = nearestAspect(style.imageWidth, style.imageHeight, modelCapabilities(serverConfig, stored?.config?.modelName || '')?.customSizes ?? false);
     const draft: StudioDraft = {
       config: { mode: 'text', prompt: style.prompt, imageCount: 1, refImages: [], ...(aspectRatio ? { aspectRatio } : {}) },
       styleId: style.id, styleName: style.name, styleTemplate: styleTemplateSnapshot(style), refImage: null, sourceRecord: null, mask: null, maskDataUrl: '', tone: 'none',
@@ -132,6 +134,7 @@ export function App() {
         ...preset, requestSize: recipe?.size || '1280x720', sizeHint: resolveSize(preset.aspectRatio, preset.sizeTier).hint,
         quality: recipe?.quality || GENERATION_DEFAULTS.quality, outputFormat: recipe?.outputFormat || GENERATION_DEFAULTS.outputFormat,
         background: recipe?.background || 'auto', outputCompression: recipe?.outputCompression ?? 90, refImages: [],
+        modelName: recipe?.modelName || '',
       };
       const reference = await recordReference(first, '原系列主体参考');
       const overrides = Object.fromEntries(card.records.map((record, index) => [sceneIds[index], record.recipe ? { ...sizePreset(record.recipe.size), quality: record.recipe.quality, outputFormat: record.recipe.outputFormat, background: record.recipe.background, outputCompression: record.recipe.outputCompression } : {}]));
@@ -166,7 +169,7 @@ export function App() {
       {page === 'studio' && (
         <CreativeStudio
           key={studioRevision}
-          imageCapabilities={serverConfig?.imageCapabilities}
+          serverConfig={serverConfig}
           onOpenStyles={() => setPage('styles')}
           onOpenGallery={() => { setPage('gallery'); window.scrollTo({ top: 0 }); }}
           onSubmitBatch={submitBatch}
@@ -179,7 +182,7 @@ export function App() {
       )}
       {page === 'series' && (
         <SeriesStudio
-          imageCapabilities={serverConfig?.imageCapabilities}
+          serverConfig={serverConfig}
           onEditRecord={(record) => void useAsReference(record, true)}
           onUseAsRef={(record) => void useAsReference(record)}
           onUseRecipe={(record) => void useRecipe(record)}

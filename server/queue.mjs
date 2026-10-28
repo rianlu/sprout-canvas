@@ -214,7 +214,7 @@ export function updatePendingGeneration(jobId, userId, input, provider, session)
   if (job.status !== 'pending') throw requestError('任务已经开始, 请在完成后重新绘制', 409);
   if (session) stateStore.credits.checkQuote(session, input.creditQuote, false);
   validateSubmissionImages(input);
-  if (input.requestId !== job.requestId || input.clientContext.placeholderId !== job.clientContext.placeholderId || input.referenceJobId !== job.submission?.referenceJobId || input.providerId !== job.submission?.providerId || input.retryOf !== job.submission?.retryOf) throw requestError('编辑不能更换任务身份, 通道或参考链', 409);
+  if (input.requestId !== job.requestId || input.clientContext.placeholderId !== job.clientContext.placeholderId || input.referenceJobId !== job.submission?.referenceJobId || input.providerId !== job.submission?.providerId || input.modelName !== job.submission?.modelName || input.retryOf !== job.submission?.retryOf) throw requestError('编辑不能更换任务身份, 模型, 通道或参考链', 409);
   if (input.referenceImage && job.referenceJobId) validateReferenceSnapshot(imageJobs.get(job.referenceJobId), input.referenceImage);
   const cfg = provider || { id: job.providerId, name: job.providerName, imageModel: job.recipe.model, generationMode: job.recipe.generationMode };
   if (!providerSupportsRequest(cfg, job.upstreamPath, job.contentType, Buffer.from(JSON.stringify(toImagesPayload(input))))) throw requestError('当前通道不支持这些生成参数');
@@ -645,6 +645,13 @@ export function chooseImageProvider(config, upstreamPath, contentType, excludeId
   return provider;
 }
 
+/** Restricts routing to the channels serving one model; without a model every channel stays eligible. */
+export function modelScope(config, modelName) {
+  if (!modelName) return config;
+  const providers = (config.imageProviders || config.providers || []).filter((provider) => provider.modelName === modelName);
+  return { ...config, providers, imageProviders: providers };
+}
+
 export function providerSupportsRequest(provider, upstreamPath, contentType, body) {
   return compatibleProviders({ providers: [provider] }, upstreamPath, contentType, body).length > 0;
 }
@@ -700,7 +707,7 @@ function compatibleProviders(config, upstreamPath, contentType, body) {
       if (transparent && !provider.capabilities?.transparent) return false;
       if (payload.output_format && provider.capabilities?.outputFormats && !provider.capabilities.outputFormats.includes(payload.output_format)) return false;
       if (!payload.size || ['auto', '1024x1024', '1536x1024', '1024x1536'].includes(payload.size)) return true;
-      return provider.generationMode === 'images' && /^gpt-image-2(?:-|$)/.test(provider.imageModel);
+      return provider.capabilities?.customSizes === true;
     });
   }
   if (upstreamPath === '/v1/images/edits' && isMultipartEdit(contentType)) {
@@ -772,7 +779,7 @@ function recordProviderFailure(providerId, error) {
 
 function providersForJob(job, config) {
   if (!job.autoProviderRouting) return [config];
-  const providers = rankedImageProviders(config, job.upstreamPath, job.contentType, job.excludeProviderId, job.submission ? Buffer.from(JSON.stringify(toImagesPayload(job.submission))) : job.originalBody || job.body);
+  const providers = rankedImageProviders(modelScope(config, job.submission?.modelName), job.upstreamPath, job.contentType, job.excludeProviderId, job.submission ? Buffer.from(JSON.stringify(toImagesPayload(job.submission))) : job.originalBody || job.body);
   const selectedIndex = providers.findIndex((provider) => provider.id === job.providerId);
   if (selectedIndex <= 0) return providers;
   const [selectedProvider] = providers.splice(selectedIndex, 1);

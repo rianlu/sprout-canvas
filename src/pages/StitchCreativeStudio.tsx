@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { GenerationConfig, RefImage, ResultRecord } from '../types/generation';
 import type { QueueJob } from '../types/queue';
-import type { ImageCapabilities } from '../types/provider';
+import type { ServerConfig } from '../types/provider';
 import { prepareImageFile } from '../lib/image/compress';
-import { buildGenerationPayload, clampToCapabilities, resolveSize } from '../lib/api/generation';
+import { buildGenerationPayload, clampToCapabilities, describeClamp, resolveSize, supportsRequest } from '../lib/api/generation';
+import { imageModels, modelCapabilities } from '../lib/image/models';
 import { LOCK_UNSUPPORTED_IMAGE_OPTIONS, LOCKED_IMAGE_DEFAULTS } from '../lib/image/channel-limits';
 import type { QueueSubmitInput } from '../lib/api/queue';
 import { requestTextGeneration } from '../lib/api/text';
@@ -36,7 +37,7 @@ interface CreativeStudioProps {
   onRetry: (jobId: string) => Promise<QueueJob>;
   results: ResultRecord[];
   jobs: QueueJob[];
-  imageCapabilities?: ImageCapabilities;
+  serverConfig?: ServerConfig | null;
 }
 
 const STUDIO_STYLE_DRAFT_KEY = 'studio_style';
@@ -45,7 +46,7 @@ const STUDIO_PROMPT_DRAFT_KEY = 'studio_prompt';
 /**
  * 单图创作页 (照搬 Stitch 单图稿). DOM 类名原样, 逻辑层复用 v3.0.
  */
-export function CreativeStudio({ onOpenStyles, onOpenGallery, onSubmitBatch, onCancel, onUseRecipe, onRetry, results, jobs, imageCapabilities }: CreativeStudioProps) {
+export function CreativeStudio({ onOpenStyles, onOpenGallery, onSubmitBatch, onCancel, onUseRecipe, onRetry, results, jobs, serverConfig }: CreativeStudioProps) {
   const { toasts, pushToast } = useToasts();
   const [submitting, setSubmitting] = useState(false);
   const [retryingJobs, setRetryingJobs] = useState<Set<string>>(new Set());
@@ -78,10 +79,6 @@ export function CreativeStudio({ onOpenStyles, onOpenGallery, onSubmitBatch, onC
     return null;
   });
 
-  useEffect(() => {
-    if (!imageCapabilities || !draftLoaded) return;
-    setConfig((current) => current.mode === 'edit' ? current : clampToCapabilities(current, imageCapabilities));
-  }, [imageCapabilities, draftLoaded]);
   const [fullscreen, setFullscreen] = useState<ResultRecord | null>(null);
   const [splitOpen, setSplitOpen] = useState(false);
   const [splitRecord, setSplitRecord] = useState<ResultRecord | null>(null);
@@ -104,6 +101,23 @@ export function CreativeStudio({ onOpenStyles, onOpenGallery, onSubmitBatch, onC
       refImages: [],
     };
   });
+  const models = useMemo(() => imageModels(serverConfig), [serverConfig]);
+  const imageCapabilities = useMemo(() => modelCapabilities(serverConfig, config.modelName || ''), [serverConfig, config.modelName]);
+  // A model removed from the configuration falls back to automatic routing instead of blocking the draft.
+  useEffect(() => {
+    if (!draftLoaded || !serverConfig?.providers?.length || !config.modelName || models.includes(config.modelName)) return;
+    setConfig((current) => ({ ...current, modelName: '' }));
+    pushToast('info', `${config.modelName} 暂未提供, 已改为自动选择模型`);
+  }, [draftLoaded, serverConfig, models, config.modelName, pushToast]);
+  // Keep every parameter within what one channel of the chosen model accepts; local edits keep the original recipe.
+  useEffect(() => {
+    if (!imageCapabilities || !draftLoaded || config.mode === 'edit') return;
+    const next = clampToCapabilities(config, imageCapabilities);
+    if (next === config) return;
+    setConfig((current) => current.mode === 'edit' ? current : clampToCapabilities(current, imageCapabilities));
+    const changes = describeClamp(config, next);
+    if (changes.length) pushToast('info', `已按${config.modelName ? ` ${config.modelName} ` : '可用通道'}调整参数: ${changes.join(', ')}`);
+  }, [imageCapabilities, draftLoaded, config, pushToast]);
 
   useEffect(() => {
     let alive = true;
@@ -239,6 +253,11 @@ export function CreativeStudio({ onOpenStyles, onOpenGallery, onSubmitBatch, onC
   }, []);
 
   const maxReferences = Math.min(MAX_REFERENCE_IMAGES, imageCapabilities?.maxReferences ?? MAX_REFERENCE_IMAGES);
+  // A saved work keeps its original channel; an uploaded original follows the model chosen before entering the edit.
+  const editRecipe = sourceRecord?.recipe;
+  const editModelLabel = editRecipe?.providerId
+    ? serverConfig?.providers?.find((provider) => provider.id === editRecipe.providerId)?.modelName || editRecipe.modelName || editRecipe.model || '原通道'
+    : config.modelName || '自动';
   const referenceImages = useMemo(() => studioReferenceImages({ refImage, config }), [refImage, config]);
 
   // All input methods append in order; only an explicit replacement changes an existing image.
@@ -304,7 +323,7 @@ export function CreativeStudio({ onOpenStyles, onOpenGallery, onSubmitBatch, onC
         return;
       }
       const isEdit = config.mode === 'edit';
-      if (!isEdit && !imageCapabilities.formats.includes(config.outputFormat === 'auto' ? 'png' : config.outputFormat)) throw new Error('当前通道不支持所选生成格式, 请重新选择');
+      if (!isEdit && !supportsRequest(imageCapabilities, config)) throw new Error('所选模型不支持这组画幅, 背景和格式, 请重新选择');
       const count = isEdit ? 1 : config.imageCount;
       const requestIds = Array.from({ length: count }, () => randomId());
       if (isEdit && (!refImage || !(mask || restoredMask))) throw new Error('请先涂抹并保存需要修改的区域');
@@ -328,7 +347,8 @@ export function CreativeStudio({ onOpenStyles, onOpenGallery, onSubmitBatch, onC
       const editSource = isEdit ? sourceRecord : null;
       const inputs: QueueSubmitInput[] = requestIds.map((requestId) => ({
         requestId, request: payload, creditQuote,
-        ...(editSource?.recipe?.providerId ? { providerId: editSource.recipe.providerId } : {}),
+        // Edits of a saved work stay on its original channel; everything else follows the model selector.
+        ...(editSource?.recipe?.providerId ? { providerId: editSource.recipe.providerId } : config.modelName ? { modelName: config.modelName } : {}),
         clientContext: {
           kind: editSource?.kind || 'single', placeholderId: randomId(), prompt: config.prompt,
           mode: isEdit ? 'edit' : refImage ? 'reference' : 'text',
@@ -500,6 +520,8 @@ export function CreativeStudio({ onOpenStyles, onOpenGallery, onSubmitBatch, onC
                 maxReferences={maxReferences}
                 onRemoveRef={handleRemoveRef}
                 imageCapabilities={imageCapabilities}
+                models={models}
+                editModelLabel={models.length > 1 ? editModelLabel : undefined}
                 onUploadRefs={(files, replaceId) => {
                   void handleUploadRefs(files, replaceId);
                 }}
