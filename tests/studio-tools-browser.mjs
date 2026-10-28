@@ -237,6 +237,8 @@ try {
   await inspect.getByRole('button', { name: '切图拆分', exact: true }).click();
   const split = page.getByRole('dialog', { name: '切图工具', exact: true }); await split.waitFor();
   // A file dropped inside the dialog loads; the dialog stops drops from reaching page drop zones underneath.
+  // The zone accepts drops once the work opened from the viewer has finished loading.
+  await split.getByText(/^\d+×\d+ · /).waitFor();
   await split.getByRole('button', { name: '上传要切分的图片', exact: true }).evaluate((zone, base64) => {
     const transfer = new DataTransfer();
     transfer.items.add(new File([Uint8Array.from(atob(base64), (char) => char.charCodeAt(0))], '拖入切图.png', { type: 'image/png' }));
