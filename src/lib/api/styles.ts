@@ -1,4 +1,5 @@
 import { apiFetch } from './client';
+import { saveFile } from '../download';
 import type { StyleCatalog, StyleImportPreview, StyleInput, StyleRecord } from '../../../shared/style-contract.mjs';
 
 const json = (method: string, body: unknown): RequestInit => ({ method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
@@ -12,8 +13,5 @@ export const previewStylesImport = (archive: unknown) => apiFetch<StyleImportPre
 export const importStyles = (archive: unknown, revision: number) => apiFetch<StyleImportPreview>('/api/admin/styles/import', json('POST', { archive, revision }));
 export async function exportStyles() {
   const archive = await apiFetch<unknown>('/api/admin/styles/export');
-  const url = URL.createObjectURL(new Blob([JSON.stringify(archive, null, 2)], { type: 'application/json' }));
-  const link = document.createElement('a');
-  link.href = url; link.download = `sprout-styles-${new Date().toISOString().slice(0, 10)}.json`; link.click();
-  window.setTimeout(() => URL.revokeObjectURL(url), 4000);
+  saveFile(new Blob([JSON.stringify(archive, null, 2)], { type: 'application/json' }), `sprout-styles-${new Date().toISOString().slice(0, 10)}.json`);
 }

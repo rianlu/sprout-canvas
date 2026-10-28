@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useFocusTrap } from '../hooks/useFocusTrap';
+import { Dialog, overlayOpen } from '../components/ui/Dialog';
+import { ImageViewport } from '../components/gallery/ImageViewport';
 import { useStyleCatalog } from '../hooks/useStyleCatalog';
 import { StitchIcon } from '../components/ui/StitchIcon';
+import { SegmentedControl } from '../components/ui/SegmentedControl';
 import { StyleExampleImage } from '../components/image/StyleExampleImage';
 import type { StyleRecord } from '../../shared/style-contract.mjs';
 
@@ -20,21 +22,13 @@ export function StylesLibrary({ onUseInStudio }: StylesLibraryProps) {
   const [actionError, setActionError] = useState('');
   const applyLock = useRef(false);
   const inputRef = useRef<HTMLInputElement>(null);
-  const dialogRef = useFocusTrap<HTMLDivElement>(Boolean(detail));
   useEffect(() => {
     const key = (event: KeyboardEvent) => {
-      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k' && !detail) { event.preventDefault(); inputRef.current?.focus(); }
-      if (event.key === 'Escape') setDetail(null);
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k' && !overlayOpen()) { event.preventDefault(); inputRef.current?.focus(); }
     };
     window.addEventListener('keydown', key);
     return () => window.removeEventListener('keydown', key);
-  }, [detail]);
-  useEffect(() => {
-    if (!detail) return;
-    const previous = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    return () => { document.body.style.overflow = previous; };
-  }, [detail]);
+  }, []);
   const groups = ['全部', ...categories, ...(styles.some((style) => !style.category) ? ['未分类'] : [])];
   const selectedCategory = groups.includes(category) ? category : '全部';
   const filtered = useMemo(() => {
@@ -72,9 +66,14 @@ export function StylesLibrary({ onUseInStudio }: StylesLibraryProps) {
       <div className="flex flex-col lg:flex-row lg:items-center gap-3">
         <div className="relative w-full lg:w-80 shrink-0"><StitchIcon name="search" size={18} className="absolute left-3 top-3 text-outline" /><input ref={inputRef} aria-label="搜索风格" placeholder="搜索名称, 提示词或作者..." className="w-full pl-10 pr-3 py-2.5 rounded-xl bg-surface-container-low border border-outline-variant/25 outline-none focus:border-primary font-body-sm text-body-sm" value={search} onChange={(event) => setSearch(event.target.value)} /></div>
         <div className="flex min-w-0 flex-1 items-center gap-2">
-          <div className="flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto overscroll-x-contain [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden" aria-label="风格分类">
-            {groups.map((group) => <button type="button" key={group} aria-pressed={selectedCategory === group} className={`shrink-0 whitespace-nowrap px-3 py-1.5 rounded-lg font-meta-sm text-meta-sm ${selectedCategory === group ? 'bg-primary text-on-primary' : 'bg-surface-container-low text-on-surface-variant hover:bg-surface-container'}`} onClick={() => setCategory(group)}>{group} {group === '全部' ? styles.length : styles.filter((style) => (style.category || '未分类') === group).length}</button>)}
-          </div>
+          <SegmentedControl
+            label="风格分类"
+            className="flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto overscroll-x-contain [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
+            value={selectedCategory}
+            onChange={setCategory}
+            options={groups.map((group) => ({ id: group, label: `${group} ${group === '全部' ? styles.length : styles.filter((style) => (style.category || '未分类') === group).length}` }))}
+            itemClassName={(active) => `shrink-0 whitespace-nowrap px-3 py-1.5 rounded-lg font-meta-sm text-meta-sm ${active ? 'bg-primary text-on-primary' : 'bg-surface-container-low text-on-surface-variant hover:bg-surface-container'}`}
+          />
           <button type="button" className="shrink-0 p-2 rounded-lg bg-surface-container-low hover:bg-surface-container text-primary" aria-label={compact ? '切换为较少列' : '切换为较多列'} title={compact ? '较少列' : '较多列'} aria-pressed={compact} onClick={() => setCompact((value) => !value)}><StitchIcon name={compact ? 'view_module' : 'grid_view'} size={20} /></button>
         </div>
       </div>
@@ -84,7 +83,7 @@ export function StylesLibrary({ onUseInStudio }: StylesLibraryProps) {
       {loading && <p role="status" className="py-10 text-center text-on-surface-variant">正在读取风格库...</p>}
       <div className={`grid ${compact ? 'grid-cols-2 gap-3 lg:grid-cols-3 lg:gap-space-lg xl:grid-cols-4' : 'grid-cols-1 gap-space-lg sm:grid-cols-2 lg:grid-cols-3'}`}>
         {filtered.map((style) => <article key={style.id} className={`style-card group flex flex-col bg-surface-container-lowest border border-outline-variant/30 rounded-2xl shadow-[0_4px_20px_rgba(85,95,75,0.05)] ${compact ? 'p-3 lg:p-space-md' : 'p-space-md'}`}>
-          <button type="button" aria-label={`放大 ${style.name}`} className={`relative w-full aspect-[4/3] overflow-hidden rounded-xl bg-surface-container-low text-left ${compact ? 'mb-3 lg:mb-4' : 'mb-4'}`} onClick={() => setDetail(style)}>
+          <button type="button" aria-label={`查看风格详情 ${style.name}`} className={`relative w-full aspect-[4/3] overflow-hidden rounded-xl bg-surface-container-low text-left ${compact ? 'mb-3 lg:mb-4' : 'mb-4'}`} onClick={() => setDetail(style)}>
             <StyleExampleImage src={style.image} alt={style.name} className="transition-transform duration-300 group-hover:scale-[1.02]" />
             <span className="absolute top-3 left-3 px-2 py-1 rounded-lg bg-surface-bright/95 text-secondary font-meta-sm text-meta-sm">{style.category || '未分类'}</span>
           </button>
@@ -97,8 +96,7 @@ export function StylesLibrary({ onUseInStudio }: StylesLibraryProps) {
       {!loading && !error && filtered.length === 0 && <p className="py-12 text-center text-on-surface-variant">{styles.length ? '没有匹配的风格, 可清空搜索或切换分类.' : '风格库暂无已上架内容.'}</p>}
       <p className="mt-space-xl font-meta-sm text-meta-sm text-outline">示例图用于展示创作案例, 不会自动作为生图参考图. 来源与许可请查看各条详情.</p>
     </main>
-    {detail && <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-inverse-surface/50 backdrop-blur-sm" onClick={(event) => { if (event.target === event.currentTarget) setDetail(null); }}>
-      <div ref={dialogRef} role="dialog" aria-modal="true" aria-label={`风格详情 ${detail.name}`} className="relative flex h-[min(92dvh,calc(100dvh-1.5rem))] w-[min(100%,calc(100vw-1.5rem))] max-w-5xl flex-col overflow-hidden rounded-2xl bg-surface shadow-[0_20px_60px_rgba(40,48,36,0.20)] sm:h-[min(88dvh,56rem)] sm:w-[min(80vw,64rem)]">
+    {detail && <Dialog label={`风格详情 ${detail.name}`} onClose={() => setDetail(null)} backdropClassName="fixed inset-0 z-50 bg-inverse-surface/50 backdrop-blur-sm" viewportClassName="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6" className="relative flex h-[min(92dvh,calc(100dvh-1.5rem))] w-[min(100%,calc(100vw-1.5rem))] max-w-5xl flex-col overflow-hidden rounded-2xl bg-surface shadow-[0_20px_60px_rgba(40,48,36,0.20)] sm:h-[min(88dvh,56rem)] sm:w-[min(80vw,64rem)]">
         <div className="h-16 px-3 md:px-space-lg bg-surface-container-lowest border-b border-outline-variant/30 flex items-center justify-between gap-2 shrink-0">
           <div className="min-w-0 flex-1">
             <h2 className="font-headline-sm text-headline-sm text-on-surface truncate">{detail.name}</h2>
@@ -107,8 +105,8 @@ export function StylesLibrary({ onUseInStudio }: StylesLibraryProps) {
           <button type="button" aria-label="关闭详情" className="viewer-tool-button" onClick={() => setDetail(null)}><StitchIcon name="close" size={20} /></button>
         </div>
         <div className="flex min-h-0 flex-1 flex-col items-stretch overflow-hidden lg:flex-row">
-          <div className="flex min-h-0 flex-1 items-center justify-center bg-surface-container-low p-3">
-            <img src={detail.image} alt={detail.name} className="max-h-full max-w-full object-contain" />
+          <div className="flex min-h-0 flex-1 flex-col">
+            <ImageViewport key={detail.id} src={detail.image} alt={detail.name} />
           </div>
           <aside className="flex max-h-[46%] min-h-0 w-full flex-col overflow-hidden border-t border-outline-variant/30 bg-surface-container-lowest lg:h-full lg:max-h-none lg:w-80 lg:flex-none lg:border-l lg:border-t-0">
             <div className="min-h-0 flex-1 space-y-space-md overflow-y-auto p-space-lg">
@@ -125,7 +123,6 @@ export function StylesLibrary({ onUseInStudio }: StylesLibraryProps) {
             <div className="shrink-0 border-t border-outline-variant/30 px-space-lg py-space-md">{actions(detail)}</div>
           </aside>
         </div>
-      </div>
-    </div>}
+    </Dialog>}
   </div>;
 }

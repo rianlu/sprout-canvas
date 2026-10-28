@@ -2,10 +2,10 @@ import { useRef } from 'react';
 import { BookOpenText, Minus, Plus, Sparkles } from '../components/ui/icons';
 import type { ResultRecord } from '../types/generation';
 import type { QueueJob } from '../types/queue';
-import { qualityLabel, resolveSize } from '../lib/api/generation';
+import { QUALITY_OPTIONS, qualityLabel, resolveSize } from '../lib/api/generation';
 import { StitchIcon } from '../components/ui/StitchIcon';
+import { SegmentedControl } from '../components/ui/SegmentedControl';
 import { StitchGalleryViewer } from '../components/gallery/StitchGalleryViewer';
-import { ToastStack } from '../components/shell/QueueDrawer';
 import { SceneEditor } from '../components/series/SceneEditor';
 import { SeriesReferences } from '../components/series/SeriesReferences';
 import { RecordImage } from '../components/gallery/RecordImage';
@@ -30,7 +30,7 @@ export interface SeriesStudioProps extends SeriesActions {
 export function SeriesStudio(props: SeriesStudioProps) {
   const { prices } = useCredits();
   const { onEditRecord, onUseRecipe, onRetry, onCancel, onPrioritize } = props;
-  const { models, imageCapabilities, ready, brief, setBrief, count, setCount, config, setConfig, busy, submitting, referenceBusy, toasts, pushToast, seriesId, seriesResults, allSeriesResults, activeJobs, canContinue, submissionCount, metadata, view, setView, preview, setPreview, shots, shotIds, splitStory, submitBatch, exportSeries, updateTask, removeShot, resetSeries, redrawShot, references, maxReferences, removeReference, uploadReferences, editing, setEditing, beginEdit, saveEdit } = useSeriesStudio(props);
+  const { models, imageCapabilities, ready, brief, setBrief, count, setCount, config, setConfig, busy, submitting, referenceBusy, pushToast, seriesId, seriesResults, allSeriesResults, activeJobs, canContinue, submissionCount, metadata, view, setView, preview, setPreview, shots, shotIds, splitStory, submitBatch, exportSeries, updateTask, removeShot, resetSeries, redrawShot, references, maxReferences, removeReference, uploadReferences, editing, setEditing, beginEdit, saveEdit } = useSeriesStudio(props);
   const storyboardRef = useRef<HTMLElement>(null);
   const shotLabel = '分镜看板';
   const plannedTotal = shots.length;
@@ -177,40 +177,33 @@ export function SeriesStudio(props: SeriesStudioProps) {
                     </span>
                     <span className="font-meta-sm text-meta-sm text-outline">可逐镜单独调整</span>
                   </div>
-                  <div className="grid grid-cols-4 gap-1.5">
-                    {seriesAspects(imageCapabilities?.customSizes, config.aspectRatio).map((aspect) => {
-                      const active = config.aspectRatio === aspect.id;
-                      return (
-                        <button
-                          key={aspect.id}
-                          type="button"
-                          aria-pressed={active}
-                          disabled={planLocked}
-                          className={
-                            active
-                              ? 'flex flex-col items-center justify-center py-1 px-1 rounded-lg bg-secondary-container text-on-secondary-container border border-primary/30 text-center'
-                              : 'flex flex-col items-center justify-center py-1 px-1 rounded-lg bg-surface-container-lowest hover:bg-surface-container text-on-surface-variant border border-outline-variant/30 text-center transition-colors'
-                          }
-                          onClick={() => {
-                            const size = resolveSize(aspect.id, config.sizeTier);
-                            setConfig((current) => ({
-                              ...current,
-                              aspectRatio: aspect.id,
-                              requestSize: size.size,
-                              sizeHint: size.hint,
-                            }));
-                          }}
-                        >
-                          <span className="font-meta-md text-meta-sm font-semibold leading-none">{aspect.label}</span>
-                          <span
-                            className={`text-[10px] mt-0.5 ${active ? 'text-on-secondary-container/80' : 'text-outline'}`}
-                          >
-                            {aspect.tip}
-                          </span>
-                        </button>
-                      );
-                    })}
-                  </div>
+                  <SegmentedControl
+                    label="默认画幅"
+                    className="grid grid-cols-4 gap-1.5"
+                    disabled={planLocked}
+                    value={config.aspectRatio}
+                    onChange={(aspectRatio) => {
+                      const size = resolveSize(aspectRatio, config.sizeTier);
+                      setConfig((current) => ({
+                        ...current,
+                        aspectRatio,
+                        requestSize: size.size,
+                        sizeHint: size.hint,
+                      }));
+                    }}
+                    options={seriesAspects(imageCapabilities?.customSizes, config.aspectRatio).map((aspect) => ({
+                      id: aspect.id,
+                      label: <>
+                        <span className="font-meta-md text-meta-sm font-semibold leading-none">{aspect.label}</span>
+                        <span className={`text-[10px] mt-0.5 ${config.aspectRatio === aspect.id ? 'text-on-secondary-container/80' : 'text-outline'}`}>
+                          {aspect.tip}
+                        </span>
+                      </>,
+                    }))}
+                    itemClassName={(active) => active
+                      ? 'flex flex-col items-center justify-center py-1 px-1 rounded-lg bg-secondary-container text-on-secondary-container border border-primary/30 text-center disabled:opacity-60 disabled:cursor-not-allowed'
+                      : 'flex flex-col items-center justify-center py-1 px-1 rounded-lg bg-surface-container-lowest hover:bg-surface-container text-on-surface-variant border border-outline-variant/30 text-center transition-colors disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-surface-container-lowest'}
+                  />
                 </div>
               </div>
             </div>
@@ -233,7 +226,7 @@ export function SeriesStudio(props: SeriesStudioProps) {
                   <strong className="text-on-surface font-medium">
                     {LOCK_UNSUPPORTED_IMAGE_OPTIONS
                       ? <span aria-label="系列生成质量" title="上游暂不支持修改, 将使用默认值">{qualityLabel(config.quality)}</span>
-                      : <select aria-label="系列生成质量" disabled={planLocked} className="bg-transparent disabled:opacity-60" value={config.quality} onChange={(event) => setConfig((current) => ({ ...current, quality: event.target.value as typeof current.quality }))}><option value="auto">自动</option><option value="low">快速</option><option value="medium">标准</option><option value="high">精细</option></select>}
+                      : <select aria-label="系列生成质量" disabled={planLocked} className="bg-transparent disabled:opacity-60" value={config.quality} onChange={(event) => setConfig((current) => ({ ...current, quality: event.target.value as typeof current.quality }))}>{QUALITY_OPTIONS.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}</select>}
                   </strong>
                 </span>
                 <span className="text-outline">·</span>
@@ -290,27 +283,17 @@ export function SeriesStudio(props: SeriesStudioProps) {
                   {receiptErrorCount ? `${receiptErrorCount} 幕领取待重试` : activeJobs ? '分镜处理中' : canContinue ? '剩余分镜待续交' : failedCount ? `${failedCount} 幕生成异常` : remainingCount === 0 ? `${plannedTotal} 幕已完成` : hasCompletePlan ? `${remainingCount} 幕待确认` : `${filledPrompts}/${plannedTotal} 幕已填写`}
                 </span>
               </div>
-              <div className="flex items-center gap-space-xs text-body-sm text-on-surface-variant font-meta-sm">
-                <button
-                  type="button"
-                  className={`flex items-center gap-1 hover:text-primary ${view === 'timeline' ? 'text-primary font-medium' : ''}`}
-                  onClick={() => setView('timeline')}
-                  aria-pressed={view === 'timeline'}
-                >
-                  <StitchIcon name="view_timeline" size={16} />
-                  <span>时间轴视图</span>
-                </button>
-                <span className="text-outline">|</span>
-                <button
-                  type="button"
-                  className={`flex items-center gap-1 hover:text-primary ${view === 'grid' ? 'text-primary font-medium' : ''}`}
-                  onClick={() => setView('grid')}
-                  aria-pressed={view === 'grid'}
-                >
-                  <StitchIcon name="grid_view" size={16} />
-                  <span>分镜卡片流</span>
-                </button>
-              </div>
+              <SegmentedControl
+                label="分镜视图"
+                className="flex items-center gap-space-xs text-body-sm text-on-surface-variant font-meta-sm divide-x divide-outline-variant/60 [&>button+button]:pl-space-xs"
+                value={view}
+                onChange={setView}
+                options={[
+                  { id: 'timeline', label: <><StitchIcon name="view_timeline" size={16} /><span>时间轴视图</span></> },
+                  { id: 'grid', label: <><StitchIcon name="grid_view" size={16} /><span>分镜卡片流</span></> },
+                ]}
+                itemClassName={(active) => `flex items-center gap-1 hover:text-primary ${active ? 'text-primary font-medium' : ''}`}
+              />
             </div>
             <div
               className={
@@ -338,7 +321,7 @@ export function SeriesStudio(props: SeriesStudioProps) {
                 return (
                   <article
                     key={shotIds[index] || `plan-${index}`}
-                    className={`stitch-shot-card flex flex-col rounded-2xl group overflow-hidden min-w-0 ${view === 'timeline' ? 'shrink-0 w-80' : ''} ${running ? 'bg-surface-container-lowest border-2 border-primary/40 shadow-[0_2px_16px_rgba(85,95,75,0.06)]' : done ? 'bg-surface-container-lowest border border-outline-variant/30 shadow-[0_2px_16px_rgba(85,95,75,0.06)] hover:shadow-md' : failed ? 'bg-surface-container-lowest border border-error/30' : 'bg-surface-container-lowest/80 border border-dashed border-outline-variant/50 shadow-[0_2px_12px_rgba(85,95,75,0.03)]'}`}
+                    className={`stitch-shot-card flex flex-col rounded-2xl overflow-hidden min-w-0 ${view === 'timeline' ? 'shrink-0 w-80' : ''} ${running ? 'bg-surface-container-lowest border-2 border-primary/40 shadow-[0_2px_16px_rgba(85,95,75,0.06)]' : done ? 'bg-surface-container-lowest border border-outline-variant/30 shadow-[0_2px_16px_rgba(85,95,75,0.06)] hover:shadow-md' : failed ? 'bg-surface-container-lowest border border-error/30' : 'bg-surface-container-lowest/80 border border-dashed border-outline-variant/50 shadow-[0_2px_12px_rgba(85,95,75,0.03)]'}`}
                   >
                     <div
                       className={`p-space-md border-b border-outline-variant/15 flex flex-wrap items-center justify-between gap-2 ${running ? 'bg-primary/5' : ''}`}
@@ -378,23 +361,28 @@ export function SeriesStudio(props: SeriesStudioProps) {
                       </span>
                     </div>
                     <div
-                      className={`w-full relative ${done ? 'aspect-video overflow-hidden bg-surface-container-low' : `${shot.kind === 'planned' ? 'min-h-24' : 'min-h-36'} bg-surface-container-low/50 flex flex-col items-center justify-center p-space-md`}`}
+                      className={`group/shot w-full relative ${done ? 'aspect-video overflow-hidden bg-surface-container-low' : `${shot.kind === 'planned' ? 'min-h-24' : 'min-h-36'} bg-surface-container-low/50 flex flex-col items-center justify-center p-space-md`}`}
                     >
                       {done && shot.record ? (
                         <>
-                          <RecordImage
-                            alt={shot.task.title}
-                            className="w-full h-full object-contain"
-                            record={shot.record}
-                          />
-                          <div className="absolute bottom-2 left-2 px-2 py-0.5 rounded bg-inverse-surface/75 text-inverse-on-surface font-meta-sm text-[10px]">
+                          {/* Tapping the picture opens the details; the keyboard path is the 查看作品详情 button. */}
+                          <div className="w-full h-full cursor-zoom-in" onClick={() => setPreview(shot.record!)}>
+                            <RecordImage
+                              alt={shot.task.title}
+                              className="w-full h-full object-contain"
+                              record={shot.record}
+                            />
+                          </div>
+                          <div className="pointer-events-none absolute bottom-2 left-2 px-2 py-0.5 rounded bg-inverse-surface/75 text-inverse-on-surface font-meta-sm text-[10px]">
                             {info ? `${info.size} · ${info.ratioLabel}` : '读取画幅中'}
                           </div>
-                          <div className="absolute inset-0 bg-inverse-surface/40 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity flex items-center justify-center gap-space-xs">
+                          {/* Touch screens have no hover, so the hidden actions never take a tap there: the paid redraw stays reachable only from visible controls. */}
+                          <div className="pointer-events-none absolute inset-0 bg-inverse-surface/40 opacity-0 [@media(hover:hover)]:group-hover/shot:opacity-100 [@media(hover:hover)]:[&>button]:pointer-events-auto focus-within:opacity-100 transition-opacity flex items-center justify-center gap-space-xs">
                             <button
                               type="button"
                               className="w-9 h-9 rounded-full bg-surface text-on-surface flex items-center justify-center hover:scale-110 shadow-sm"
-                              title="全屏预览大图"
+                              title="查看作品详情"
+                              aria-label="查看作品详情"
                               onClick={() => setPreview(shot.record!)}
                             >
                               <StitchIcon name="zoom_in" size={18} />
@@ -406,6 +394,7 @@ export function SeriesStudio(props: SeriesStudioProps) {
                               title="重新绘制本镜"
                               onClick={() => void redrawShot(index)}
                             >
+                              <span className="sr-only">重新绘制本镜</span>
                               <StitchIcon name="replay" size={18} />
                               <CreditCost />
                             </button>
@@ -413,6 +402,7 @@ export function SeriesStudio(props: SeriesStudioProps) {
                               type="button"
                               className="w-9 h-9 rounded-full bg-surface text-on-surface flex items-center justify-center hover:scale-110 shadow-sm"
                               title="局部修改"
+                              aria-label="局部修改"
                               onClick={() => onEditRecord(shot.record!)}
                             >
                               <StitchIcon name="brush" size={18} />
@@ -612,7 +602,6 @@ export function SeriesStudio(props: SeriesStudioProps) {
           onNotify={pushToast}
         />
       )}
-      <ToastStack toasts={toasts} />
     </main>
   );
 }

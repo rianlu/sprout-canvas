@@ -102,7 +102,7 @@ try {
       const view = preview().getByRole('region', { name: '图片查看区', exact: true });
       const viewSize = await view.boundingBox();
       assert.ok(viewSize.width > thumbnail.width * 5 && viewSize.height > thumbnail.height * 3, 'preview opens beyond the configuration panel');
-      assert.equal(await page.evaluate(() => document.body.style.overflow), 'hidden');
+      await until(async () => await page.evaluate(() => getComputedStyle(document.body).overflowY === 'hidden' || getComputedStyle(document.documentElement).overflowY === 'hidden'), 'page scroll locked behind preview');
       const originalScale = parseInt(await preview().getByLabel('缩放比例').innerText());
       await preview().getByLabel('放大图片', { exact: true }).click();
       await until(async () => parseInt(await preview().getByLabel('缩放比例').innerText()) > originalScale, 'image zoom increases');
@@ -121,7 +121,7 @@ try {
       await page.keyboard.press('Escape');
       await preview().waitFor({ state: 'hidden' });
       assert.ok(await trigger.evaluate((element) => document.activeElement === element), 'closing returns focus to original thumbnail');
-      assert.equal(await page.evaluate(() => document.body.style.overflow), '');
+      await until(async () => await page.evaluate(() => getComputedStyle(document.body).overflowY !== 'hidden' && getComputedStyle(document.documentElement).overflowY !== 'hidden'), 'page scroll unlocked after preview');
       assert.deepEqual(await sources(), initialSources, 'preview does not change reference inputs');
       checks.push(`${label}: 大图预览, 缩放, 平移和键盘关闭正常, 焦点恢复且不触发生图`);
 

@@ -236,6 +236,15 @@ try {
   if (await details.count()) await details.click();
   await inspect.getByRole('button', { name: '切图拆分', exact: true }).click();
   const split = page.getByRole('dialog', { name: '切图工具', exact: true }); await split.waitFor();
+  // A file dropped inside the dialog loads; the dialog stops drops from reaching page drop zones underneath.
+  await split.getByRole('button', { name: '上传要切分的图片', exact: true }).evaluate((zone, base64) => {
+    const transfer = new DataTransfer();
+    transfer.items.add(new File([Uint8Array.from(atob(base64), (char) => char.charCodeAt(0))], '拖入切图.png', { type: 'image/png' }));
+    zone.dispatchEvent(new DragEvent('dragover', { dataTransfer: transfer, bubbles: true, cancelable: true }));
+    zone.dispatchEvent(new DragEvent('drop', { dataTransfer: transfer, bubbles: true, cancelable: true }));
+  }, png(500, 300).toString('base64'));
+  await split.getByText('500×300 · 拖入切图.png', { exact: true }).waitFor();
+  assert.deepEqual((await draft()).config.refImages.map((ref) => ref.id), expectedReferences.map((ref) => ref.id), 'a drop inside the split dialog never adds reference images');
   await split.locator('input[type=file]').setInputFiles({ name: '九宫格测试.png', mimeType: 'image/png', buffer: png(641, 359) });
   await split.getByRole('button', { name: '切分为 3×3', exact: true }).click();
   await split.getByRole('button', { name: '打包下载 (9 张)', exact: true }).waitFor();

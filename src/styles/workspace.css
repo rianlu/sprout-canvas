@@ -12,6 +12,8 @@ body {
 ::-webkit-scrollbar { display: none; }
 button, a, input, select, textarea { -webkit-tap-highlight-color: transparent; }
 button:disabled { cursor: not-allowed; }
+/* Default dim for disabled buttons; element-level specificity so a component's own disabled: utility still wins. */
+button:where(:disabled) { opacity: 0.5; }
 :focus-visible { outline: 2px solid rgb(var(--sc-primary)); outline-offset: 3px; }
 textarea:focus-visible, input:focus-visible { outline-offset: 1px; }
 .studio-prompt-field { position: relative; border-radius: 12px; transition: outline-color 150ms; }
@@ -35,7 +37,7 @@ textarea:focus-visible, input:focus-visible { outline-offset: 1px; }
 @container (max-width: 240px) {
   .reference-image-slot .reference-image-actions { height: 52px; flex-direction: column; }
 }
-.stitch-inpaint-frame { max-width: 100%; max-height: 54vh; }
+.stitch-inpaint-frame { max-width: 100%; max-height: 54dvh; }
 .stitch-style-card-list { display: grid; grid-template-columns: 220px 1fr; gap: 24px; }
 .stitch-style-card-list .stitch-style-image { height: 180px; margin: 0; }
 .stitch-mobile-nav { display: none; }

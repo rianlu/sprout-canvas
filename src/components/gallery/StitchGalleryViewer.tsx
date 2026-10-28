@@ -1,6 +1,6 @@
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import type { ResultRecord } from '../../types/generation';
-import { useFocusTrap } from '../../hooks/useFocusTrap';
+import { Dialog } from '../ui/Dialog';
 import { useImageMetadata } from '../../hooks/useImageMetadata';
 import {
   cardRecords,
@@ -17,10 +17,11 @@ import {
 import { imageFileExtension } from '../../lib/image/format';
 import { useOriginalImage } from '../../hooks/useOriginalImage';
 import { StitchIcon } from '../ui/StitchIcon';
+import { SegmentedControl } from '../ui/SegmentedControl';
 import { RecordImage } from './RecordImage';
 import { ImageViewport } from './ImageViewport';
 import { ImagePreviewDialog } from '../image/ImagePreviewDialog';
-import { sizePreset } from '../../lib/api/generation';
+import { qualityLabel, sizePreset } from '../../lib/api/generation';
 import { defaultModelName } from '../../../shared/generation-contract.mjs';
 
 interface ViewerProps {
@@ -47,7 +48,6 @@ export function StitchGalleryViewer({ cards, initialIndex, initialSceneIndex = 0
   const [detailsOpen, setDetailsOpen] = useState(() => window.matchMedia('(min-width: 1024px)').matches);
   const [fullWindow, setFullWindow] = useState(false);
 
-  const dialogRef = useFocusTrap<HTMLDivElement>(true);
   const stripRef = useRef<HTMLDivElement>(null);
   const card = cards[cardIndex] ?? cards[0];
   const records = useMemo(() => (card ? cardRecords(card) : []), [card]);
@@ -87,34 +87,12 @@ export function StitchGalleryViewer({ cards, initialIndex, initialSceneIndex = 0
   );
 
   useEffect(() => {
-    const previous = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    return () => {
-      document.body.style.overflow = previous;
-    };
-  }, []);
-
-  useEffect(() => {
     const media = window.matchMedia('(min-width: 1024px)');
     const changed = () => setDetailsOpen(media.matches);
     media.addEventListener('change', changed);
     return () => media.removeEventListener('change', changed);
   }, []);
 
-  useEffect(() => {
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onClose();
-      if (event.target instanceof HTMLElement && event.target.matches('input, textarea, select')) return;
-      if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
-        event.preventDefault();
-        const delta = event.key === 'ArrowLeft' ? -1 : 1;
-        if (showSeries) changeScene(delta);
-        else changeCard(delta);
-      }
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [changeCard, changeScene, onClose, showSeries]);
 
   useEffect(() => {
     stripRef.current
@@ -124,6 +102,15 @@ export function StitchGalleryViewer({ cards, initialIndex, initialSceneIndex = 0
 
   if (!card || !record) return null;
 
+  // Escape and focus belong to Dialog; arrow keys switch works or scenes unless a field or a control group uses them.
+  const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (event.defaultPrevented || (event.target instanceof HTMLElement && event.target.matches('input, textarea, select'))) return;
+    if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
+    event.preventDefault();
+    const delta = event.key === 'ArrowLeft' ? -1 : 1;
+    if (showSeries) changeScene(delta);
+    else changeCard(delta);
+  };
   const copy = async (text: string) => {
     try {
       await navigator.clipboard.writeText(text);
@@ -151,20 +138,14 @@ export function StitchGalleryViewer({ cards, initialIndex, initialSceneIndex = 0
   };
 
   return (
-    <div
-      className="stitch-viewer fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-inverse-surface/50 backdrop-blur-sm"
-      onClick={(event) => {
-        if (event.target === event.currentTarget) onClose();
-      }}
+    <Dialog
+      label="作品检视"
+      onClose={onClose}
+      onKeyDown={onKeyDown}
+      backdropClassName="fixed inset-0 z-50 bg-inverse-surface/50 backdrop-blur-sm"
+      viewportClassName="stitch-viewer fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6"
+      className="stitch-viewer-dialog relative flex h-[min(92dvh,calc(100dvh-1.5rem))] w-[min(100%,calc(100vw-1.5rem))] max-w-7xl flex-col overflow-hidden rounded-2xl bg-surface shadow-[0_20px_60px_rgba(40,48,36,0.20)] sm:h-[min(88dvh,56rem)] sm:w-[min(80vw,80rem)]"
     >
-      <div
-        ref={dialogRef}
-        role="dialog"
-        aria-modal="true"
-        aria-label="作品检视"
-        inert={fullWindow}
-        className="stitch-viewer-dialog relative flex h-[min(92dvh,calc(100dvh-1.5rem))] w-[min(100%,calc(100vw-1.5rem))] max-w-7xl flex-col overflow-hidden rounded-2xl bg-surface shadow-[0_20px_60px_rgba(40,48,36,0.20)] sm:h-[min(88dvh,56rem)] sm:w-[min(80vw,80rem)]"
-      >
         <div className="h-16 px-3 md:px-space-lg bg-surface-container-lowest border-b border-outline-variant/30 flex items-center justify-between gap-2 md:gap-space-md shrink-0">
           <div className="flex items-center gap-space-md min-w-0 flex-1">
             <div className="hidden sm:flex w-10 h-10 rounded-xl bg-primary/10 text-primary items-center justify-center shrink-0">
@@ -190,7 +171,7 @@ export function StitchGalleryViewer({ cards, initialIndex, initialSceneIndex = 0
             <div className="flex items-center bg-surface-container rounded-lg p-0.5">
               <button
                 type="button"
-                className="p-1.5 rounded hover:bg-surface-container-high"
+                className="p-1.5 rounded enabled:hover:bg-surface-container-high"
                 title={series ? '上一套' : '上一张'}
                 aria-label={series ? '上一套' : '上一张'}
                 onClick={() => changeCard(-1)}
@@ -203,7 +184,7 @@ export function StitchGalleryViewer({ cards, initialIndex, initialSceneIndex = 0
               </span>
               <button
                 type="button"
-                className="p-1.5 rounded hover:bg-surface-container-high"
+                className="p-1.5 rounded enabled:hover:bg-surface-container-high"
                 title={series ? '下一套' : '下一张'}
                 aria-label={series ? '下一套' : '下一张'}
                 onClick={() => changeCard(1)}
@@ -258,28 +239,22 @@ export function StitchGalleryViewer({ cards, initialIndex, initialSceneIndex = 0
           <div className={`stitch-viewer-stage flex-1 flex-col min-w-0 min-h-0 ${detailsOpen ? 'hidden lg:flex' : 'flex'}`}>
             {series && (
               <div className="flex items-center flex-wrap gap-2 px-3 py-2 bg-surface-container-lowest border-b border-outline-variant/30 shrink-0">
-                <div className="flex items-center bg-surface-container-low p-0.5 rounded-lg" aria-label="检视模式">
-                  {([['series', 'view_carousel', '系列预览'], ['single', 'image', '当前图片']] as const).map(([mode, icon, label]) => (
-                    <button
-                      key={mode}
-                      type="button"
-                      aria-pressed={previewMode === mode}
-                      className={`flex items-center gap-1 px-2 py-1.5 rounded-lg font-body-sm text-body-sm ${previewMode === mode ? 'bg-primary text-on-primary' : 'text-on-surface-variant hover:bg-surface-container'}`}
-                      onClick={() => { setPreviewMode(mode); setLayout('carousel'); }}
-                    ><StitchIcon name={icon} size={16} />{label}</button>
-                  ))}
-                </div>
-                {showSeries && <div className="flex items-center gap-1 ml-auto" aria-label="分镜布局">
-                  {([['carousel', 'image', '逐镜'], ['waterfall', 'view_stream', '拼版']] as const).map(([mode, icon, label]) => (
-                    <button
-                      key={mode}
-                      type="button"
-                      aria-pressed={layout === mode}
-                      className={`flex items-center gap-1 px-2 py-1.5 rounded-lg font-body-sm text-body-sm ${layout === mode ? 'bg-secondary-container text-on-secondary-container' : 'text-on-surface-variant hover:bg-surface-container'}`}
-                      onClick={() => setLayout(mode)}
-                    ><StitchIcon name={icon} size={16} />{label}</button>
-                  ))}
-                </div>}
+                <SegmentedControl
+                  label="检视模式"
+                  className="flex items-center bg-surface-container-low p-0.5 rounded-lg"
+                  value={previewMode}
+                  onChange={(mode) => { setPreviewMode(mode); setLayout('carousel'); }}
+                  options={([['series', 'view_carousel', '系列预览'], ['single', 'image', '当前图片']] as const).map(([mode, icon, label]) => ({ id: mode, label: <><StitchIcon name={icon} size={16} />{label}</> }))}
+                  itemClassName={(active) => `flex items-center gap-1 px-2 py-1.5 rounded-lg font-body-sm text-body-sm ${active ? 'bg-primary text-on-primary' : 'text-on-surface-variant hover:bg-surface-container'}`}
+                />
+                {showSeries && <SegmentedControl
+                  label="分镜布局"
+                  className="flex items-center gap-1 ml-auto"
+                  value={layout}
+                  onChange={setLayout}
+                  options={([['carousel', 'image', '逐镜'], ['waterfall', 'view_stream', '拼版']] as const).map(([mode, icon, label]) => ({ id: mode, label: <><StitchIcon name={icon} size={16} />{label}</> }))}
+                  itemClassName={(active) => `flex items-center gap-1 px-2 py-1.5 rounded-lg font-body-sm text-body-sm ${active ? 'bg-secondary-container text-on-secondary-container' : 'text-on-surface-variant hover:bg-surface-container'}`}
+                />}
 
               </div>
             )}
@@ -368,6 +343,7 @@ export function StitchGalleryViewer({ cards, initialIndex, initialSceneIndex = 0
                     className="w-7 h-7 rounded-lg bg-surface-container hover:bg-surface-container-high flex items-center justify-center"
                     onClick={() => changeScene(-1)}
                     title="上一幕"
+                    aria-label="上一幕"
                   >
                     <StitchIcon name="chevron_left" size={16} />
                   </button>
@@ -376,6 +352,7 @@ export function StitchGalleryViewer({ cards, initialIndex, initialSceneIndex = 0
                     className="w-7 h-7 rounded-lg bg-surface-container hover:bg-surface-container-high flex items-center justify-center"
                     onClick={() => changeScene(1)}
                     title="下一幕"
+                    aria-label="下一幕"
                   >
                     <StitchIcon name="chevron_right" size={16} />
                   </button>
@@ -435,7 +412,7 @@ export function StitchGalleryViewer({ cards, initialIndex, initialSceneIndex = 0
                   ['画风', record.recipe?.styleName || (record.recipe ? '自定义' : '历史作品未记录')],
                   ['参考素材', record.recipe ? `${record.recipe.references.length || record.recipe.referenceImage ? [...record.recipe.references.map((ref) => ref.name), ...(record.recipe.referenceImage ? ['分镜衔接参考'] : [])].join(', ') : '文字创作'}${record.recipe.hasMask ? ' · 局部编辑蒙版' : ''}` : '历史作品未记录'],
                   ['背景', record.recipe?.background === 'transparent' ? '透明' : record.recipe ? '自然背景' : '历史作品未记录'],
-                  ['质量', ({ high: '精细', medium: '标准', low: '快速', auto: '自动' } as Record<string, string>)[record.recipe?.quality || ''] || '历史作品未记录'],
+                  ['质量', record.recipe?.quality ? qualityLabel(record.recipe.quality) : '历史作品未记录'],
                 ].map(([label, value, className = '']) => (
                   <Fragment key={label}>
                     <dt className={`text-on-surface-variant ${className}`}>{label}</dt>
@@ -468,7 +445,6 @@ export function StitchGalleryViewer({ cards, initialIndex, initialSceneIndex = 0
             </div>
           </aside>}
         </div>
-      </div>
       {fullWindow && <ImagePreviewDialog
         fullWindow
         label="全屏查看图片"
@@ -488,6 +464,6 @@ export function StitchGalleryViewer({ cards, initialIndex, initialSceneIndex = 0
         onCopy={copyImage}
         onDownload={downloadCurrent}
       />}
-    </div>
+    </Dialog>
   );
 }

@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { Download, Grid2X2, Scissors, X } from '../ui/icons';
 import { fileToDataUrl, imageFromDataUrl } from '../../lib/image/data-url';
-import { useFocusTrap } from '../../hooks/useFocusTrap';
+import { useDropzone } from 'react-dropzone';
+import { Dialog } from '../ui/Dialog';
+import { SegmentedControl } from '../ui/SegmentedControl';
 import type { ResultRecord } from '../../types/generation';
 import type { RefImage } from '../../types/generation';
 import { prepareImageDataUrl } from '../../lib/image/compress';
@@ -9,6 +11,7 @@ import { getRecordDataUrl } from '../../lib/storage/gallery-db';
 import { randomId } from '../../lib/random/id';
 import { RecordImage } from '../gallery/RecordImage';
 import { downloadZip } from '../../lib/image/zip';
+import { saveFile } from '../../lib/download';
 import { imageFileExtension } from '../../lib/image/format';
 
 interface SlicePreview { id: string; dataUrl: string; filename: string; width: number; height: number }
@@ -43,13 +46,6 @@ function sourceFilename(name: string) {
   return name.replace(/\.[^.]+$/, '').replace(/[\\/:*?"<>|\u0000-\u001f]/g, '_').replace(/^[.\s]+|[.\s]+$/g, '').slice(0, 100) || '切图';
 }
 
-function download(dataUrl: string, filename: string) {
-  const anchor = document.createElement('a');
-  anchor.href = dataUrl;
-  anchor.download = filename;
-  anchor.click();
-}
-
 function gallerySourceName(record: ResultRecord, index: number) {
   const serial = String(index + 1).padStart(2, '0');
   const date = Number.isFinite(record.createdAt) && record.createdAt > 0
@@ -82,7 +78,6 @@ export function SplitToolDrawer({ open, onClose, galleryRecords, initialRecord, 
   const downloadLock = useRef(false);
   const splitLock = useRef(false);
   const renderIdRef = useRef(0);
-  const dialogRef = useFocusTrap<HTMLDivElement>(open);
   useEffect(() => {
     if (!open) { renderIdRef.current++; splitLock.current = false; setBusy(false); setLoadingSource(false); return; }
     if (!initialRecord) return;
@@ -90,13 +85,6 @@ export function SplitToolDrawer({ open, onClose, galleryRecords, initialRecord, 
     void loadSource(gallerySourceName(record, 0), () => getRecordDataUrl(record));
   }, [open, initialRecord]);
   useEffect(() => () => { renderIdRef.current++; }, []);
-
-  useEffect(() => {
-    if (!open) return undefined;
-    function onKey(event: KeyboardEvent) { if (event.key === 'Escape') onClose(); }
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
-  }, [open, onClose]);
 
   async function loadSource(name: string, readDataUrl: () => Promise<string>) {
     if (downloadLock.current) return;
@@ -195,12 +183,23 @@ export function SplitToolDrawer({ open, onClose, galleryRecords, initialRecord, 
     } finally { downloadLock.current = false; setDownloading(false); }
   }
 
+  // Loading and splitting stay cancellable; only packaging the ZIP keeps the dialog open.
+  const working = busy || loadingSource || downloading;
+  const dropzone = useDropzone({
+    accept: { 'image/png': [], 'image/jpeg': [], 'image/webp': [] },
+    multiple: false,
+    noPaste: true,
+    disabled: working,
+    // Dialogs stop drops from reaching the page; without this the library would discard the drop as stopped.
+    noDragEventsBubbling: true,
+    onDropAccepted: ([file]) => { if (file) void loadFile(file); },
+  });
+
   if (!open) return null;
 
   return (
     /* 切图工具 (Stitch 抽屉形态: 遮罩 + 面板 + 左参数右预览, 类名对齐 inpaint modal) */
-    <div className="fixed inset-0 z-50 bg-inverse-surface/60 backdrop-blur-md flex items-center justify-center p-space-md" role="dialog" aria-modal="true" aria-label="切图工具" onClick={onClose}>
-      <div ref={dialogRef} className="w-full max-w-5xl max-h-[92vh] bg-surface-bright rounded-2xl shadow-[0_24px_64px_rgba(85,95,75,0.20)] overflow-hidden flex flex-col" onClick={(event) => event.stopPropagation()}>
+    <Dialog label="切图工具" busy={downloading} onClose={onClose} backdropClassName="fixed inset-0 z-50 bg-inverse-surface/60 backdrop-blur-md" viewportClassName="fixed inset-0 z-50 flex items-center justify-center p-space-md" className="w-full max-w-5xl max-h-[92dvh] bg-surface-bright rounded-2xl shadow-[0_24px_64px_rgba(85,95,75,0.20)] overflow-hidden flex flex-col">
         {/* 头条 */}
         <div className="px-space-lg py-space-md bg-surface-container-low flex items-center justify-between">
           <div className="flex items-center gap-space-sm">
@@ -212,7 +211,7 @@ export function SplitToolDrawer({ open, onClose, galleryRecords, initialRecord, 
               <p className="font-meta-sm text-meta-sm text-on-surface-variant">按行列切分原图, 一次打包下载所有切片</p>
             </div>
           </div>
-          <button type="button" className="w-8 h-8 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface flex items-center justify-center transition-colors" onClick={onClose} aria-label="关闭">
+          <button type="button" className="viewer-tool-button" disabled={downloading} onClick={onClose} aria-label="关闭">
             <X size={18} aria-hidden="true" />
           </button>
         </div>
@@ -222,18 +221,12 @@ export function SplitToolDrawer({ open, onClose, galleryRecords, initialRecord, 
           <aside className="w-full md:w-72 shrink-0 bg-surface-container-lowest p-space-md md:overflow-y-auto flex flex-col gap-space-md">
             {/* 上传区 */}
             <div
-              className="w-full flex flex-col items-center justify-center gap-1 py-space-md rounded-xl border-2 border-dashed border-outline-variant/50 hover:border-primary/50 hover:bg-surface-container-low/50 transition-colors text-on-surface-variant cursor-pointer"
-              onClick={() => document.getElementById('split-file-input')?.click()}
-              role="button" tabIndex={0}
-              onKeyDown={(event) => { if (event.key === 'Enter') document.getElementById('split-file-input')?.click(); }}
-              onDragOver={(event) => { if (event.dataTransfer.types.includes('Files')) event.preventDefault(); }}
-              onDrop={(event) => { event.preventDefault(); const file = event.dataTransfer.files[0]; if (file) void loadFile(file); }}
-              aria-label="上传要切分的图片"
+              {...dropzone.getRootProps({ role: 'button', 'aria-label': '上传要切分的图片' })}
+              className={`w-full flex flex-col items-center justify-center gap-1 py-space-md rounded-xl border-2 border-dashed transition-colors text-on-surface-variant ${dropzone.isDragActive ? 'border-primary bg-primary/5' : 'border-outline-variant/50 hover:border-primary/50 hover:bg-surface-container-low/50'} ${working ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'}`}
             >
               <strong className="font-body-sm text-body-sm">{loadingSource ? '正在读取原图...' : '上传或拖入要切分的图'}</strong>
               <span className="font-meta-sm text-[10px] text-outline">支持 PNG / JPEG / WebP</span>
-              <input type="file" accept="image/png,image/jpeg,image/webp" id="split-file-input" className="hidden" disabled={downloading}
-                onChange={(event) => { if (event.target.files?.[0]) void loadFile(event.target.files[0]); event.currentTarget.value = ''; }} />
+              <input {...dropzone.getInputProps()} />
             </div>
 
             {/* 展馆选图 */}
@@ -276,15 +269,16 @@ export function SplitToolDrawer({ open, onClose, galleryRecords, initialRecord, 
                 {/* 格式 */}
                 <div className="flex flex-col gap-1.5">
                   <span className="font-meta-sm text-meta-sm text-on-surface font-medium">输出格式</span>
-                  <div className="flex items-center gap-1 bg-surface-container p-0.5 rounded-lg">
-                    {(['png', 'jpeg', 'webp'] as const).map((item) => (
-                      <button key={item} type="button" className={format === item
-                        ? 'flex-1 px-2 py-1 rounded-md bg-surface-container-lowest font-meta-sm text-[11px] text-primary font-medium shadow-sm'
-                        : 'flex-1 px-2 py-1 rounded-md font-meta-sm text-[11px] text-on-surface-variant hover:text-on-surface transition-colors'} onClick={() => setFormat(item)}>
-                        {item.toUpperCase()}
-                      </button>
-                    ))}
-                  </div>
+                  <SegmentedControl
+                    label="输出格式"
+                    className="flex items-center gap-1 bg-surface-container p-0.5 rounded-lg"
+                    value={format}
+                    onChange={setFormat}
+                    options={(['png', 'jpeg', 'webp'] as const).map((item) => ({ id: item, label: item.toUpperCase() }))}
+                    itemClassName={(active) => active
+                      ? 'flex-1 px-2 py-1 rounded-md bg-surface-container-lowest font-meta-sm text-[11px] text-primary font-medium shadow-sm'
+                      : 'flex-1 px-2 py-1 rounded-md font-meta-sm text-[11px] text-on-surface-variant hover:text-on-surface transition-colors'}
+                  />
                 </div>
 
                 {format !== 'png' && (
@@ -325,7 +319,7 @@ export function SplitToolDrawer({ open, onClose, galleryRecords, initialRecord, 
                       <span className="font-meta-sm text-[9px] text-outline truncate">{slice.filename.split('_').pop()}</span>
                       <span className="flex gap-1.5 shrink-0">
                         <button type="button" className="font-meta-sm text-meta-sm text-primary hover:underline" onClick={() => { void useAsReference(slice); }}>送创作</button>
-                        <button type="button" className="font-meta-sm text-meta-sm text-primary hover:underline" onClick={() => download(slice.dataUrl, slice.filename)}>下载</button>
+                        <button type="button" className="font-meta-sm text-meta-sm text-primary hover:underline" onClick={() => saveFile(slice.dataUrl, slice.filename)}>下载</button>
                       </span>
                     </figcaption>
                   </figure>
@@ -335,7 +329,6 @@ export function SplitToolDrawer({ open, onClose, galleryRecords, initialRecord, 
             )}
           </div>
         </div>
-      </div>
-    </div>
+    </Dialog>
   );
 }

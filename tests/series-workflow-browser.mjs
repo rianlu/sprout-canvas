@@ -75,8 +75,9 @@ async function rows(page, store = 'records') {
 }
 async function jobs(page) { return (await (await page.context().request.get(app.base + '/api/jobs/me')).json()).jobs; }
 async function closeQueue(page) {
-  const submit = confirmation(page).getByRole('button');
-  if (await submit.count()) await until(async () => !(await submit.innerText()).includes('提交中'), 'submission callback reached the page', 15000);
+  // The drawer opens once a submission returns and is modal, so wait on the DOM (not the accessibility tree) before closing it.
+  const submit = page.locator('[role="region"][aria-label="分镜确认与生成"] button');
+  if (await submit.count()) await until(async () => !(await submit.first().innerText()).includes('提交中'), 'submission callback reached the page', 15000);
   const close = page.getByLabel('关闭队列抽屉');
   if (await close.isVisible()) { await close.click(); await close.waitFor({ state: 'hidden' }); }
 }
@@ -99,13 +100,14 @@ async function completePlan(page) {
   await settled(page, 4);
 }
 async function screenshot(page, name) {
-  if (!(await page.getByRole('dialog').count())) await page.evaluate(() => window.scrollTo(0, 0));
+  // Toasts are role=dialog too; only an open modal keeps the page scroll position.
+  if (!(await page.locator('[role="dialog"][data-open], [role="alertdialog"][data-open]').count())) await page.evaluate(() => window.scrollTo(0, 0));
   await page.evaluate(async () => { await document.fonts.ready; });
   await page.screenshot({ path: path.join(output, name + '.png'), fullPage: true });
 }
-async function scenario(name, body, init) {
+async function scenario(name, body, init, contextOptions = {}) {
   textGate = imageGate = textPlan = undefined; rejectImage = false;
-  const context = await browser.newContext({ viewport: { width: 1440, height: 1000 }, locale: 'zh-CN', reducedMotion: 'reduce', permissions: ['clipboard-read', 'clipboard-write'] });
+  const context = await browser.newContext({ viewport: { width: 1440, height: 1000 }, locale: 'zh-CN', reducedMotion: 'reduce', permissions: ['clipboard-read', 'clipboard-write'], ...contextOptions });
   if (init) await context.addInitScript(init);
   const page = await context.newPage();
   page.setDefaultTimeout(10000);
@@ -253,7 +255,7 @@ try {
       open.onsuccess = () => { const db = open.result, query = db.transaction('artifacts').objectStore('artifacts').getAllKeys(); query.onsuccess = () => { db.close(); resolve(query.result); }; query.onerror = () => reject(query.error); };
     }));
     assert.ok(artifacts.includes(`ref-${latest.recipe.referenceImage.id}`), 'continuity snapshot survives cleanup');
-    await cards(page).nth(1).getByTitle('全屏预览大图', { exact: true }).click();
+    await cards(page).nth(1).getByTitle('查看作品详情', { exact: true }).click();
     await page.getByRole('dialog', { name: '作品检视', exact: true }).getByRole('button', { name: '复用配方', exact: true }).click();
     const studioReferences = page.getByLabel('已载入参考图', { exact: true });
     await until(async () => await studioReferences.getByRole('img').count() === 5, 'full recipe keeps all four references and continuity image');
@@ -289,8 +291,10 @@ try {
     const submitted = [];
     page.on('request', (request) => { if (request.method() === 'POST' && request.url().endsWith('/api/jobs')) submitted.push(request.postDataJSON()); });
     rejectImage = false;
-    page.once('dialog', (dialog) => { assert.match(dialog.message(), /访问码|身份/); return dialog.accept(); });
     await queue.getByRole('button', { name: /^重新生成/ }).first().click();
+    const recreate = page.getByRole('alertdialog', { name: '重新创建待提交任务', exact: true });
+    assert.match(await recreate.innerText(), /访问码|身份/);
+    await recreate.getByRole('button', { name: '继续重新创建', exact: true }).click();
     await until(async () => (await rows(page)).length === 2 && (await jobs(page)).every((job) => job.acknowledgedAt), 'new code received its one scene');
     assert.equal(submitted.length, 1);
     assert.deepEqual(submitted[0].request.references.map((ref) => ref.id), refs.map((ref) => ref.id));
@@ -383,8 +387,8 @@ try {
     await completePlan(page);
     const old = await rows(page), before = imageCalls();
     await page.locator('#series-story-prompt').fill('小熊改去海边旅行');
-    page.once('dialog', (dialog) => dialog.accept());
     await page.getByRole('button', { name: /^重新拆解分镜/ }).click();
+    await page.getByRole('alertdialog', { name: '重新拆解分镜', exact: true }).getByRole('button', { name: '重新拆解', exact: true }).click();
     await until(async () => (await page.locator('#scene-prompt-0').inputValue()).includes('柔和的绘本') && await confirmation(page).getByRole('button', { name: /^确认并生成 4 张图片/ }).isEnabled(), 'new plan applied and text receipt finished');
     assert.ok(await confirmation(page).getByRole('button', { name: /^确认并生成 4 张图片/ }).isEnabled(), 'new scenes need confirmation instead of reusing completed images');
     assert.equal(await cards(page).getByRole('img').count(), 0);
@@ -394,6 +398,23 @@ try {
     await settled(page, 8);
     assert.equal(new Set((await rows(page)).map((row) => row.seriesId)).size, 2);
   });
+
+  await scenario('触屏点按分镜图片只打开详情, 隐藏的付费重绘不接收点按', async (page) => {
+    await completePlan(page);
+    const before = imageCalls();
+    const picture = cards(page).nth(1).getByRole('img').first();
+    await picture.scrollIntoViewIfNeeded();
+    const box = await picture.boundingBox();
+    const hit = await page.evaluate(({ x, y }) => document.elementFromPoint(x, y)?.closest('button')?.title || '', { x: box.x + box.width / 2, y: box.y + box.height / 2 });
+    assert.equal(hit, '', 'the hidden overlay buttons are not tap targets on touch screens');
+    await picture.tap();
+    const viewer = page.getByRole('dialog', { name: '作品检视', exact: true });
+    await viewer.waitFor();
+    assert.equal(imageCalls(), before, 'tapping a finished scene never redraws it');
+    assert.equal((await jobs(page)).filter((job) => ['pending', 'running'].includes(job.status)).length, 0);
+    await viewer.getByRole('button', { name: '关闭查看器', exact: true }).tap();
+    await viewer.waitFor({ state: 'detached' });
+  }, undefined, { viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
 
   await scenario('分镜设置读取原任务参数, 不跟随后来修改的默认值', async (page) => {
     await completePlan(page);
@@ -607,6 +628,7 @@ try {
     await editor.waitFor({ state: 'hidden' });
     await settled(page, 9); assert.equal(imageCalls(), before + 6);
     assert.deepEqual(dialogs, [], '结果未知后重新生成不再弹出确认');
+    assert.equal(await page.getByRole('alertdialog').count(), 0, '结果未知后重新生成不弹出页内确认');
   });
   await writeFile(path.join(output, 'report.json'), JSON.stringify({ checks, failures, errors }, null, 2));
   assert.equal(failures.length, 0, failures.map((failure) => failure.name).join('; '));

@@ -1,6 +1,7 @@
 import type { ResultRecord } from '../../types/generation';
 import { imageFileExtension } from './format';
 import { buildZip } from './zip';
+import { saveFile } from '../download';
 import { getRecordBlob } from '../storage/gallery-db';
 
 export interface SeriesCard {
@@ -31,13 +32,7 @@ export function cardTimestamp(card: GalleryCard) {
 }
 
 export async function downloadRecord(record: ResultRecord) {
-  const blob = await getRecordBlob(record);
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = `sprout-${record.id}.${imageFileExtension(record.dataUrl, record.outputFormat)}`;
-  link.click();
-  window.setTimeout(() => URL.revokeObjectURL(url), 10000);
+  saveFile(await getRecordBlob(record), `sprout-${record.id}.${imageFileExtension(record.dataUrl, record.outputFormat)}`);
 }
 
 async function pngBlob(blob: Blob) {
@@ -65,10 +60,7 @@ export async function copyRecordImage(record: ResultRecord) {
 export async function downloadRecords(records: ResultRecord[], name = 'sprout-artworks') {
   const entries = [];
   for (const [index, record] of records.entries()) entries.push({ name: `scene-${String(index + 1).padStart(2, '0')}-${record.id}.${imageFileExtension(record.dataUrl, record.outputFormat)}`, data: new Uint8Array(await (await getRecordBlob(record)).arrayBuffer()) });
-  const url = URL.createObjectURL(buildZip(entries));
-  const link = document.createElement('a');
-  link.href = url; link.download = `${name}.zip`; link.click();
-  window.setTimeout(() => URL.revokeObjectURL(url), 10000);
+  saveFile(buildZip(entries), `${name}.zip`);
 }
 
 export function supportsFileSharing() { return typeof navigator.share === 'function' && typeof navigator.canShare === 'function'; }

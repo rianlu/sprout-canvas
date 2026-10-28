@@ -15,7 +15,9 @@ import { brushMaskToDataUrl, brushStrokeCount, hasEditableRegion, type BrushMask
 import { MaskEditor } from '../components/editor/MaskEditor';
 import { SplitToolDrawer } from '../components/tools/SplitToolDrawer';
 import { randomId } from '../lib/random/id';
-import { useToasts } from '../hooks/useToasts';
+import { useToasts } from '../components/ui/Toasts';
+import { useConfirm } from '../components/ui/ConfirmDialog';
+import { overlayOpen } from '../components/ui/Dialog';
 import { readDraft, writeDraft } from '../lib/storage/drafts';
 import { copyRecordImage, downloadRecord } from '../lib/image/gallery';
 import { readWorkspaceDraft, writeWorkspaceDraft, registerWorkspaceSubmission, unconfirmedWorkspaceBatch } from '../lib/storage/gallery-db';
@@ -25,7 +27,6 @@ import { StitchStudioRail, StitchCanvasStream, type CanvasEntry } from '../compo
 import { selectStudioFeed } from '../lib/studio-feed';
 import { readPromptHistory, togglePromptHistory, type PromptHistory } from '../lib/prompt-history';
 import { PROMPT_POLISH_INSTRUCTIONS, validatePolishedPrompt } from '../../shared/prompt-polish.mjs';
-import { ToastStack } from '../components/shell/QueueDrawer';
 import { StitchGalleryViewer } from '../components/gallery/StitchGalleryViewer';
 
 interface CreativeStudioProps {
@@ -47,7 +48,8 @@ const STUDIO_PROMPT_DRAFT_KEY = 'studio_prompt';
  * 单图创作页 (照搬 Stitch 单图稿). DOM 类名原样, 逻辑层复用 v3.0.
  */
 export function CreativeStudio({ onOpenStyles, onOpenGallery, onSubmitBatch, onCancel, onUseRecipe, onRetry, results, jobs, serverConfig }: CreativeStudioProps) {
-  const { toasts, pushToast } = useToasts();
+  const { pushToast } = useToasts();
+  const confirm = useConfirm();
   const [submitting, setSubmitting] = useState(false);
   const [retryingJobs, setRetryingJobs] = useState<Set<string>>(new Set());
   const submitLock = useRef(false);
@@ -318,7 +320,7 @@ export function CreativeStudio({ onOpenStyles, onOpenGallery, onSubmitBatch, onC
       const creditQuote = getCreditQuote();
       const unconfirmed = await unconfirmedWorkspaceBatch('studio', currentDraft);
       if (unconfirmed.length) {
-        const recovered = await recoverSubmissionBatch(unconfirmed, creditQuote);
+        const recovered = await recoverSubmissionBatch(unconfirmed, confirm, creditQuote);
         await onSubmitBatch(recovered.inputs);
         pushToast('success', recovered.recreated ? `已使用当前访问码重新提交 ${recovered.inputs.length} 张图片` : `已确认原批次的 ${unconfirmed.length} 张任务, 不会重复提交`);
         return;
@@ -394,12 +396,13 @@ export function CreativeStudio({ onOpenStyles, onOpenGallery, onSubmitBatch, onC
     splitOpen,
   ]);
 
-  // ⌘+Enter
+  // ⌘+Enter, ignored while help, the queue, the user menu or any other overlay is open.
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
+        if (overlayOpen()) return;
         event.preventDefault();
-        void handleSubmit();
+        if (!event.repeat && !event.isComposing) void handleSubmit();
       }
     };
     window.addEventListener('keydown', onKey);
@@ -630,7 +633,6 @@ export function CreativeStudio({ onOpenStyles, onOpenGallery, onSubmitBatch, onC
         }}
       />
 
-      <ToastStack toasts={toasts} />
     </main>
   );
 }

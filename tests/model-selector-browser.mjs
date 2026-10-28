@@ -70,13 +70,13 @@ try {
   checks.push('多模型时显示生成模型, 默认自动; 九格画幅自动在首位且为默认, 只标比例');
 
   // Transparency fits only the standard-size channel, so wide frames are disabled while it is on.
-  await transparent().locator('..').click();
+  await transparent().click();
   assert.ok(await transparent().isChecked());
   assert.ok(await ratio('16:9 宽屏').isDisabled());
   assert.ok(await ratio('3:2 横图').isEnabled());
   assert.match(await ratio('16:9 宽屏').getAttribute('title'), /透明背景/);
   assert.match(await rail().innerText(), /开启透明背景时, 当前模型不支持 21:9, 4:3, 16:9, 3:4, 9:16/);
-  await transparent().locator('..').click();
+  await transparent().click();
   await ratio('16:9 宽屏').click();
   assert.ok(await transparent().isDisabled());
   assert.match(await page.locator('#studio-transparent-hint').innerText(), /当前画幅不支持透明背景/);

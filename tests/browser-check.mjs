@@ -117,7 +117,8 @@ async function screenshot(page, name, fullPage = false) {
   const overflow = await page.evaluate(() => ({ scroll: document.documentElement.scrollWidth, width: innerWidth }));
   assert.ok(overflow.scroll <= overflow.width + 1, `${name} horizontal overflow: ${JSON.stringify(overflow)}`);
   for (const label of ['任务队列', '用户菜单']) {
-    const bounds = await page.getByRole('button', { name: new RegExp(label) }).first().boundingBox();
+    // Modal dialogs hide the page from assistive tech, so locate header buttons by their label attribute.
+    const bounds = await page.locator(`header button[aria-label^="${label}"]`).first().boundingBox();
     assert.ok(bounds && bounds.x >= 0 && bounds.x + bounds.width <= overflow.width + 1, `${name}: ${label} must stay inside viewport`);
   }
 }
@@ -190,7 +191,7 @@ try {
   await page.getByRole('button', { name: '管理作品', exact: true }).click();
   await page.getByRole('checkbox', { name: /选择作品/ }).first().check();
   await page.getByRole('button', { name: '删除选中作品', exact: true }).click();
-  await page.getByRole('dialog', { name: '确认删除作品' }).getByRole('button', { name: '确认删除', exact: true }).click();
+  await page.getByRole('alertdialog', { name: '确认删除作品' }).getByRole('button', { name: '确认删除', exact: true }).click();
   const remaining = await waitRecords(page, 1);
   await page.reload();
   await page.locator('.gallery-card').waitFor();
@@ -273,7 +274,7 @@ try {
   await fullWindow.getByRole('region', { name: '图片查看区', exact: true }).waitFor();
   const fullBox = await fullWindow.boundingBox();
   assert.ok(fullBox && fullBox.x <= 0.5 && fullBox.y <= 0.5 && fullBox.width >= 1599 && fullBox.height >= 999, `full-window preview covers the window: ${JSON.stringify(fullBox)}`);
-  assert.equal(await viewer.evaluate((element) => element.inert), true, 'the viewer underneath is inert');
+  assert.equal(await page.locator('[aria-label="作品检视"]').getAttribute('data-nested-dialog-open'), '', 'the viewer underneath yields to the nested preview');
   assert.match(await fullWindow.innerText(), /GPT Image 2/);
   await until(async () => await fullWindow.locator('img').evaluate((image) => image.complete && image.naturalWidth > 0), 'full-window image loads');
   await fullWindow.getByRole('button', { name: '放大图片', exact: true }).click();
@@ -282,7 +283,7 @@ try {
   await page.keyboard.press('Escape');
   await fullWindow.waitFor({ state: 'detached' });
   assert.ok(await viewer.isVisible(), 'Escape leaves the work viewer open');
-  assert.equal(await viewer.evaluate((element) => element.inert), false);
+  assert.equal(await viewer.getAttribute('data-nested-dialog-open'), null);
   assert.equal(await openFullWindow.evaluate((button) => button === document.activeElement), true, 'focus returns to the full-window button');
   checks.push('查看器放宽到 80rem, 标题显示模型名而非通道名; 全屏查看复用缩放组件, 铺满窗口, Esc 退出并恢复焦点');
   for (const theme of ['light', 'dark']) {
@@ -423,12 +424,14 @@ try {
   assert.equal(submissions, 0, 'saving a draft scene must not generate an image');
   assert.equal(await page.locator('#scene-prompt-0').inputValue(), reviewedPrompt);
 
-  page.once('dialog', (dialog) => dialog.dismiss());
+  const resplit = page.getByRole('alertdialog', { name: '重新拆解分镜', exact: true });
   await page.locator('#series-story-prompt').press('Control+Enter');
+  await resplit.getByRole('button', { name: '取消', exact: true }).click();
+  await resplit.waitFor({ state: 'detached' });
   assert.equal(await page.locator('#scene-prompt-0').inputValue(), reviewedPrompt);
   await page.route('**/api/text', (route) => route.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ error: '测试: 分镜拆解暂时不可用' }) }));
-  page.once('dialog', (dialog) => dialog.accept());
   await page.getByRole('button', { name: /^重新拆解分镜/ }).click();
+  await resplit.getByRole('button', { name: '重新拆解', exact: true }).click();
   await page.getByRole('alert').filter({ hasText: '测试: 分镜拆解暂时不可用' }).waitFor();
   await page.unroute('**/api/text');
   assert.equal(await page.locator('#scene-prompt-0').inputValue(), reviewedPrompt, 'failed replanning must keep the reviewed draft');
@@ -492,7 +495,7 @@ try {
   await waitRecords(page, 8); await closeQueue(page);
   await waitEmptyWorkspace(page, 'series');
   assert.ok((await rows(page)).some((record) => record.version === 3 && record.recipe.size === '768x1024'));
-  await page.getByTitle('全屏预览大图', { exact: true }).first().click();
+  await page.getByTitle('查看作品详情', { exact: true }).first().click();
   await page.getByLabel('本镜版本', { exact: true }).waitFor();
   assert.equal(await page.getByLabel('本镜版本').locator('option').count(), 3);
   await fittedImage(page);
@@ -553,7 +556,7 @@ try {
   await page.getByRole('button', { name: /写实摄影 5/ }).click();
   assert.equal(await page.locator('main article').count(), 5);
   await page.getByRole('button', { name: /全部 36/ }).click();
-  const tallExample = page.getByRole('button', { name: `放大 ${styles.find((style) => style.id === 'open-13750').name}`, exact: true });
+  const tallExample = page.getByRole('button', { name: `查看风格详情 ${styles.find((style) => style.id === 'open-13750').name}`, exact: true });
   await tallExample.scrollIntoViewIfNeeded();
   const exampleFit = await tallExample.evaluate(async (frame) => {
     const image = frame.querySelector('img[alt]:not([alt=""])');
@@ -566,7 +569,7 @@ try {
   assert.ok(Math.abs(exampleFit.frame - 4 / 3) < 0.02, 'cards keep the fixed 4:3 frame');
   await page.getByLabel('搜索风格').fill('水彩');
   assert.ok(await page.locator('main article').count() > 0);
-  await page.getByRole('button', { name: /^放大 / }).first().click();
+  await page.getByRole('button', { name: /^查看风格详情 / }).first().click();
   const styleDialog = page.getByRole('dialog', { name: /风格详情/ });
   assert.match(await styleDialog.innerText(), /CC BY 4.0/);
   assert.doesNotMatch(await styleDialog.innerText(), /CFG|Seed|步数/);
@@ -627,7 +630,7 @@ try {
 
   await nav(sp, '风格库');
   await sp.getByLabel('搜索风格').fill(longStyle.name);
-  await sp.getByRole('button', { name: `放大 ${longStyle.name}`, exact: true }).click();
+  await sp.getByRole('button', { name: `查看风格详情 ${longStyle.name}`, exact: true }).click();
   const longStyleDialog = sp.getByRole('dialog', { name: `风格详情 ${longStyle.name}`, exact: true });
   assert.equal(await longStyleDialog.locator('p.whitespace-pre-wrap').textContent(), longStyle.prompt);
   await longStyleDialog.getByRole('button', { name: '复制模板', exact: true }).click();
@@ -641,7 +644,7 @@ try {
   assert.equal(await stylePrompt.inputValue(), longStyle.prompt, 'pasting a template longer than 1000 characters must not truncate it');
   await nav(sp, '风格库');
   await sp.getByLabel('搜索风格').fill(longStyle.name);
-  await sp.getByRole('button', { name: `放大 ${longStyle.name}`, exact: true }).click();
+  await sp.getByRole('button', { name: `查看风格详情 ${longStyle.name}`, exact: true }).click();
   await longStyleDialog.getByRole('button', { name: '发送到单图', exact: true }).click();
   await sp.getByText(`已载入 ${longStyle.name}, 画幅已按示例图设为 3:4, 可修改后开始绘制`, { exact: true }).waitFor();
   assert.equal(await stylePrompt.inputValue(), longStyle.prompt);
@@ -1038,7 +1041,7 @@ try {
   await cp.setViewportSize({ width: 1600, height: 1000 });
   await cp.evaluate(() => document.documentElement.classList.remove('dark'));
   const prompt = '检查锁定的默认生成参数';
-  await cp.getByLabel('透明背景', { exact: true }).locator('..').click();
+  await cp.getByLabel('透明背景', { exact: true }).click();
   assert.ok(await cp.getByLabel('透明背景', { exact: true }).isChecked());
   await cp.getByLabel('画面提示词', { exact: true }).fill(prompt);
   await controlsSubmit.click();
@@ -1159,7 +1162,7 @@ try {
   await rp.getByRole('button', { name: '管理作品', exact: true }).click();
   await rp.getByRole('checkbox', { name: /选择作品/ }).first().check();
   await rp.getByRole('button', { name: '删除选中作品', exact: true }).click();
-  await rp.getByRole('dialog', { name: '确认删除作品' }).getByRole('button', { name: '确认删除', exact: true }).click();
+  await rp.getByRole('alertdialog', { name: '确认删除作品' }).getByRole('button', { name: '确认删除', exact: true }).click();
   await waitRecords(rp, 0);
   await nav(rp, '单图创作');
   await rp.reload();

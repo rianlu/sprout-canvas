@@ -47,8 +47,9 @@ async function settled(page, count) {
   await until(async () => !(await rows(page, 'outbox')).length && (await serverJobs(page)).every((job) => job.acknowledgedAt), 'receipt and outbox cleanup', 22000);
 }
 async function closeQueue(page) {
+  // The drawer traps focus and hides the page from the accessibility tree, so close it before reading page controls.
   const close = page.getByLabel('关闭队列抽屉');
-  if (await close.isVisible()) await close.click();
+  if (await close.isVisible()) { await close.click(); await close.waitFor({ state: 'hidden' }); }
 }
 async function signIn(page, code = app.accessCode) {
   await page.getByLabel('访问码', { exact: true }).fill(code);
@@ -128,8 +129,12 @@ try {
     await until(() => accepted?.jobs?.length === 1, 'server accepted POST');
     await settled(page, 1);
     pending.release();
-    await page.getByRole('button', { name: /^开始绘制/ }).waitFor();
-    await until(async () => await page.getByRole('button', { name: /^开始绘制/ }).isEnabled(), 'late POST completed');
+    // The late response opens the queue drawer; close it whenever it appears before reading the submit button.
+    await until(async () => {
+      await closeQueue(page);
+      const start = page.getByRole('button', { name: /^开始绘制/ });
+      return await start.count() > 0 && await start.isEnabled();
+    }, 'late POST completed');
     assert.equal((await rows(page, 'outbox')).length, 0);
     assert.equal((await rows(page, 'consumed')).length, 1);
     assert.equal((await serverJobs(page)).length, 1);

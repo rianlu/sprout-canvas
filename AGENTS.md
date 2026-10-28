@@ -55,6 +55,7 @@
 | `src/pages/AdminPage.tsx`, `src/pages/AdminDashboard.tsx`, `src/pages/AccessCodeAdmin.tsx`, `src/lib/credits.ts` | 独立管理外壳, 仪表盘与管理操作入口, 访问码与点值管理, 用户端余额同步 |
 | `src/hooks/useSeriesStudio.ts` | 系列身份, 草稿, 单镜版本和续交业务 |
 | `src/components/image/ReferenceImageSlots.tsx`, `src/components/image/ReferenceImagePreview.tsx` | 单图和系列共用四槽位参考图列表, 逐张操作与原图预览 |
+| `src/components/ui/Dialog.tsx`, `ConfirmDialog.tsx`, `SegmentedControl.tsx`, `Switch.tsx`, `Toasts.tsx`, `src/hooks/useFileDrop.ts` | 基于 Base UI 与 react-dropzone 的弹窗, 页内确认, 分段选择, 开关, 提示条和拖放; 页面不再自写焦点陷阱, Esc, 滚动锁定或系统确认框 |
 | `src/hooks/useQueue.ts`, `src/hooks/useQueueDelivery.ts` | 提交与元信息轮询, 独立结果领取, 本地事务后的确认及领取重试 |
 | `src/lib/queue-recovery.ts` | 旧版或换码后的任务确认, 新请求身份与系列参考链恢复 |
 | `src/lib/storage/gallery-db.ts` | IndexedDB v4 元信息, 原图 Blob, 缩略图, 领取记录, outbox 和草稿 |

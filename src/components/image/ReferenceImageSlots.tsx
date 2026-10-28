@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import type { RefImage } from '../../types/generation';
 import { Plus, RefreshCw, X } from '../ui/icons';
 import { ReferenceImagePreview } from './ReferenceImagePreview';
+import { overlayOpen } from '../ui/Dialog';
 
 interface Props {
   references: RefImage[];
@@ -9,6 +10,8 @@ interface Props {
   label?: string;
   disabled: boolean;
   busy: boolean;
+  /** A file is dragged over the surrounding drop area (see useFileDrop). */
+  dragging?: boolean;
   onAdd: () => void;
   onUpload: (files: File[]) => void;
   onReplace: (id: string) => void;
@@ -19,16 +22,15 @@ function imageFiles(transfer: DataTransfer): File[] {
   return Array.from(transfer.files).filter((file) => file.type.startsWith('image/'));
 }
 
-export function ReferenceImageSlots({ references, maxReferences, label = '参考图', disabled, busy, onAdd, onUpload, onReplace, onRemove }: Props) {
+export function ReferenceImageSlots({ references, maxReferences, label = '参考图', disabled, busy, dragging = false, onAdd, onUpload, onReplace, onRemove }: Props) {
   const [previewId, setPreviewId] = useState<string | null>(null);
-  const [dragging, setDragging] = useState(false);
   const slots = Array.from({ length: Math.max(maxReferences, references.length) }, (_, index) => references[index]);
   const previewOpen = references.some((reference) => reference.id === previewId);
   const inputDisabled = disabled || busy;
 
   useEffect(() => {
     const paste = (event: ClipboardEvent) => {
-      if (event.defaultPrevented || !event.clipboardData || previewOpen || (event.target instanceof Element && event.target.closest('[role="dialog"], [aria-modal="true"]'))) return;
+      if (event.defaultPrevented || !event.clipboardData || previewOpen || overlayOpen() || (event.target instanceof Element && event.target.closest('[role="dialog"], [aria-modal="true"]'))) return;
       const files = imageFiles(event.clipboardData);
       if (!files.length) return;
       event.preventDefault();
@@ -39,19 +41,7 @@ export function ReferenceImageSlots({ references, maxReferences, label = '参考
   }, [inputDisabled, onUpload, previewOpen]);
 
   return <>
-    <div className={`reference-image-input flex flex-col gap-2 rounded-lg ${dragging && !inputDisabled ? 'outline outline-2 outline-offset-4 outline-primary' : ''}`} onDragOver={(event) => {
-      if (!event.dataTransfer.types.includes('Files')) return;
-      event.preventDefault(); event.stopPropagation();
-      event.dataTransfer.dropEffect = inputDisabled ? 'none' : 'copy';
-      if (!inputDisabled) setDragging(true);
-    }} onDragLeave={(event) => {
-      if (!(event.relatedTarget instanceof Node) || !event.currentTarget.contains(event.relatedTarget)) setDragging(false);
-    }} onDrop={(event) => {
-      if (!event.dataTransfer.types.includes('Files')) return;
-      event.preventDefault(); event.stopPropagation(); setDragging(false);
-      const files = imageFiles(event.dataTransfer);
-      if (files.length && !inputDisabled) onUpload(files);
-    }}>
+    <div className={`reference-image-input flex flex-col gap-2 rounded-lg ${dragging && !inputDisabled ? 'outline outline-2 outline-offset-4 outline-primary' : ''}`}>
     <div className="reference-image-slots" aria-label={`已载入${label}`} style={{ gridAutoColumns: `minmax(0, calc((100% - ${(maxReferences - 1) * 8}px) / ${maxReferences}))` }}>
       {slots.map((reference, index) => <div key={reference?.id || `empty-${index}`} className="reference-image-slot min-w-0 flex flex-col gap-1">
         {reference ? <>

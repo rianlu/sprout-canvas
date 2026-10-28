@@ -1,16 +1,23 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { AdminEmpty, AdminHeading, AdminLoading, adminButton, adminPanel } from '../components/admin/AdminUI';
 import { StitchIcon } from '../components/ui/StitchIcon';
+import { SegmentedControl } from '../components/ui/SegmentedControl';
 import { getAdminOverview, type AdminOverview } from '../lib/api/admin';
 import { compactPoints } from '../lib/credits';
 import { ActivityHeatmap } from '../components/admin/ActivityHeatmap';
+import { StyleExampleImage } from '../components/image/StyleExampleImage';
 
 type Period = 'today' | 'month' | 'all';
 const periods: { value: Period; label: string }[] = [{ value: 'today', label: '今日' }, { value: 'month', label: '本月' }, { value: 'all', label: '累计' }];
 function PeriodSwitch({ label, value, onChange }: { label: string; value: Period; onChange: (value: Period) => void }) {
-  return <div role="group" aria-label={label} className="inline-flex shrink-0 items-center gap-0.5 rounded-lg bg-surface-container-low p-0.5">
-    {periods.map((period) => <button key={period.value} type="button" aria-pressed={value === period.value} onClick={() => onChange(period.value)} className={`min-h-7 rounded-md px-2 font-meta-sm text-meta-sm transition-colors ${value === period.value ? 'bg-surface-container-lowest text-primary shadow-sm' : 'text-on-surface-variant hover:text-on-surface'}`}>{period.label}</button>)}
-  </div>;
+  return <SegmentedControl
+    label={label}
+    className="inline-flex shrink-0 items-center gap-0.5 rounded-lg bg-surface-container-low p-0.5"
+    value={value}
+    onChange={onChange}
+    options={periods.map((period) => ({ id: period.value, label: period.label }))}
+    itemClassName={(active) => `min-h-7 rounded-md px-2 font-meta-sm text-meta-sm transition-colors ${active ? 'bg-surface-container-lowest text-primary shadow-sm' : 'text-on-surface-variant hover:text-on-surface'}`}
+  />;
 }
 const usageFor = (overview: AdminOverview, period: Period) => period === 'all' ? overview.usage : overview.usagePeriods[period];
 
@@ -72,7 +79,7 @@ export function AdminDashboard({ active, onNavigate, onEditStyle }: { active: bo
       <section aria-label="最近更新的风格" className={`${adminPanel} p-5 sm:p-6`}>
         <div className="flex items-center justify-between gap-3 mb-5"><div><h2 className="font-headline-sm text-headline-sm">最近整理的风格</h2><p className="mt-1 font-body-sm text-body-sm text-on-surface-variant">最近新增或更新的图片与提示词.</p></div><button type="button" className="inline-flex items-center gap-1 shrink-0 font-body-sm text-body-sm text-primary hover:underline" onClick={() => onNavigate('styles')}>整理风格库<StitchIcon name="arrow_forward" size={16} /></button></div>
         {overview.styles.recent.length ? <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">{overview.styles.recent.map((style) => <button type="button" key={style.id} aria-label={`编辑最近风格 ${style.name}`} className="group text-left min-w-0 rounded-xl" onClick={() => onEditStyle(style.id)}>
-          <div className="relative aspect-[16/9] overflow-hidden rounded-xl bg-surface-container-low"><img src={style.image} alt={style.name} className="w-full h-full object-cover transition-transform duration-200 group-hover:scale-[1.02]" /><span className="absolute top-2 left-2 px-2 py-1 rounded-lg bg-surface-bright/95 font-meta-sm text-meta-sm text-secondary">{style.published ? '已上架' : '未上架'}</span></div>
+          <div className="relative aspect-[16/9] overflow-hidden rounded-xl bg-surface-container-low"><StyleExampleImage src={style.image} alt={style.name} className="transition-transform duration-200 group-hover:scale-[1.02]" /><span className="absolute top-2 left-2 px-2 py-1 rounded-lg bg-surface-bright/95 font-meta-sm text-meta-sm text-secondary">{style.published ? '已上架' : '未上架'}</span></div>
           <p className="mt-3 font-body-md text-body-md font-medium truncate">{style.name}</p><p className="mt-1 font-meta-sm text-meta-sm text-on-surface-variant truncate">{style.author || '未注明作者'}</p>
         </button>)}</div> : <AdminEmpty icon="palette" title="从第一份风格开始" description="添加图片与提示词后, 就能在这里查看最近整理的素材." />}
       </section>

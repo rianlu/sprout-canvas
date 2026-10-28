@@ -16,8 +16,10 @@ import type { AspectRatio, GenerationConfig, RefImage, ResultRecord } from '../.
 import type { StudioStyleTemplate } from '../../lib/image/recipe';
 import { StudioTemplateCard } from './StudioTemplateCard';
 import { StitchIcon } from '../ui/StitchIcon';
+import { Switch } from '../ui/Switch';
+import { SegmentedControl } from '../ui/SegmentedControl';
 import { useImageMetadata } from '../../hooks/useImageMetadata';
-import { formatRequestSize, qualityLabel, resolveSize, STANDARD_ASPECTS, supportsRequest } from '../../lib/api/generation';
+import { formatRequestSize, QUALITY_OPTIONS, qualityLabel, resolveSize, STANDARD_ASPECTS, supportsRequest } from '../../lib/api/generation';
 import { LOCK_UNSUPPORTED_IMAGE_OPTIONS } from '../../lib/image/channel-limits';
 import { imageFileExtension } from '../../lib/image/format';
 import { RecordImage } from '../gallery/RecordImage';
@@ -32,6 +34,7 @@ import type { QueueDelivery } from '../../types/queue';
 import { deliveryMessage, personalQueuePosition, type QueueTiming } from '../../lib/queue-presentation';
 import { QueueElapsed } from '../queue/QueueElapsed';
 import { ReferenceImageSlots } from '../image/ReferenceImageSlots';
+import { imagesOnly, useFileDrop } from '../../hooks/useFileDrop';
 import { ReferenceImagePreview } from '../image/ReferenceImagePreview';
 
 /* ============ 单图创作 · 控制轨 (照搬 Stitch 单图稿 LEFT CONTROL PANEL, 类名原样) ============ */
@@ -84,27 +87,21 @@ function AspectRatioGrid({ value, onChange, customSizes = true, unavailable }: {
   ];
   const visible = customSizes ? ratios : ratios.filter((r) => STANDARD_ASPECTS.includes(r.id) || r.id === value);
   return (
-    <div role="group" aria-label="画面画幅比例" className="grid grid-cols-3 gap-1.5">
-      {visible.map((r) => {
-        const active = value === r.id;
-        const reason = active ? '' : unavailable(r.id);
-        return (
-          <button
-            key={r.id}
-            type="button"
-            aria-pressed={active}
-            disabled={Boolean(reason)}
-            title={reason || r.title}
-            className={
-              active
-                ? 'flex flex-col items-start p-2 rounded-xl bg-surface-container-high shadow-[0_0_0_2px_#597445] text-on-surface transition-all text-left'
-                : 'flex flex-col items-start p-2 rounded-xl bg-surface-container-low hover:bg-surface-container text-on-surface-variant transition-all text-left disabled:opacity-45 disabled:cursor-not-allowed disabled:hover:bg-surface-container-low'
-            }
-            onClick={() => onChange(r.id)}
-          >
+    <SegmentedControl
+      label="画面画幅比例"
+      className="grid grid-cols-3 gap-1.5"
+      value={value}
+      onChange={onChange}
+      options={visible.map((r) => {
+        const reason = value === r.id ? '' : unavailable(r.id);
+        return {
+          id: r.id,
+          disabled: Boolean(reason),
+          title: reason || r.title,
+          label: <>
             <div className="mb-1.5 flex h-5 w-full items-center justify-between">
               <div className="flex h-5 w-5 items-center justify-center">
-                <div className={`${r.box} rounded-sm border-2 ${active ? 'border-primary bg-primary/20' : 'border-outline/60'}`} />
+                <div className={`${r.box} rounded-sm border-2 ${value === r.id ? 'border-primary bg-primary/20' : 'border-outline/60'}`} />
               </div>
               {r.id === 'auto' && (
                 <span className="px-1 rounded text-[9px] bg-primary-fixed text-on-primary-fixed font-meta-sm font-medium">
@@ -113,56 +110,39 @@ function AspectRatioGrid({ value, onChange, customSizes = true, unavailable }: {
               )}
             </div>
             <span className="font-meta-sm text-[11px] font-medium text-on-surface leading-tight">{r.name}</span>
-          </button>
-        );
+          </>,
+        };
       })}
-    </div>
+      itemClassName={(active) => active
+        ? 'flex flex-col items-start p-2 rounded-xl bg-surface-container-high ring-2 ring-primary-container text-on-surface transition-all text-left'
+        : 'flex flex-col items-start p-2 rounded-xl bg-surface-container-low hover:bg-surface-container text-on-surface-variant transition-all text-left disabled:opacity-45 disabled:cursor-not-allowed disabled:hover:bg-surface-container-low'}
+    />
   );
 }
 
-/** 分段选择器 (通用: 调性/精度/数量/格式) */
-function SegmentedControl<T extends string>({
+/** 侧栏分段选择 (模型/数量/精度): 共用 SegmentedControl, 保留稿中的轨道与等宽列. */
+function RailSegments<T extends string>({
+  label,
   options,
   value,
   onChange,
   columns = 2,
 }: {
-  options: { id: T; label: string; sub?: string; tag?: string; disabled?: boolean; title?: string }[];
+  label: string;
+  options: { id: T; label: string; disabled?: boolean; title?: string }[];
   value: T;
   onChange: (v: T) => void;
   columns?: number;
 }) {
   return (
-    <div
+    <SegmentedControl
+      label={label}
       className={`grid p-0.5 bg-surface-container rounded-lg ${columns === 4 ? 'grid-cols-4' : columns === 3 ? 'grid-cols-3' : 'grid-cols-2'} text-center font-meta-sm text-meta-sm`}
-    >
-      {options.map((opt) => {
-        const active = opt.id === value;
-        return (
-          <button
-            key={opt.id}
-            type="button"
-            disabled={opt.disabled}
-            title={opt.title}
-            aria-pressed={active}
-            className={
-              active
-                ? 'py-1.5 px-2 rounded-md bg-surface-container-lowest font-medium text-primary shadow-sm flex flex-col gap-0.5 items-center'
-                : 'py-1.5 px-2 rounded-md text-on-surface-variant hover:text-on-surface transition-colors flex flex-col gap-0.5 items-center'
-            }
-            onClick={() => onChange(opt.id)}
-          >
-            <span className="text-[11px] font-medium flex items-center gap-2">
-              {opt.label}
-              {opt.tag && (
-                <span className="px-1 py-0.5 rounded bg-primary-fixed text-on-primary-fixed text-[9px]">{opt.tag}</span>
-              )}
-            </span>
-            {opt.sub && <span className="text-[10px] text-outline font-normal leading-tight">{opt.sub}</span>}
-          </button>
-        );
-      })}
-    </div>
+      value={value}
+      onChange={onChange}
+      options={options.map((opt) => ({ ...opt, label: <span className="text-[11px] font-medium">{opt.label}</span> }))}
+      itemClassName={(active) => `py-1.5 px-2 rounded-md flex flex-col items-center disabled:opacity-50 disabled:cursor-not-allowed ${active ? 'bg-surface-container-lowest font-medium text-primary shadow-sm' : 'text-on-surface-variant hover:text-on-surface transition-colors'}`}
+    />
   );
 }
 
@@ -207,7 +187,8 @@ export function StitchStudioRail(props: StitchStudioRailProps) {
   const transparentUnavailable = !capabilities || config.background === 'transparent' || supportsRequest(capabilities, { ...config, background: 'transparent' }) ? ''
     : capabilities.channels?.some((channel) => channel.transparent) ? '当前画幅不支持透明背景, 可改用 1:1, 3:2, 2:3 或自动' : '当前模型不支持透明背景';
   const blockedRatios = config.background === 'transparent' && !isEdit ? (['1:1', '21:9', '4:3', '3:2', '16:9', '3:4', '2:3', '9:16'] as AspectRatio[]).filter((ratio) => (capabilities?.customSizes || STANDARD_ASPECTS.includes(ratio)) && ratioUnavailable(ratio)) : [];
-  const referenceSlots = <ReferenceImageSlots references={props.referenceImages} maxReferences={props.maxReferences} disabled={imagesDisabled} busy={props.imageBusy} onAdd={() => chooseFiles()} onUpload={(files) => props.onUploadRefs(files)} onReplace={chooseFiles} onRemove={props.onRemoveRef} />;
+  const referenceDrop = useFileDrop((files) => { const images = imagesOnly(files); if (images.length) props.onUploadRefs(images); }, imagesDisabled || isEdit);
+  const referenceSlots = <ReferenceImageSlots references={props.referenceImages} maxReferences={props.maxReferences} disabled={imagesDisabled} busy={props.imageBusy} dragging={referenceDrop.dragging} onAdd={() => chooseFiles()} onUpload={(files) => props.onUploadRefs(files)} onReplace={chooseFiles} onRemove={props.onRemoveRef} />;
 
   return (
     <section className="w-full lg:w-[440px] shrink-0 bg-surface-container-lowest/80 backdrop-blur-xl rounded-xl p-space-lg shadow-[0_12px_36px_rgba(85,95,75,0.06)] flex flex-col gap-space-lg">
@@ -269,16 +250,7 @@ export function StitchStudioRail(props: StitchStudioRailProps) {
         : <button type="button" onClick={props.onOpenStyles} disabled={submitting || polishing} className="flex items-center justify-between w-full p-3 rounded-xl border border-outline-variant/30 bg-surface-container-low hover:bg-surface-container text-primary font-body-sm text-body-sm disabled:opacity-50"><span className="flex items-center gap-2"><StitchIcon name="palette" size={18} />从风格库挑选提示词模板</span><StitchIcon name="north_east" size={16} /></button>)}
 
       {/* 基底垫图与局部重绘 */}
-      <div aria-label="参考图片" className="studio-reference-area bg-surface-container-low rounded-xl p-space-md flex flex-col gap-space-sm" onDragOver={(event) => {
-        if (!event.dataTransfer.types.includes('Files')) return;
-        event.preventDefault();
-        event.dataTransfer.dropEffect = imagesDisabled || isEdit ? 'none' : 'copy';
-      }} onDrop={(event) => {
-        if (!event.dataTransfer.types.includes('Files')) return;
-        event.preventDefault();
-        const files = Array.from(event.dataTransfer.files).filter((file) => file.type.startsWith('image/'));
-        if (files.length && !imagesDisabled && !isEdit) props.onUploadRefs(files);
-      }}>
+      <div {...referenceDrop.rootProps({ role: 'group', 'aria-label': '参考图片', className: 'studio-reference-area bg-surface-container-low rounded-xl p-space-md flex flex-col gap-space-sm' })}>
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-space-xs">
             <Leaf className="text-primary" size={18} aria-hidden />
@@ -288,10 +260,17 @@ export function StitchStudioRail(props: StitchStudioRailProps) {
         </div>
         {refImage ? (
           <>
-            <div className="grid grid-cols-2 gap-1 rounded-lg bg-surface-container p-1" role="group" aria-label="图片使用方式">
-              <button type="button" aria-pressed={!isEdit} disabled={imagesDisabled} title="切换后清除蒙版, 可调整画幅与风格" onClick={props.onSwitchToReference} className={`rounded-md px-2 py-1.5 font-meta-sm text-meta-sm disabled:opacity-50 ${!isEdit ? 'bg-surface-container-lowest text-primary shadow-sm' : 'text-on-surface-variant'}`}>参考图生成</button>
-              <button type="button" aria-pressed={isEdit} disabled={polishing || imagesDisabled} onClick={props.onSwitchToEdit} className={`rounded-md px-2 py-1.5 font-meta-sm text-meta-sm disabled:opacity-50 ${isEdit ? 'bg-surface-container-lowest text-primary shadow-sm' : 'text-on-surface-variant'}`}>局部重绘</button>
-            </div>
+            <SegmentedControl
+              label="图片使用方式"
+              className="grid grid-cols-2 gap-1 rounded-lg bg-surface-container p-1"
+              value={isEdit ? 'edit' : 'reference'}
+              onChange={(mode) => (mode === 'edit' ? props.onSwitchToEdit : props.onSwitchToReference)()}
+              options={[
+                { id: 'reference', label: '参考图生成', disabled: imagesDisabled, title: '切换后清除蒙版, 可调整画幅与风格' },
+                { id: 'edit', label: '局部重绘', disabled: polishing || imagesDisabled },
+              ]}
+              itemClassName={(active) => `rounded-md px-2 py-1.5 font-meta-sm text-meta-sm disabled:opacity-50 disabled:cursor-not-allowed ${active ? 'bg-surface-container-lowest text-primary shadow-sm' : 'text-on-surface-variant hover:text-on-surface'}`}
+            />
             <p className="font-meta-sm text-meta-sm text-on-surface-variant">{isEdit ? '涂抹指定区域, 沿用原图参数和画风.' : referenceCount > 1 ? '按图 1, 图 2 的顺序参考, 可在提示词中说明各张图片的用途.' : '参考原图重新创作, 可自由调整画幅与风格.'}</p>
             {tooManyReferences && <p role="status" className="rounded-lg bg-secondary-container/50 px-3 py-2 font-meta-sm text-meta-sm text-on-secondary-container">配方已载入 {referenceCount} 张参考图, 单图创作最多使用 {props.maxReferences} 张. 请移除多余图片并检查文案后再绘制.</p>}
             {!isEdit ? referenceSlots : <div className="flex items-start gap-3 rounded-lg bg-surface-container-lowest p-2 shadow-sm">
@@ -381,12 +360,13 @@ export function StitchStudioRail(props: StitchStudioRailProps) {
 
         {/* 模型: 两个以上模型时显示, 默认自动 */}
         {props.models.length > 1 && (
-          <div role="group" aria-label="生成模型" className="bg-surface-container-low p-2.5 rounded-xl flex flex-col gap-1.5">
+          <div className="bg-surface-container-low p-2.5 rounded-xl flex flex-col gap-1.5">
             <div className="flex items-center justify-between">
               <span className="font-meta-sm text-meta-sm text-on-surface font-medium">生成模型</span>
               <span className="font-meta-sm text-[10px] text-outline">model</span>
             </div>
-            <SegmentedControl
+            <RailSegments
+              label="生成模型"
               columns={Math.min(4, props.models.length + 1)}
               value={config.modelName || ''}
               onChange={(modelName) => onConfigChange({ modelName })}
@@ -410,7 +390,8 @@ export function StitchStudioRail(props: StitchStudioRailProps) {
             <span className="font-meta-sm text-meta-sm text-on-surface font-medium">生成数量</span>
             <span className="font-meta-sm text-[10px] text-outline">n (张)</span>
           </div>
-          <SegmentedControl
+          <RailSegments
+            label="生成数量"
             columns={3}
             value={String(config.imageCount) as '1' | '2' | '4'}
             onChange={(v) => onConfigChange({ imageCount: Number(v) })}
@@ -430,18 +411,13 @@ export function StitchStudioRail(props: StitchStudioRailProps) {
                 <p className="font-meta-sm text-meta-sm text-on-surface font-medium">透明背景</p>
                 <p id="studio-transparent-hint" className="font-meta-sm text-[10px] text-outline">{transparentUnavailable || '开启后走支持透明底的通道'}</p>
               </div>
-              <label className={`relative inline-flex items-center ${transparentUnavailable ? 'cursor-not-allowed' : 'cursor-pointer'}`}>
-                <input
-                  className="sr-only peer"
-                  type="checkbox"
-                  aria-label="透明背景"
-                  aria-describedby="studio-transparent-hint"
-                  disabled={Boolean(transparentUnavailable)}
-                  checked={config.background === 'transparent'}
-                  onChange={(event) => onConfigChange({ background: event.target.checked ? 'transparent' : 'auto' })}
-                />
-                <div className="w-9 h-5 bg-surface-container-highest peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-primary peer-disabled:opacity-50" />
-              </label>
+              <Switch
+                label="透明背景"
+                describedBy="studio-transparent-hint"
+                disabled={Boolean(transparentUnavailable)}
+                checked={config.background === 'transparent'}
+                onChange={(checked) => onConfigChange({ background: checked ? 'transparent' : 'auto' })}
+              />
             </div>
           </div>
           <div role="group" aria-label="生成格式" className="rounded-xl bg-surface-container-low p-2.5 flex flex-col gap-2.5 text-on-surface-variant">
@@ -463,16 +439,12 @@ export function StitchStudioRail(props: StitchStudioRailProps) {
                 <span className="font-meta-sm text-meta-sm text-on-surface font-medium">渲染精度</span>
                 <span className="font-meta-sm text-[10px] text-outline">quality</span>
               </div>
-              <SegmentedControl
+              <RailSegments
+                label="渲染精度"
                 columns={4}
                 value={config.quality}
                 onChange={(quality) => onConfigChange({ quality })}
-                options={[
-                  { id: 'auto', label: '自动' },
-                  { id: 'low', label: '快速' },
-                  { id: 'medium', label: '标准' },
-                  { id: 'high', label: '高清 HD' },
-                ]}
+                options={QUALITY_OPTIONS}
               />
             </div>
             <div className="p-2.5 bg-surface-container-low rounded-xl flex flex-col gap-1.5">
@@ -481,17 +453,16 @@ export function StitchStudioRail(props: StitchStudioRailProps) {
                   <Layers className="text-primary" size={18} aria-hidden />
                   <span className="font-body-sm text-body-sm font-medium text-on-surface">画布背景透光 (background)</span>
                 </div>
-                <label className={`relative inline-flex items-center ${transparentUnavailable ? 'cursor-not-allowed' : 'cursor-pointer'}`} title={transparentUnavailable || undefined}>
-                  <input
-                    className="sr-only peer"
-                    type="checkbox"
-                    aria-label="透明背景"
+                <span className="inline-flex" title={transparentUnavailable || undefined}>
+                  <Switch
+                    label="透明背景"
+                    describedBy={transparentUnavailable ? 'studio-transparent-reason' : undefined}
                     disabled={Boolean(transparentUnavailable)}
                     checked={config.background === 'transparent'}
-                    onChange={(event) => onConfigChange({ background: event.target.checked ? 'transparent' : 'auto' })}
+                    onChange={(checked) => onConfigChange({ background: checked ? 'transparent' : 'auto' })}
                   />
-                  <div className="w-9 h-5 bg-surface-container-highest peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-primary peer-disabled:opacity-50" />
-                </label>
+                  {transparentUnavailable && <span id="studio-transparent-reason" className="sr-only">{transparentUnavailable}</span>}
+                </span>
               </div>
               <div className="flex items-center justify-between text-outline font-meta-sm text-[10px]">
                 <span>开启后使用支持透明的 PNG 或 WebP</span>
@@ -507,26 +478,16 @@ export function StitchStudioRail(props: StitchStudioRailProps) {
                 {outputFormats.length === 1 ? (
                   <span aria-label="当前生成格式" className="px-2.5 py-0.5 rounded-md bg-surface-container font-meta-sm text-[11px] text-primary font-medium">{outputFormats[0].toUpperCase()}</span>
                 ) : outputFormats.length > 1 ? (
-                  <div className="flex items-center gap-1 bg-surface-container p-0.5 rounded-lg">
-                    {outputFormats.map((fmt) => {
-                      const active = (config.outputFormat === 'auto' ? 'png' : config.outputFormat) === fmt;
-                      return (
-                        <button
-                          key={fmt}
-                          type="button"
-                          aria-pressed={active}
-                          className={
-                            active
-                              ? 'px-2.5 py-0.5 rounded-md bg-surface-container-lowest font-meta-sm text-[11px] text-primary font-medium shadow-sm'
-                              : 'px-2 py-0.5 rounded-md font-meta-sm text-[11px] text-on-surface-variant hover:text-on-surface transition-colors'
-                          }
-                          onClick={() => onConfigChange({ outputFormat: fmt })}
-                        >
-                          {fmt.toUpperCase()}
-                        </button>
-                      );
-                    })}
-                  </div>
+                  <SegmentedControl
+                    label="选择生成格式"
+                    className="flex flex-wrap items-center justify-end gap-1 bg-surface-container p-0.5 rounded-lg"
+                    value={config.outputFormat === 'auto' ? 'png' : config.outputFormat}
+                    onChange={(outputFormat) => onConfigChange({ outputFormat })}
+                    options={outputFormats.map((fmt) => ({ id: fmt, label: fmt.toUpperCase() }))}
+                    itemClassName={(active) => active
+                      ? 'px-2.5 py-0.5 rounded-md bg-surface-container-lowest font-meta-sm text-[11px] text-primary font-medium shadow-sm'
+                      : 'px-2 py-0.5 rounded-md font-meta-sm text-[11px] text-on-surface-variant hover:text-on-surface transition-colors'}
+                  />
                 ) : <span role="status" className="font-meta-sm text-meta-sm text-outline">正在读取可用格式...</span>}
               </div>
               {outputFormats.length === 1 && <p className="font-meta-sm text-meta-sm text-on-surface-variant">当前支持 {outputFormats[0].toUpperCase()} 格式</p>}
@@ -753,11 +714,13 @@ export function StitchCanvasStream(props: StitchCanvasStreamProps) {
                     alt=""
                   />
                 </button>
-                <div className="absolute top-space-sm right-space-sm z-10 flex items-center gap-1 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity duration-200 bg-surface-bright/90 backdrop-blur-md p-1 rounded-lg shadow-md">
+                {/* Hidden until hover or keyboard focus; on touch screens it never takes a tap, which opens the details instead. */}
+                <div className="pointer-events-none absolute top-space-sm right-space-sm z-10 flex items-center gap-1 opacity-0 [@media(hover:hover)]:group-hover:opacity-100 [@media(hover:hover)]:[&>button]:pointer-events-auto group-focus-within:opacity-100 transition-opacity duration-200 bg-surface-bright/90 backdrop-blur-md p-1 rounded-lg shadow-md">
                   <button
                     type="button"
                     className="w-8 h-8 rounded-md hover:bg-surface-container flex items-center justify-center text-on-surface transition-colors"
-                    title="下载无损图"
+                    title="下载原图"
+                    aria-label="下载原图"
                     onClick={(event) => { event.stopPropagation(); onDownload(record); }}
                   >
                     <Download size={18} aria-hidden />
@@ -775,6 +738,7 @@ export function StitchCanvasStream(props: StitchCanvasStreamProps) {
                     type="button"
                     className="w-8 h-8 rounded-md hover:bg-surface-container flex items-center justify-center text-on-surface transition-colors"
                     title="局部涂抹修改"
+                    aria-label="局部涂抹修改"
                     onClick={(event) => { event.stopPropagation(); onOpenMask(record); }}
                   >
                     <Brush size={18} aria-hidden />

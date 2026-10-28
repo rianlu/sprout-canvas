@@ -238,6 +238,7 @@ try {
   assert.equal(textRequests.length, textCount + 1); assert.notEqual(textRequests.at(-1).requestId, uncertainTextId);
   assert.equal(app.calls.length, modelCount + 1);
   page.off('dialog', recordDialog); assert.deepEqual(dialogs, [], '结果未知后重新生成不再弹出确认');
+  assert.equal(await page.getByRole('alertdialog').count(), 0, '结果未知后重新生成不弹出页内确认');
   checks.push('文字结果未知时自动返还, 再次点击直接建立新请求, 仅新增一次扣点');
 
   const { entries } = (await app.api('/api/admin/access-codes/' + app.accessCodeRecord.id + '/ledger', { cookie: app.adminCookie })).data;

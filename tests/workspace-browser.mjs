@@ -101,14 +101,14 @@ try {
   assert.ok((await menu(page).innerText()).includes(app.accessCodeRecord.tail));
   await screenshot(page, 'user-menu-light');
   await page.keyboard.press('Escape');
-  assert.equal(await menu(page).count(), 0);
+  await menu(page).waitFor({ state: 'detached' });
   assert.equal(await trigger(page).evaluate((node) => node === document.activeElement), true);
   await trigger(page).click();
   await page.getByRole('heading', { name: '创作画卷', exact: true }).click();
-  assert.equal(await menu(page).count(), 0);
+  await menu(page).waitFor({ state: 'detached' });
   await trigger(page).click();
   for (let index = 0; index < 5; index++) await page.keyboard.press('Tab');
-  assert.equal(await menu(page).count(), 0, 'Tab can leave the non-modal menu');
+  await menu(page).waitFor({ state: 'detached' });
   checks.push('顶栏余额加粗, 用户菜单收纳名称/尾号/外观/帮助/退出, 点击外部和 Esc/Tab 正常关闭');
 
   await trigger(page).click();

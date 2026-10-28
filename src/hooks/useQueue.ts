@@ -8,6 +8,7 @@ import type { GenerationRecipe, ResultRecord } from '../types/generation';
 import type { QueueActivity, QueueJob } from '../types/queue';
 import { bindCreditQuote, getCreditQuote } from '../lib/credits';
 import { needsNewCreditIdentity, recoverSubmissionBatch } from '../lib/queue-recovery';
+import { useConfirm } from '../components/ui/ConfirmDialog';
 import { useQueueDelivery } from './useQueueDelivery';
 
 /** Whether a pending job already carries an edit whose response was lost. */
@@ -22,6 +23,7 @@ function localJob(input: QueueSubmitInput, savedAt: number, jobId?: string, subm
 }
 
 export function useQueue(onResult: (records: ResultRecord[], jobId: string) => Promise<unknown>, enabled = true, ownerId = '') {
+  const confirm = useConfirm();
   const [jobs, setJobs] = useState<QueueJob[]>([]);
   const [activity, setActivity] = useState<QueueActivity>({ globalActive: 0, globalQueued: 0, serverNow: 0, connection: 'loading' });
   const [error, setError] = useState('');
@@ -221,7 +223,7 @@ export function useQueue(onResult: (records: ResultRecord[], jobId: string) => P
     if (!input) throw new Error('本地原始配方不存在, 请回到创作页重新填写');
     const quote = getCreditQuote();
     if (needsNewCreditIdentity(input, quote)) {
-      const recovered = await recoverSubmissionBatch([input], quote);
+      const recovered = await recoverSubmissionBatch([input], confirm, quote);
       const job = await submit(recovered.inputs[0]);
       await tick();
       return job;

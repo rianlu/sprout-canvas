@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import { CircleAlert, CircleCheck, Info, LoaderCircle, RefreshCw, X } from '../ui/icons';
+import { useMemo, useState, type ReactNode } from 'react';
+import { CircleAlert, CircleCheck, LoaderCircle, RefreshCw, X } from '../ui/icons';
 import { StitchIcon } from '../ui/StitchIcon';
-import { useFocusTrap } from '../../hooks/useFocusTrap';
+import { Dialog } from '@base-ui/react/dialog';
 import type { QueueActivity, QueueJob } from '../../types/queue';
 import { CreditStatus } from '../ui/CreditStatus';
 import { CreditCost } from '../ui/CreditCost';
@@ -64,7 +64,6 @@ function statusLabel(job: QueueJob, open: boolean): {
  * 无实时进度时不显示比例条, 按 PRD §7.1 区分等待与实际处理状态.
  */
 export function QueueDrawer({ open, onClose, jobs, activity, onCancelJob, onRetryJob, onPrioritizeJob, onArchive, onArchiveJob, onLoadMore, hasMore, loadingHistory }: QueueDrawerProps) {
-  const dialogRef = useFocusTrap<HTMLDivElement>(open);
   const [error, setError] = useState('');
   const [exiting, setExiting] = useState<{ id: string; job: QueueJob; index: number }[]>([]);
   const visibleJobs = [...jobs].sort((a, b) => {
@@ -79,29 +78,17 @@ export function QueueDrawer({ open, onClose, jobs, activity, onCancelJob, onRetr
   const activeCount = jobs.filter((job) => isQueueActive(job) || job.status === 'unsubmitted').length;
   const runningLabel = activeCount > 0 ? `${activeCount} 项待完成` : '暂无待办';
 
-  // Esc 关闭
-  useEffect(() => {
-    if (!open) return;
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onClose();
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [open, onClose]);
-
   return (
-    <>
-      {open && <div className="fixed inset-0 z-40" aria-hidden="true" onClick={onClose} />}
-      <div
-        ref={dialogRef}
-        className={`stitch-queue fixed top-16 right-0 bottom-0 w-sidebar-width max-w-full bg-surface-bright/95 backdrop-blur-2xl shadow-[-8px_0_32px_rgba(85,95,75,0.08)] z-50 transform transition-transform duration-300 ease-out flex flex-col ${open ? '' : 'translate-x-full invisible'}`}
-        id="queue-drawer"
-        role="dialog"
-        aria-label="任务队列"
-        aria-modal={open}
-        aria-hidden={!open}
-        inert={!open}
-      >
+    // Base UI dialog: focus trap and return, Escape and the hidden page come from the library; 'trap-focus' keeps page
+    // scroll unlocked as before. The transparent backdrop sits above the header, so any press outside closes the drawer.
+    <Dialog.Root open={open} modal="trap-focus" onOpenChange={(next) => { if (!next) onClose(); }}>
+      <Dialog.Portal>
+        <Dialog.Backdrop className="fixed inset-0 z-40" />
+        <Dialog.Popup
+          id="queue-drawer"
+          aria-label="任务队列"
+          className="stitch-queue fixed top-16 right-0 bottom-0 w-sidebar-width max-w-full bg-surface-bright/95 backdrop-blur-2xl shadow-[-8px_0_32px_rgba(85,95,75,0.08)] z-50 flex flex-col outline-none transition-transform duration-300 ease-out data-[starting-style]:translate-x-full data-[ending-style]:translate-x-full"
+        >
         {/* 头部 */}
         <div className="p-space-lg flex items-center justify-between bg-surface-container-low/60">
           <div className="flex items-center gap-space-xs">
@@ -247,37 +234,8 @@ export function QueueDrawer({ open, onClose, jobs, activity, onCancelJob, onRetr
             清空已完成
           </button>
         </div>
-      </div>
-    </>
-  );
-}
-
-/**
- * 全局 toast 栈. DOM 照搬 Stitch #toast-container (fixed bottom center, 逐条浮出).
- */
-export function ToastStack({
-  toasts,
-}: {
-  toasts: { id: string; type: 'info' | 'success' | 'error'; message: string }[];
-}) {
-  return (
-    <div
-      className="fixed bottom-space-lg left-1/2 -translate-x-1/2 z-[60] flex flex-col items-center gap-space-xs max-w-[calc(100vw-2rem)] pointer-events-none"
-      id="toast-container"
-    >
-      {toasts.map((toast) => {
-        const Icon = toast.type === 'error' ? CircleAlert : toast.type === 'success' ? CircleCheck : Info;
-        return (
-          <div
-            key={toast.id}
-            className="pointer-events-auto px-space-md py-space-xs rounded-full bg-inverse-surface/90 text-inverse-on-surface backdrop-blur-md shadow-[0_12px_36px_rgba(85,95,75,0.15)] flex items-center gap-2"
-            role={toast.type === 'error' ? 'alert' : 'status'}
-          >
-            <Icon className={toast.type === 'error' ? 'text-error' : 'text-primary-fixed-dim'} size={16} aria-hidden />
-            <span className="font-body-sm text-body-sm">{toast.message}</span>
-          </div>
-        );
-      })}
-    </div>
+        </Dialog.Popup>
+      </Dialog.Portal>
+    </Dialog.Root>
   );
 }

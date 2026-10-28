@@ -120,11 +120,16 @@ export function formatRequestSize(size: string) {
   return size === 'auto' ? '自动尺寸' : size.replace('x', '×');
 }
 
+/** One set of quality names for the studio, series, scene editor and viewer. */
+export const QUALITY_OPTIONS: { id: GenerationConfig['quality']; label: string }[] = [
+  { id: 'auto', label: '自动' },
+  { id: 'low', label: '快速' },
+  { id: 'medium', label: '标准' },
+  { id: 'high', label: '精细' },
+];
+
 export function qualityLabel(quality: GenerationConfig['quality']) {
-  if (quality === 'low') return '快速';
-  if (quality === 'medium') return '标准';
-  if (quality === 'high') return '精细';
-  return '自动';
+  return QUALITY_OPTIONS.find((option) => option.id === quality)?.label || '自动';
 }
 
 export async function buildGenerationPayload(config: GenerationConfig, maskFactory?: (imageDataUrl: string) => Promise<string>): Promise<GenerationRequest> {

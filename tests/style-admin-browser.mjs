@@ -39,11 +39,12 @@ async function list(page, admin = true) { return (await api(page, admin ? '/api/
 async function adminLogin(page) {
   await page.getByLabel('管理员密码', { exact: true }).fill(TEST_ADMIN_PASSWORD);
   await page.getByRole('button', { name: '登录管理后台', exact: true }).click();
-  const navigation = page.getByRole('navigation', { name: '后台导航' });
+  // A restored editor dialog is modal and hides the page from the accessibility tree, so wait on the DOM.
+  const navigation = page.locator('nav[aria-label="后台导航"]');
   await navigation.waitFor();
-  const stylesTab = navigation.getByRole('button', { name: '风格管理', exact: true });
+  const stylesTab = navigation.locator('button', { hasText: '风格管理' });
   if (await stylesTab.getAttribute('aria-pressed') !== 'true') await stylesTab.click();
-  await page.getByRole('button', { name: '添加风格', exact: true }).waitFor();
+  await page.locator('button', { hasText: '添加风格' }).first().waitFor();
 }
 async function openEditor(page, name) {
   if (name) await card(page, name).getByRole('button', { name: `编辑 ${name}`, exact: true }).click();
@@ -280,8 +281,8 @@ try {
   const archive = JSON.parse(await readFile(backupPath, 'utf8'));
   assert.equal(archive.styles.length, 39);
   assert.ok(archive.images.every((image) => image.dataUrl.startsWith('data:image/')));
-  page.once('dialog', (confirm) => confirm.accept());
   await card(page, pasted.name).getByRole('button', { name: '删除', exact: true }).click();
+  await page.getByRole('alertdialog', { name: '删除风格', exact: true }).getByRole('button', { name: '删除', exact: true }).click();
   await card(page, pasted.name).waitFor({ state: 'hidden' });
   await page.getByLabel('导入风格备份').setInputFiles(backupPath);
   let preview = page.getByRole('dialog', { name: '确认导入备份', exact: true });

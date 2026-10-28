@@ -2,9 +2,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { RefImage, ResultRecord } from '../types/generation';
 import { SplitToolDrawer } from '../components/tools/SplitToolDrawer';
 import { StitchIcon } from '../components/ui/StitchIcon';
+import { SegmentedControl } from '../components/ui/SegmentedControl';
 import { StitchGalleryViewer } from '../components/gallery/StitchGalleryViewer';
-import { ToastStack } from '../components/shell/QueueDrawer';
-import { useFocusTrap } from '../hooks/useFocusTrap';
+import { AlertDialog } from '@base-ui/react/alert-dialog';
+import { DIALOG_BACKDROP, DIALOG_VIEWPORT, overlayOpen } from '../components/ui/Dialog';
 import {
   cardRecords,
   cardTimestamp,
@@ -15,7 +16,7 @@ import {
   type SeriesCard,
 } from '../lib/image/gallery';
 import { useImageMetadata } from '../hooks/useImageMetadata';
-import { useToasts } from '../hooks/useToasts';
+import { useToasts } from '../components/ui/Toasts';
 import { RecordImage } from '../components/gallery/RecordImage';
 
 interface GalleryProps {
@@ -76,9 +77,8 @@ export function GalleryGrid({ records, onClear, onDeleteMany, onUseRecipe, onUse
   const [viewer, setViewer] = useState<{ cards: GalleryCard[]; index: number } | null>(null);
   const [splitRecord, setSplitRecord] = useState<ResultRecord | null>(null);
   const [working, setWorking] = useState(false);
-  const { toasts, pushToast } = useToasts();
+  const { pushToast } = useToasts();
   const searchRef = useRef<HTMLInputElement>(null);
-  const confirmRef = useFocusTrap<HTMLDivElement>(confirming);
   const metadata = useImageMetadata(records);
   const exitSelect = useCallback(() => {
     setSelecting(false);
@@ -88,16 +88,17 @@ export function GalleryGrid({ records, onClear, onDeleteMany, onUseRecipe, onUse
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
-      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k' && !viewer && !confirming) {
+      // Dialogs own their keys; the gallery reacts only when nothing is open on top of it.
+      if (overlayOpen()) return;
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
         event.preventDefault();
         searchRef.current?.focus();
       }
-      if (event.key === 'Escape' && confirming) { event.preventDefault(); setConfirming(false); }
-      else if (event.key === 'Escape' && selecting && !viewer) { event.preventDefault(); exitSelect(); }
+      if (event.key === 'Escape' && selecting) { event.preventDefault(); exitSelect(); }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [confirming, exitSelect, selecting, viewer]);
+  }, [exitSelect, selecting]);
 
   const cards = useMemo<GalleryCard[]>(() => {
     const series = new Map<string, ResultRecord[]>();
@@ -216,29 +217,29 @@ export function GalleryGrid({ records, onClear, onDeleteMany, onUseRecipe, onUse
         </div>
         <div className="flex flex-col gap-2 bg-surface-container-low border border-outline-variant/30 p-space-md rounded-2xl">
           <div className="flex items-center gap-2">
-            <div className={`${CHIP_WRAP} min-w-0 shrink`} role="group" aria-label="作品类型">
-              {(
+            <SegmentedControl
+              label="作品类型"
+              className={`${CHIP_WRAP} min-w-0 shrink`}
+              value={typeFilter}
+              onChange={setTypeFilter}
+              options={(
                 [
                   ['all', 'auto_stories', '全部', cards.length],
                   ['studio', 'brush', '单图', singlesCount],
                   ['storyboard', 'view_carousel', '系列', seriesCount],
                 ] as const
-              ).map(([id, icon, label, count]) => (
-                <button
-                  key={id}
-                  type="button"
-                  aria-pressed={typeFilter === id}
-                  className={`flex items-center gap-1.5 ${chipClass(typeFilter === id)}`}
-                  onClick={() => setTypeFilter(id)}
-                >
+              ).map(([id, icon, label, count]) => ({
+                id,
+                label: <>
                   <StitchIcon name={icon} size={15} />
                   {label}
                   <span className={`font-meta-sm text-[10px] ${typeFilter === id ? 'px-1.5 rounded-full bg-white/20' : 'opacity-75'}`}>
                     {count}
                   </span>
-                </button>
-              ))}
-            </div>
+                </>,
+              }))}
+              itemClassName={(active) => `flex items-center gap-1.5 ${chipClass(active)}`}
+            />
             <div className="flex min-w-0 flex-1 items-center rounded-xl border border-outline-variant/50 bg-surface-container-lowest px-3.5 py-2 shadow-sm focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/20 sm:max-w-xl sm:ml-auto">
               <StitchIcon name="search" size={19} className="mr-2 shrink-0 text-primary" />
               <input
@@ -252,18 +253,23 @@ export function GalleryGrid({ records, onClear, onDeleteMany, onUseRecipe, onUse
               />
             </div>
           </div>
-          <div className={`${CHIP_WRAP}`} role="group" aria-label="画幅比例">
-            {RATIOS.map(([id, label]) => (
-              <button key={id} type="button" aria-pressed={ratio === id} className={chipClass(ratio === id)} onClick={() => setRatio(id)}>
-                {label}
-              </button>
-            ))}
-          </div>
+          <SegmentedControl
+            label="画幅比例"
+            className={CHIP_WRAP}
+            value={ratio}
+            onChange={setRatio}
+            options={RATIOS.map(([id, label]) => ({ id, label }))}
+            itemClassName={chipClass}
+          />
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <div className={CHIP_WRAP} role="group" aria-label="作品排序">
-              <button type="button" aria-pressed={sort === 'newest'} className={chipClass(sort === 'newest')} onClick={() => setSort('newest')}>最新</button>
-              <button type="button" aria-pressed={sort === 'oldest'} className={chipClass(sort === 'oldest')} onClick={() => setSort('oldest')}>最早</button>
-            </div>
+            <SegmentedControl
+              label="作品排序"
+              className={CHIP_WRAP}
+              value={sort}
+              onChange={setSort}
+              options={[{ id: 'newest', label: '最新' }, { id: 'oldest', label: '最早' }]}
+              itemClassName={chipClass}
+            />
             {selecting ? (
               <div className="flex flex-wrap items-center gap-1" role="toolbar" aria-label="管理作品">
                 <button
@@ -411,29 +417,25 @@ export function GalleryGrid({ records, onClear, onDeleteMany, onUseRecipe, onUse
           </div>
         )}
       </div>
-      {confirming && (
-        <div className="fixed inset-0 z-50 bg-inverse-surface/45 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => { if (!working) setConfirming(false); }}>
-          <div
-            ref={confirmRef}
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="gallery-delete-title"
-            className="w-full max-w-md rounded-2xl bg-surface-container-lowest p-5 shadow-2xl"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <h3 id="gallery-delete-title" className="font-headline-sm text-headline-sm text-on-surface">确认删除作品</h3>
-            <p className="mt-2 font-body-sm text-body-sm text-on-surface-variant leading-relaxed">
-              确定永久删除选中的{countLabel(selectedSingles, selectedSeries).replace(' · ', '和')}吗?
-              {selectedSeries > 0 ? ' 系列会连同各幕旧版本一起删除.' : ''}
-              删除后无法恢复.
-            </p>
-            <div className="mt-4 flex justify-end gap-2">
-              <button type="button" className="px-3 py-2 rounded-lg bg-surface-container font-body-sm text-body-sm" disabled={working} onClick={() => setConfirming(false)}>取消</button>
-              <button type="button" className="px-3 py-2 rounded-lg bg-error text-on-error font-body-sm text-body-sm disabled:opacity-60" disabled={working} onClick={() => void confirmDelete()}>确认删除</button>
-            </div>
-          </div>
-        </div>
-      )}
+      <AlertDialog.Root open={confirming} onOpenChange={(open, details) => { if (open) return; if (working) { details.cancel(); return; } setConfirming(false); }}>
+        <AlertDialog.Portal>
+          <AlertDialog.Backdrop forceRender className={DIALOG_BACKDROP} />
+          <AlertDialog.Viewport className={DIALOG_VIEWPORT}>
+            <AlertDialog.Popup className="w-full max-w-md rounded-2xl bg-surface-container-lowest p-5 shadow-2xl outline-none">
+              <AlertDialog.Title className="font-headline-sm text-headline-sm text-on-surface">确认删除作品</AlertDialog.Title>
+              <AlertDialog.Description className="mt-2 font-body-sm text-body-sm text-on-surface-variant leading-relaxed">
+                确定永久删除选中的{countLabel(selectedSingles, selectedSeries).replace(' · ', '和')}吗?
+                {selectedSeries > 0 ? ' 系列会连同各幕旧版本一起删除.' : ''}
+                删除后无法恢复.
+              </AlertDialog.Description>
+              <div className="mt-4 flex justify-end gap-2">
+                <button type="button" className="px-3 py-2 rounded-lg bg-surface-container font-body-sm text-body-sm" disabled={working} onClick={() => setConfirming(false)}>取消</button>
+                <button type="button" className="px-3 py-2 rounded-lg bg-error text-on-error font-body-sm text-body-sm" disabled={working} onClick={() => void confirmDelete()}>确认删除</button>
+              </div>
+            </AlertDialog.Popup>
+          </AlertDialog.Viewport>
+        </AlertDialog.Portal>
+      </AlertDialog.Root>
       {viewer && (
         <StitchGalleryViewer
           cards={viewer.cards}
@@ -454,7 +456,6 @@ export function GalleryGrid({ records, onClear, onDeleteMany, onUseRecipe, onUse
         galleryRecords={records}
         onUseAsReference={(ref) => { setSplitRecord(null); onUseSliceAsRef(ref); }}
       />
-      <ToastStack toasts={toasts} />
     </main>
   );
 }

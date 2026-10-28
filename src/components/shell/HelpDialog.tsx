@@ -1,19 +1,10 @@
-import { useEffect } from 'react';
-import { useFocusTrap } from '../../hooks/useFocusTrap';
+import { Dialog } from '../ui/Dialog';
 import { StitchIcon } from '../ui/StitchIcon';
 
 export function HelpDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const ref = useFocusTrap<HTMLDivElement>(open);
-  useEffect(() => {
-    if (!open) return;
-    const key = (event: KeyboardEvent) => { if (event.key === 'Escape') onClose(); };
-    window.addEventListener('keydown', key);
-    return () => window.removeEventListener('keydown', key);
-  }, [open, onClose]);
   if (!open) return null;
-  return <div className="fixed inset-0 z-50 bg-inverse-surface/40 backdrop-blur-md flex items-center justify-center p-4" onClick={onClose}>
-    <div ref={ref} role="dialog" aria-modal="true" aria-label="工作台帮助" className="w-full max-w-2xl max-h-[85vh] overflow-y-auto rounded-2xl bg-surface p-space-lg shadow-xl" onClick={(event) => event.stopPropagation()}>
-      <div className="flex items-center justify-between mb-space-lg"><h2 className="font-headline-lg text-headline-lg">工作台帮助</h2><button type="button" aria-label="关闭帮助" onClick={onClose} className="w-8 h-8 rounded-lg hover:bg-surface-container"><StitchIcon name="close" size={20} /></button></div>
+  return <Dialog label="工作台帮助" onClose={onClose} backdropClassName="fixed inset-0 z-50 bg-inverse-surface/40 backdrop-blur-md" viewportClassName="fixed inset-0 z-50 flex items-center justify-center p-4" className="w-full max-w-2xl max-h-[85dvh] overflow-y-auto rounded-2xl bg-surface p-space-lg shadow-xl">
+      <div className="flex items-center justify-between mb-space-lg"><h2 className="font-headline-lg text-headline-lg">工作台帮助</h2><button type="button" aria-label="关闭帮助" onClick={onClose} className="viewer-tool-button"><StitchIcon name="close" size={20} /></button></div>
       <div className="space-y-space-md text-body-sm leading-relaxed">
         <section><h3 className="font-medium mb-1">创作与下载</h3><p>描述画面, 或从风格库载入完整提示词后修改. 已选模板会展示示例图与名称, 画幅自动设为与示例图最接近的比例, 可再修改; 移除模板关联会保留当前文案和画幅. 可多选上传最多 4 张参考图, 单张不超过 12 MiB, 在提示词中按图 1, 图 2 说明用途. 已有图片可继续添加, 或逐张更换和移除. 也可拖入图片或按 ⌘/Ctrl + V 粘贴, 图片按顺序追加到空余位置, 不会覆盖已有素材; 超出数量时整批不添加并提示剩余位置. 按 ⌘/Ctrl + Enter 提交. 文生图和参考图生成可一次生成 1, 2 或 4 张, 队列会逐张执行, 按输出张数使用灵感点. 生成模型默认自动, 指定模型后只用该模型生成, 不支持的画幅或透明背景会置灰并说明原因. 画幅默认自动, 由模型按提示词和参考图决定横竖; 需要固定比例时再选择. 画幅只决定比例, 实际像素以生成文件为准.</p></section>
         <section><h3 className="font-medium mb-1">提示词润色</h3><p>短句会补足可画的场景, 构图和光线, 完整提示词只整理表达. 人名, 品牌, 地名, 画面文字和占位符会保留. 完成后请检查内容, 可点击撤销润色回到原文, 再点击恢复润色找回结果, 两边的手工修改都会保留. 当前草稿保存最近一次润色的前后版本, 刷新后仍可切换. 撤销和恢复不消耗灵感点, 已成功的润色不会因撤销退点.</p></section>
@@ -25,6 +16,5 @@ export function HelpDialog({ open, onClose }: { open: boolean; onClose: () => vo
         <section><h3 className="font-medium mb-1">文件与分享</h3><p>PNG 和 WebP 可用于透明背景, JPEG 不保留透明通道. 查看器标题显示生成所用的模型, 详情列出实际图片尺寸与生成配方. 图片工具栏的全屏按钮可铺满窗口查看, 方向键切换, Esc 退出. 作品详情中的切图拆分可按行列切分图片, 一次打包下载全部切片为 ZIP, 也可逐张下载或送回创作台. 切图在浏览器完成, 不消耗灵感点. 支持文件分享的浏览器会显示系统分享入口, 图片不会上传到工作台服务器生成链接.</p></section>
         <section><h3 className="font-medium mb-1">创作守则</h3><p>使用有权使用的素材, 核对图片中的文字和事实, 尊重肖像与作品权利. 初始开源案例保留 CC BY 4.0 署名. 其他风格请查看各条详情中的来源与许可.</p></section>
       </div>
-    </div>
-  </div>;
+  </Dialog>;
 }

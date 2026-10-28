@@ -40,6 +40,12 @@ async function rows(page, store = 'records') {
 }
 const card = (page, name) => page.locator('article').filter({ has: page.getByRole('heading', { name, exact: true }) });
 const auth = async (page) => (await api(page, '/api/auth/status')).data;
+async function answerRecreate(page, accept, message) {
+  const prompt = page.getByRole('alertdialog', { name: '重新创建待提交任务', exact: true });
+  if (message) assert.match(await prompt.innerText(), message);
+  await prompt.getByRole('button', { name: accept ? '继续重新创建' : '取消', exact: true }).click();
+  await prompt.waitFor({ state: 'detached' });
+}
 async function signIn(page, code) {
   await page.goto(app.base); await page.getByLabel('访问码', { exact: true }).fill(` ${code} `);
   await page.getByRole('button', { name: '进入工作台', exact: true }).click();
@@ -48,7 +54,8 @@ async function signIn(page, code) {
 async function signInAdmin(page) {
   await page.getByLabel('管理员密码').fill(TEST_ADMIN_PASSWORD);
   await page.getByRole('button', { name: '登录管理后台', exact: true }).click();
-  await page.getByRole('navigation', { name: '后台导航' }).waitFor();
+  // A restored dialog is modal and hides the page from the accessibility tree, so wait on the DOM.
+  await page.locator('nav[aria-label="后台导航"]').waitFor();
 }
 async function screenshot(page, name) {
   await page.evaluate(async () => document.fonts.ready);
@@ -293,8 +300,8 @@ try {
   const recoveredOwner = await auth(recovery);
   assert.notEqual(recoveredOwner.userId, legacyInput.creditQuote.userId);
   const beforeRecovery = app.calls.length;
-  recovery.once('dialog', (prompt) => { assert.match(prompt.message(), /旧版本.*预计 12 灵感点/); return prompt.dismiss(); });
   await recovery.getByRole('button', { name: /开始绘制/ }).click();
+  await answerRecreate(recovery, false, /旧版本.*预计 12 灵感点/);
   await recovery.getByRole('alert').filter({ hasText: '已取消重新创建' }).waitFor();
   assert.equal(app.calls.length, beforeRecovery);
   assert.equal((await rows(recovery, 'outbox'))[0].requestId, legacyInput.requestId);
@@ -309,8 +316,8 @@ try {
     if (loseRecovery) { loseRecovery = false; await route.fetch(); return route.abort('failed'); }
     return route.continue();
   });
-  recovery.once('dialog', (prompt) => prompt.accept());
   await recovery.getByRole('button', { name: /开始绘制/ }).click();
+  await answerRecreate(recovery, true);
   await until(async () => (await api(recovery, '/api/jobs/me')).data.jobs.length === 1, 'confirmed legacy recreation');
   const recreated = recoveredBatches[1].jobs[0];
   assert.notEqual(recreated.requestId, legacyInput.requestId);
@@ -348,16 +355,16 @@ try {
   await recovery.getByRole('button', { name: /继续提交剩余分镜/ }).waitFor();
   assert.equal((await api(recovery, '/api/jobs/me')).data.jobs.length, 0);
   assert.equal((await auth(recovery)).credits.available, 120);
-  recovery.once('dialog', (prompt) => { assert.match(prompt.message(), /重新创建 4 张图片.*预计 48 灵感点/); return prompt.dismiss(); });
   await recovery.getByRole('button', { name: /继续提交剩余分镜/ }).click();
+  await answerRecreate(recovery, false, /重新创建 4 张图片.*预计 48 灵感点/);
   await recovery.getByRole('alert').filter({ hasText: '已取消重新创建' }).waitFor();
   assert.equal(seriesBatches.length, 1);
   await recovery.unroute('**/api/jobs/batch');
   await recovery.route('**/api/jobs/batch', async (route) => { seriesBatches.push(route.request().postDataJSON()); await route.fetch(); return route.abort('failed'); });
   const seriesHold = new Promise((resolve) => { releaseImage = resolve; });
   app.controls.respond = async (call, response) => { if (call.path.includes('/images/')) await seriesHold; return respond(call, response); };
-  recovery.once('dialog', (prompt) => prompt.accept());
   await recovery.getByRole('button', { name: /继续提交剩余分镜/ }).click();
+  await answerRecreate(recovery, true);
   await until(async () => (await api(recovery, '/api/jobs/me')).data.jobs.length === 4, 'series accepted under new code');
   const previousSeries = seriesBatches[0].jobs, currentSeries = seriesBatches[1].jobs;
   assert.ok(currentSeries.every((input) => !previousSeries.some((old) => old.requestId === input.requestId) && input.creditQuote.accessCodeId === newCode.id));

@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useId, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { StitchIcon } from '../components/ui/StitchIcon';
 import { AdminEmpty, AdminHeading, AdminLoading, adminButton, adminField, adminPanel } from '../components/admin/AdminUI';
-import { useFocusTrap } from '../hooks/useFocusTrap';
+import { Dialog } from '../components/ui/Dialog';
+import { Switch } from '../components/ui/Switch';
 import { CREDIT_LIMITS, type AccessCodeRecord, type CreditLedgerEntry, type CreditPrices } from '../../shared/credits-contract.mjs';
 import { listAccessCodes, createAccessCodes, updateAccessCode, deleteAccessCode, resetAccessCode, accessCodeLedger, getCreditPrices, saveCreditPrices, getAccessCode } from '../lib/api/credits';
 import { randomId } from '../lib/random/id';
@@ -20,21 +21,12 @@ type Manager = { record: AccessCodeRecord; requestId: string; note: string; enab
 type Usage = { entries: CreditLedgerEntry[]; nextCursor: number | null };
 const editRecord = (record: AccessCodeRecord): Manager => ({ record, requestId: randomId(), note: record.note, enabled: record.enabled, unlimited: record.unlimited, delta: 0, reason: '' });
 
-function Dialog({ title, busy, onClose, children, icon = 'lock' }: { title: string; busy: boolean; onClose: () => void; children: ReactNode; icon?: string }) {
-  const ref = useFocusTrap<HTMLDivElement>(true);
-  useEffect(() => {
-    const previous = document.body.style.overflow; document.body.style.overflow = 'hidden';
-    const escape = (event: KeyboardEvent) => { if (event.key === 'Escape' && !busy) onClose(); };
-    window.addEventListener('keydown', escape);
-    return () => { document.body.style.overflow = previous; window.removeEventListener('keydown', escape); };
-  }, [busy, onClose]);
-  return <div className="fixed inset-0 z-50 !m-0 bg-inverse-surface/45 backdrop-blur-sm flex items-center justify-center p-3 sm:p-5">
-    <div ref={ref} role="dialog" aria-modal="true" aria-label={title} className="w-full max-w-2xl max-h-[92dvh] overflow-y-auto rounded-3xl bg-surface-container-lowest border border-outline-variant/30 shadow-2xl">
+function AdminDialog({ title, busy, onClose, children, icon = 'lock' }: { title: string; busy: boolean; onClose: () => void; children: ReactNode; icon?: string }) {
+  return <Dialog label={title} busy={busy} dismissOnOutsidePress={false} onClose={onClose} className="w-full max-w-2xl max-h-[92dvh] overflow-y-auto rounded-3xl bg-surface-container-lowest border border-outline-variant/30 shadow-2xl">
       <div className="sticky top-0 z-10 bg-surface-container-lowest px-5 sm:px-7 py-5 flex items-center justify-between border-b border-outline-variant/30">
         <h2 className="font-headline-sm text-headline-sm flex items-center gap-3"><span className="flex w-9 h-9 items-center justify-center rounded-xl bg-surface-container-low text-primary"><StitchIcon name={icon} size={19} /></span>{title}</h2><button type="button" aria-label="关闭访问码弹窗" disabled={busy} onClick={onClose} className="w-9 h-9 flex items-center justify-center rounded-xl bg-surface-container-low hover:bg-surface-container"><StitchIcon name="close" size={20} /></button>
       </div><div className="p-5 sm:p-7 space-y-5">{children}</div>
-    </div>
-  </div>;
+  </Dialog>;
 }
 function QuotaInput({ label, value, unlimited, onValueChange, onUnlimitedChange, description, min = 0 }: { label: string; value: number; unlimited: boolean; onValueChange: (value: number) => void; onUnlimitedChange: (value: boolean) => void; description: string; min?: number }) {
   const id = useId();
@@ -43,10 +35,7 @@ function QuotaInput({ label, value, unlimited, onValueChange, onUnlimitedChange,
     <div className="flex items-center min-h-12 rounded-xl border border-outline-variant/40 bg-surface-container-low/70 focus-within:border-primary transition-colors">
       <input id={id} aria-describedby={`${id}-hint`} className="w-full min-w-0 flex-1 bg-transparent px-3 py-3 font-body-md text-body-md tabular-nums outline-none focus-visible:!outline-none disabled:text-outline disabled:cursor-not-allowed" type="number" min={min} max={CREDIT_LIMITS.points} step={1} required disabled={unlimited} value={value} onChange={(event) => onValueChange(Number(event.target.value))} />
       <span aria-hidden="true" className="pr-3 font-body-sm text-body-sm text-outline">点</span>
-      <label className="relative flex shrink-0 self-stretch items-center gap-2 border-l border-outline-variant/40 px-3 cursor-pointer font-body-sm text-body-sm">
-        无限额度<input type="checkbox" role="switch" className="peer absolute right-3 top-1/2 z-10 h-5 w-9 -translate-y-1/2 cursor-pointer opacity-0" checked={unlimited} onChange={(event) => onUnlimitedChange(event.target.checked)} />
-        <span aria-hidden="true" className={`flex h-5 w-9 items-center rounded-full p-[3px] transition-colors peer-focus-visible:ring-2 peer-focus-visible:ring-primary peer-focus-visible:ring-offset-2 peer-disabled:opacity-50 ${unlimited ? 'bg-primary' : 'bg-outline/40'}`}><span className={`h-3.5 w-3.5 rounded-full bg-white shadow-sm transition-transform ${unlimited ? 'translate-x-4' : 'translate-x-0'}`} /></span>
-      </label>
+      <label className="flex shrink-0 self-stretch items-center gap-2 border-l border-outline-variant/40 px-3 cursor-pointer font-body-sm text-body-sm"><span aria-hidden="true">无限额度</span><Switch label="无限额度" checked={unlimited} onChange={onUnlimitedChange} /></label>
     </div>
     <p id={`${id}-hint`} className="font-meta-sm text-meta-sm text-on-surface-variant leading-relaxed">{description}</p>
   </div>;
@@ -174,14 +163,14 @@ export function AccessCodeManager({ active }: { active: boolean }) {
     {!loading && !error && !codes.length && <AdminEmpty icon="lock" title={search || status !== 'all' ? '没有匹配的访问码' : '创建第一份访问额度'} description={search || status !== 'all' ? '试试其他名称或尾号, 也可以调整状态筛选.' : '创建访问码后复制给使用者, 即可开始创作.'} />}
     {nextCursor !== null && <button type="button" disabled={busy} className={`${button} bg-surface-container`} onClick={() => void run(async () => { const version = sequence.current; const result = await listAccessCodes(search, status, nextCursor); if (version === sequence.current) { setCodes((old) => [...old, ...result.codes]); setNextCursor(result.nextCursor); } })}>加载更多访问码</button>}
 
-    {active && creation && <Dialog title="创建访问码" busy={busy} onClose={close}>{feedback}<form onSubmit={saveCreation}><fieldset disabled={busy} className="space-y-4">
+    {active && creation && <AdminDialog title="创建访问码" busy={busy} onClose={close}>{feedback}<form onSubmit={saveCreation}><fieldset disabled={busy} className="space-y-4">
       <label className="flex flex-col gap-2 font-body-sm text-body-sm">访问名称(用户可见)<input aria-label="访问名称(用户可见)" className={field} maxLength={CREDIT_LIMITS.note} value={creation.note} onChange={(event) => setCreation({ ...creation, note: event.target.value })} placeholder="例如: 朋友共用, 第一轮测试" /><span className="font-meta-sm text-meta-sm text-on-surface-variant">显示在用户菜单中, 共用此码的人显示相同名称. 留空显示创作者.</span></label>
       <label className="flex flex-col gap-2 font-body-sm text-body-sm">创建数量<input aria-label="创建数量" className={field} type="number" min={1} max={CREDIT_LIMITS.batch} step={1} required value={creation.count} onChange={(event) => setCreation({ ...creation, count: Number(event.target.value) })} /><span className="text-on-surface-variant font-meta-sm text-meta-sm">支持一次创建 1 到 100 个码, 批量名称自动添加序号.</span></label>
       <QuotaInput label="每个码的初始灵感点" value={creation.points} unlimited={creation.unlimited} onValueChange={(points) => setCreation({ ...creation, points })} onUnlimitedChange={(unlimited) => setCreation({ ...creation, unlimited })} description={creation.unlimited ? '无限额度不扣减余额, 仍记录用量. 随时可以改回有限额度.' : '每个访问码独立分配此额度. 打开右侧开关可设为无限额度.'} />
       <div className="flex justify-end"><button type="submit" className={`${button} bg-primary text-on-primary`}>{busy ? '创建中...' : '创建并显示访问码'}</button></div>
-    </fieldset></form></Dialog>}
+    </fieldset></form></AdminDialog>}
 
-    {active && manager && <Dialog title="管理访问码" busy={busy} onClose={close}>
+    {active && manager && <AdminDialog title="管理访问码" busy={busy} onClose={close}>
       <div className="space-y-4 rounded-xl p-4 bg-surface-container-low"><div className="flex flex-wrap items-center justify-between gap-2"><p className="font-mono text-body-sm text-on-surface-variant">sc_••••{manager.record.tail}</p><span className="font-meta-sm text-meta-sm text-on-surface-variant">{manager.record.enabled ? '已启用' : '已停用'}</span></div><Balance record={manager.record} /></div>
       {feedback}
       {managerStale && <button type="button" disabled={busy} className={`${button} bg-surface-container`} onClick={() => void run(refreshManager)}><StitchIcon name="refresh" size={17} />刷新数据</button>}
@@ -202,9 +191,9 @@ export function AccessCodeManager({ active }: { active: boolean }) {
             <div className="flex flex-wrap justify-end gap-2"><button type="button" className={`${button} bg-surface-container`} onClick={() => setDanger(null)}>取消操作</button><button type="submit" disabled={managerStale} className={`${button} ${danger.kind === 'delete' ? 'bg-error text-on-error' : 'bg-primary text-on-primary'}`}>{danger.kind === 'reset' ? '确认重置并显示新码' : '确认删除'}</button></div>
           </fieldset></form>}
         </section>
-    </Dialog>}
+    </AdminDialog>}
 
-    {active && usageRecord && <Dialog title="用量明细" icon="view_timeline" busy={busy} onClose={close}>
+    {active && usageRecord && <AdminDialog title="用量明细" icon="view_timeline" busy={busy} onClose={close}>
       <div className="space-y-4 rounded-xl p-4 bg-surface-container-low"><div className="flex flex-wrap items-center justify-between gap-2"><p className="font-body-md text-body-md font-medium break-words">{usageRecord.note || '未命名访问码'}</p><p className="font-mono text-body-sm text-on-surface-variant">sc_••••{usageRecord.tail}</p></div><Balance record={usageRecord} /></div>
       {feedback}
       <div className="space-y-4">
@@ -218,12 +207,12 @@ export function AccessCodeManager({ active }: { active: boolean }) {
           {usage.nextCursor !== null && <button type="button" disabled={busy} className={`${button} bg-surface-container`} onClick={() => void run(async () => { const result = await accessCodeLedger(usageRecord.id, usage.nextCursor!); setUsage((old) => old && { ...old, entries: [...old.entries, ...result.entries], nextCursor: result.nextCursor }); })}>加载更早的流水</button>}
         </>}
       </div>
-    </Dialog>}
+    </AdminDialog>}
 
-    {active && secrets && <Dialog title="保存访问码" busy={busy} onClose={close}>
+    {active && secrets && <AdminDialog title="保存访问码" busy={busy} onClose={close}>
       <p className="font-body-sm text-body-sm text-on-surface-variant">完整访问码仅在本次操作显示, 请复制保存. 忘记后可在列表中重置, 额度和流水不会丢失.</p>{feedback}
       {secrets.map((record) => <div key={record.id} className="rounded-xl p-3 bg-surface-container-low space-y-2"><p className="font-body-sm text-body-sm">{record.note || '未命名访问码'} · {record.unlimited ? '无限额度' : `可用 ${record.available} 点`}</p>{record.code ? <div className="flex gap-2"><input aria-label={`完整访问码 ${record.tail}`} readOnly value={record.code} className={`${field} font-mono min-w-0`} /><button type="button" className={`${button} bg-primary text-on-primary shrink-0`} onClick={() => void run(async () => { await navigator.clipboard.writeText(record.code!); setMessage('已复制访问码'); })}>复制</button></div> : <p role="status" className="font-body-sm text-body-sm text-error">该操作已成功, 完整码不再重复返回. 请关闭弹窗后重置尾号 {record.tail} 的访问码.</p>}</div>)}
       {secrets.some((record) => record.code) && <button type="button" className={`${button} bg-primary text-on-primary`} onClick={() => void run(async () => { await navigator.clipboard.writeText(secrets.filter((record) => record.code).map((record) => `${record.note || '访问码'}: ${record.code}`).join('\n')); setMessage('已复制全部访问码'); })}>复制全部</button>}
-    </Dialog>}
+    </AdminDialog>}
   </main>;
 }

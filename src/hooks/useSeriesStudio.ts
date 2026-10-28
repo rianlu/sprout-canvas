@@ -13,7 +13,8 @@ import { getCreditQuote } from '../lib/credits';
 import { recoverSubmissionBatch } from '../lib/queue-recovery';
 import { getOutboxInput, recordReference, readWorkspaceDraft, writeWorkspaceDraft, registerWorkspaceSubmission } from '../lib/storage/gallery-db';
 import { randomId } from '../lib/random/id';
-import { useToasts } from './useToasts';
+import { useToasts } from '../components/ui/Toasts';
+import { useConfirm } from '../components/ui/ConfirmDialog';
 import { readDraft, writeDraft } from '../lib/storage/drafts';
 import { downloadRecords, latestSceneVersions } from '../lib/image/gallery';
 import { prepareImageFile } from '../lib/image/compress';
@@ -93,7 +94,8 @@ export function useSeriesStudio({ onSubmit, onSubmitBatch, onUpdate, results, jo
   const [editing, setEditing] = useState<SceneEdit | null>(null);
   const [view, setView] = useState<'grid' | 'timeline'>('grid');
   const [preview, setPreview] = useState<ResultRecord | null>(null);
-  const { toasts, pushToast } = useToasts(5000);
+  const { pushToast } = useToasts(5000);
+  const confirm = useConfirm();
   const lock = useRef(false);
   const alive = useRef(true);
   const referenceSequence = useRef(0);
@@ -204,7 +206,7 @@ export function useSeriesStudio({ onSubmit, onSubmitBatch, onUpdate, results, jo
   async function splitStory() {
     if (lock.current || !ready || referenceLock.current || editing || preview || activeJobs || canContinue) return false;
     if (!brief.trim() || brief.length > MAX_SERIES_BRIEF_LENGTH) { pushToast('error', `请填写创作需求或分镜剧本, 最多 ${MAX_SERIES_BRIEF_LENGTH} 字`); return false; }
-    if (tasks.some((task) => task.prompt.trim()) && !window.confirm('重新拆解会替换当前分镜提示词, 包括手动修改的内容. 是否继续?')) return false;
+    if (tasks.some((task) => task.prompt.trim()) && !await confirm({ title: '重新拆解分镜', description: '重新拆解会替换当前分镜提示词, 包括手动修改的内容.', confirmLabel: '重新拆解' })) return false;
     lock.current = true; setBusy(true);
     const original = currentDraftRef.current;
     try {
@@ -250,7 +252,7 @@ export function useSeriesStudio({ onSubmit, onSubmitBatch, onUpdate, results, jo
     try {
       const quote = getCreditQuote();
       if (!redraw && missingStaged.length) {
-        const recovered = await recoverSubmissionBatch(missingStaged, quote);
+        const recovered = await recoverSubmissionBatch(missingStaged, confirm, quote);
         if (recovered.recreated) {
           const replacements = new Map(missingStaged.map((input, index) => [input.requestId, recovered.inputs[index]]));
           const placeholders = new Map(missingStaged.map((input, index) => [input.clientContext.placeholderId, recovered.inputs[index].clientContext.placeholderId]));
@@ -392,5 +394,5 @@ export function useSeriesStudio({ onSubmit, onSubmitBatch, onUpdate, results, jo
     if (next < count) removeShot(count - 1);
     else rawSetCount(next);
   }
-  return { models, imageCapabilities, ready, brief, setBrief, taskText, setTaskText, count, setCount, config, setConfig, tasks, busy, submitting, referenceBusy, toasts, pushToast, seriesId, seriesResults, allSeriesResults, activeJobs, canContinue, submissionCount: canContinue ? missingStaged.length : shots.filter((shot) => shot.kind === 'planned').length, metadata, view, setView, preview, setPreview, shots, shotIds, splitStory, submitBatch, exportSeries, updateTask, removeShot, resetSeries, redrawShot, references, maxReferences, removeReference, uploadReferences, editing, setEditing, beginEdit, saveEdit };
+  return { models, imageCapabilities, ready, brief, setBrief, taskText, setTaskText, count, setCount, config, setConfig, tasks, busy, submitting, referenceBusy, pushToast, seriesId, seriesResults, allSeriesResults, activeJobs, canContinue, submissionCount: canContinue ? missingStaged.length : shots.filter((shot) => shot.kind === 'planned').length, metadata, view, setView, preview, setPreview, shots, shotIds, splitStory, submitBatch, exportSeries, updateTask, removeShot, resetSeries, redrawShot, references, maxReferences, removeReference, uploadReferences, editing, setEditing, beginEdit, saveEdit };
 }

@@ -4,7 +4,8 @@ import { StitchIcon } from '../ui/StitchIcon';
 import type { RefImage } from '../../types/generation';
 import { brushMaskToDataUrl, brushStrokeCount, type BrushMaskData, type BrushStroke } from '../../lib/editor/brush-mask';
 import { imageFromDataUrl } from '../../lib/image/data-url';
-import { useFocusTrap } from '../../hooks/useFocusTrap';
+import { Dialog } from '../ui/Dialog';
+import { SegmentedControl } from '../ui/SegmentedControl';
 
 interface MaskEditorProps {
   image: RefImage;
@@ -33,7 +34,6 @@ export function MaskEditor({ image, open, onClose, onApply, initialMask, initial
   const [baseImage, setBaseImage] = useState<HTMLImageElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const frameRef = useRef<HTMLDivElement>(null);
-  const dialogRef = useFocusTrap<HTMLDivElement>(open);
   const strokeCount = brushStrokeCount({ strokes } as BrushMaskData);
 
   // 重置 (打开新图时)
@@ -113,15 +113,6 @@ export function MaskEditor({ image, open, onClose, onApply, initialMask, initial
     return () => observer.disconnect();
   }, [open, repaint]);
 
-  useEffect(() => {
-    if (!open) return;
-    const previous = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    return () => {
-      document.body.style.overflow = previous;
-    };
-  }, [open]);
-
   function toNormalized(event: React.PointerEvent<HTMLCanvasElement>) {
     const canvas = canvasRef.current!;
     const rect = canvas.getBoundingClientRect();
@@ -180,32 +171,18 @@ export function MaskEditor({ image, open, onClose, onApply, initialMask, initial
     finally { setSaving(false); }
   }
 
-  // ESC 关闭
-  useEffect(() => {
-    if (!open) return undefined;
-    function onKey(event: KeyboardEvent) {
-      if (event.key === 'Escape' && !saving) onClose();
-    }
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
-  }, [open, onClose, saving]);
-
   if (!open) return null;
 
   return (
     /* Inpaint modal (照搬 Stitch 单图稿 MASK INPAINTING MODAL, 类名原样) */
-    <div
-      className="fixed inset-0 z-50 bg-inverse-surface/60 backdrop-blur-md flex items-center justify-center p-space-md"
-      role="dialog"
-      aria-modal="true"
-      aria-label="局部重绘工作区"
-      onClick={saving ? undefined : onClose}
+    <Dialog
+      label="局部重绘工作区"
+      busy={saving}
+      onClose={onClose}
+      backdropClassName="fixed inset-0 z-50 bg-inverse-surface/60 backdrop-blur-md"
+      viewportClassName="fixed inset-0 z-50 flex items-center justify-center p-space-md"
+      className="w-full max-w-4xl bg-surface-bright rounded-2xl shadow-[0_24px_64px_rgba(85,95,75,0.20)] overflow-hidden flex flex-col max-h-[90dvh]"
     >
-      <div
-        ref={dialogRef}
-        className="w-full max-w-4xl bg-surface-bright rounded-2xl shadow-[0_24px_64px_rgba(85,95,75,0.20)] overflow-hidden flex flex-col max-h-[90vh]"
-        onClick={(event) => event.stopPropagation()}
-      >
         {/* Inpaint Header Bar */}
         <div className="px-space-lg py-space-md bg-surface-container-low flex items-center justify-between">
           <div className="flex items-center gap-space-sm">
@@ -221,7 +198,7 @@ export function MaskEditor({ image, open, onClose, onApply, initialMask, initial
           </div>
           <button
             type="button"
-            className="w-8 h-8 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface flex items-center justify-center transition-colors"
+            className="viewer-tool-button"
             onClick={onClose}
             disabled={saving}
             aria-label="关闭"
@@ -249,23 +226,19 @@ export function MaskEditor({ image, open, onClose, onApply, initialMask, initial
                 <span className="font-meta-sm text-meta-sm text-on-surface">{brushSize}px</span>
               </div>
             </div>
-            <div className="grid grid-cols-2 md:flex md:flex-col gap-1 w-full">
-              <button
-                type="button"
-                className={`flex items-center gap-2 px-3 py-1.5 rounded-lg font-body-sm text-body-sm w-full transition-colors ${tool === 'brush' ? 'bg-secondary-container text-on-secondary-container' : 'hover:bg-surface-container text-on-surface'}`}
-                onClick={() => setTool('brush')}
-              >
-                <Brush size={18} aria-hidden="true" />
-                <span>涂抹蒙版</span>
-              </button>
-              <button
-                type="button"
-                className={`flex items-center gap-2 px-3 py-1.5 rounded-lg font-body-sm text-body-sm w-full transition-colors ${tool === 'eraser' ? 'bg-secondary-container text-on-secondary-container' : 'hover:bg-surface-container text-on-surface'}`}
-                onClick={() => setTool('eraser')}
-              >
-                <Eraser size={18} aria-hidden="true" />
-                <span>橡皮擦</span>
-              </button>
+            <div className="flex flex-col gap-1 w-full">
+              <SegmentedControl
+                label="蒙版工具"
+                className="grid grid-cols-2 md:flex md:flex-col gap-1 w-full"
+                value={tool}
+                onChange={setTool}
+                options={[
+                  { id: 'brush', label: <><Brush size={18} aria-hidden="true" /><span>涂抹蒙版</span></> },
+                  { id: 'eraser', label: <><Eraser size={18} aria-hidden="true" /><span>橡皮擦</span></> },
+                ]}
+                itemClassName={(active) => `flex items-center gap-2 px-3 py-1.5 rounded-lg font-body-sm text-body-sm w-full transition-colors ${active ? 'bg-secondary-container text-on-secondary-container' : 'hover:bg-surface-container text-on-surface'}`}
+              />
+              <div className="grid grid-cols-2 md:flex md:flex-col gap-1 w-full">
               <button
                 type="button"
                 className="flex items-center gap-2 px-3 py-1.5 rounded-lg hover:bg-surface-container text-on-surface font-body-sm text-body-sm w-full"
@@ -284,13 +257,14 @@ export function MaskEditor({ image, open, onClose, onApply, initialMask, initial
                 <Trash2 size={18} aria-hidden="true" />
                 <span>清空蒙版</span>
               </button>
+              </div>
             </div>
           </div>
           {/* Center Inpaint Interactive Preview Canvas */}
           <div className="flex-1 min-w-0 bg-surface-container-low p-space-lg flex items-center justify-center relative">
             <div className="relative w-fit max-w-full rounded-xl overflow-hidden shadow-lg select-none" ref={frameRef}>
               <img
-                className="block w-auto max-w-full max-h-[54vh] object-contain"
+                className="block w-auto max-w-full max-h-[54dvh] object-contain"
                 src={image.dataUrl}
                 alt={image.name}
                 draggable={false}
@@ -346,7 +320,6 @@ export function MaskEditor({ image, open, onClose, onApply, initialMask, initial
             </button>
           </div>
         </div>
-      </div>
-    </div>
+    </Dialog>
   );
 }
