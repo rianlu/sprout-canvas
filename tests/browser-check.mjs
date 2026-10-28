@@ -527,6 +527,17 @@ try {
   await page.getByRole('button', { name: /写实摄影 5/ }).click();
   assert.equal(await page.locator('main article').count(), 5);
   await page.getByRole('button', { name: /全部 36/ }).click();
+  const tallExample = page.getByRole('button', { name: `放大 ${styles.find((style) => style.id === 'open-13750').name}`, exact: true });
+  await tallExample.scrollIntoViewIfNeeded();
+  const exampleFit = await tallExample.evaluate(async (frame) => {
+    const image = frame.querySelector('img[alt]:not([alt=""])');
+    await image.decode();
+    const box = image.getBoundingClientRect(), outer = frame.getBoundingClientRect();
+    return { ratio: box.width / box.height, natural: image.naturalWidth / image.naturalHeight, inside: box.top >= outer.top - 0.5 && box.bottom <= outer.bottom + 0.5 && box.left >= outer.left - 0.5 && box.right <= outer.right + 0.5, enlarged: box.width > image.naturalWidth + 0.5, frame: outer.width / outer.height };
+  });
+  assert.ok(Math.abs(exampleFit.ratio - exampleFit.natural) < 0.02, `tall example keeps its own ratio: ${JSON.stringify(exampleFit)}`);
+  assert.ok(exampleFit.inside && !exampleFit.enlarged, `tall example is neither cropped nor enlarged: ${JSON.stringify(exampleFit)}`);
+  assert.ok(Math.abs(exampleFit.frame - 4 / 3) < 0.02, 'cards keep the fixed 4:3 frame');
   await page.getByLabel('搜索风格').fill('水彩');
   assert.ok(await page.locator('main article').count() > 0);
   await page.getByRole('button', { name: /^放大 / }).first().click();
@@ -536,7 +547,7 @@ try {
   await screenshot(page, 'style-detail');
   await page.getByLabel('关闭详情').click();
   await page.getByLabel('搜索风格').fill('');
-  checks.push('风格 36 款和六类真实计数, 搜索, 署名, 移除不支持的参数');
+  checks.push('风格 36 款和七类真实计数, 卡片完整显示示例图且不放大, 搜索, 署名, 移除不支持的参数');
 
   // Use the real clipboard and persisted drafts to cover both library actions.
   for (const style of styles) assert.match(style.prompt, /\p{Script=Han}/u, `${style.name} has a Chinese template`);
@@ -567,13 +578,15 @@ try {
   await until(async () => (await workspaceDraft(sp))?.config?.prompt === '这份旧草稿不能覆盖刚发送的模板', 'stale draft saved before sending');
   await nav(sp, '风格库');
   await watercolorCard.getByRole('button', { name: '发送到单图', exact: true }).click();
-  await sp.getByText(`已载入 ${watercolor.name}, 可修改后开始绘制`, { exact: true }).waitFor();
+  await sp.getByText(`已载入 ${watercolor.name}, 画幅已按示例图设为 1:1, 可修改后开始绘制`, { exact: true }).waitFor();
   assert.equal(await stylePrompt.inputValue(), watercolor.prompt);
+  assert.equal(await sp.getByRole('button', { name: /1:1 方图/ }).getAttribute('aria-pressed'), 'true');
   await sp.getByRole('group', { name: '已选提示词模板' }).getByRole('heading', { name: watercolor.name, exact: true }).waitFor();
   const sentStyle = await workspaceDraft(sp);
   assert.equal(sentStyle.styleId, watercolor.id);
   assert.equal(sentStyle.config.mode, 'text');
-  assert.equal(sentStyle.config.aspectRatio, '16:9');
+  assert.equal(sentStyle.config.aspectRatio, '1:1', 'the example ratio replaces the 16:9 chosen before');
+  assert.equal(sentStyle.config.requestSize, '1024x1024');
   assert.equal(sentStyle.config.imageCount, 1);
   assert.equal(await workspaceDraft(sp, 'studio-transfer'), undefined, 'the transfer is consumed after saving');
   await sp.reload();
@@ -584,7 +597,7 @@ try {
   assert.equal((await jobs(sp)).length, 0);
   assert.equal((await rows(sp, 'outbox')).length, 0);
   assert.equal(imageCount, imagesBeforeStyles);
-  checks.push('卡片预览与真实剪贴板中文模板一致, 发送单图覆盖旧草稿并记录模板名称, 刷新保留且不自动生图');
+  checks.push('卡片预览与真实剪贴板中文模板一致, 发送单图覆盖旧草稿, 记录模板名称并按示例图设定画幅, 刷新保留且不自动生图');
 
   await nav(sp, '风格库');
   await sp.getByLabel('搜索风格').fill(longStyle.name);
@@ -604,7 +617,7 @@ try {
   await sp.getByLabel('搜索风格').fill(longStyle.name);
   await sp.getByRole('button', { name: `放大 ${longStyle.name}`, exact: true }).click();
   await longStyleDialog.getByRole('button', { name: '发送到单图', exact: true }).click();
-  await sp.getByText(`已载入 ${longStyle.name}, 可修改后开始绘制`, { exact: true }).waitFor();
+  await sp.getByText(`已载入 ${longStyle.name}, 画幅已按示例图设为 3:4, 可修改后开始绘制`, { exact: true }).waitFor();
   assert.equal(await stylePrompt.inputValue(), longStyle.prompt);
   await sp.getByRole('group', { name: '已选提示词模板' }).getByRole('heading', { name: longStyle.name, exact: true }).waitFor();
   const reviewedTemplate = `${longStyle.prompt}\n主题: 植物研究所, 使用薄荷绿与奶油黄色.`;
@@ -629,6 +642,7 @@ try {
   const styleCall = app.calls.filter((call) => call.path.includes('/images/')).at(-1);
   assert.match(styleCall.path, /\/images\/generations$/);
   assert.equal(styleCall.json.prompt, reviewedTemplate, 'templates never append a hidden style description');
+  assert.equal(styleCall.json.size, '768x1024', 'the request follows the 3:4 example frame');
   await styleFlow.context.close();
   checks.push('详情复制与发送使用完整长模板, 超过 1000 字仍可粘贴和编辑, 桌面手机布局正常, 确认后请求使用修改内容');
 
@@ -904,7 +918,7 @@ try {
   const imagesBeforeMaskTransfer = imageCount;
   await nav(ep, '风格库');
   await ep.locator('main article').filter({ has: ep.getByRole('heading', { name: watercolor.name, exact: true }) }).getByRole('button', { name: '发送到单图', exact: true }).click();
-  await ep.getByText(`已载入 ${watercolor.name}, 可修改后开始绘制`, { exact: true }).waitFor();
+  await ep.getByText(`已载入 ${watercolor.name}, 画幅已按示例图设为 1:1, 可修改后开始绘制`, { exact: true }).waitFor();
   const assertStyleReplacedEdit = async () => {
     const prompt = ep.getByLabel('画面提示词', { exact: true });
     await prompt.waitFor();
@@ -930,6 +944,7 @@ try {
   assert.equal(afterMaskStyle.parentId, undefined);
   assert.equal(afterMaskStyle.recipe.styleId, watercolor.id);
   assert.equal(afterMaskStyle.recipe.hasMask, false);
+  assert.equal(afterMaskStyle.recipe.size, '1024x1024', 'the template frame replaces the 16:9 edit size');
   assert.deepEqual(afterMaskStyle.recipe.references, []);
   assert.match(app.calls.filter((call) => call.path.includes('/images/')).at(-1).path, /\/images\/generations$/);
   checks.push('发送单图退出旧局部编辑, 清除参考图和蒙版身份, 刷新不恢复旧编辑, 用户确认后独立生成');

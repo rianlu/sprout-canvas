@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type ClipboardEvent, type FormEvent } from 'react';
 import { StitchIcon } from '../components/ui/StitchIcon';
+import { StyleExampleImage } from '../components/image/StyleExampleImage';
 import { AdminEmpty, AdminHeading, AdminLoading, adminButton, adminField, adminPanel } from '../components/admin/AdminUI';
 import { useFocusTrap } from '../hooks/useFocusTrap';
 import { useStyleCatalog } from '../hooks/useStyleCatalog';
@@ -111,7 +112,7 @@ export function StyleManager({ active, editStyleId, onStyleOpened }: { active: b
       {catalog.loading && <AdminLoading label="正在读取风格..." />}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
         {items.map((style) => <article key={style.id} className={`admin-style-card relative group ${adminPanel} p-3 flex flex-col hover:border-primary/50 transition-colors`}>
-          <div className="relative aspect-[16/10] shrink-0 rounded-xl overflow-hidden bg-surface-container-low"><img src={style.image} alt={style.name} loading="lazy" className="w-full h-full object-cover group-hover:scale-[1.02] transition-transform duration-200" /><span className="absolute top-2 left-2 px-2 py-1 rounded-lg bg-surface-bright/95 text-secondary font-meta-sm text-meta-sm">{style.published ? '已上架' : '未上架'}</span></div>
+          <div className="relative aspect-[16/10] shrink-0 rounded-xl overflow-hidden bg-surface-container-low"><StyleExampleImage src={style.image} alt={style.name} className="group-hover:scale-[1.02] transition-transform duration-200" /><span className="absolute top-2 left-2 px-2 py-1 rounded-lg bg-surface-bright/95 text-secondary font-meta-sm text-meta-sm">{style.published ? '已上架' : '未上架'}</span></div>
           <div className="min-w-0 flex-1 flex flex-col gap-2 px-1 pt-4"><h2 className="font-body-md text-body-md font-medium line-clamp-2 break-words">{style.name}</h2><p className="font-meta-sm text-meta-sm text-secondary truncate">{style.author || '未注明作者'} · {style.category || '未分类'}</p><p className="font-body-sm text-body-sm text-on-surface-variant line-clamp-2 break-words leading-relaxed mb-3">{style.prompt}</p>
             <div className="flex items-center justify-between gap-2 font-body-sm text-body-sm pt-2 mt-auto border-t border-outline-variant/25"><span className="inline-flex items-center gap-1 text-outline font-meta-sm text-meta-sm"><StitchIcon name="edit_note" size={16} />编辑详情</span><div className="flex items-center gap-1">
               <button type="button" className="relative z-10 px-2 py-2 rounded-lg text-primary hover:bg-secondary-container/50 disabled:opacity-50" disabled={working} onClick={() => void run(async () => { await saveStyle({ ...editInput(style), published: !style.published }, style.id); await catalog.refresh(); setMessage(style.published ? '已下架, 风格库不再展示这条内容' : '已上架'); })}>{style.published ? '下架' : '上架'}</button>

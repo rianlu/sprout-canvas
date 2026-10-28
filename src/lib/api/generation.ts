@@ -48,6 +48,14 @@ export function resolveSize(aspectRatio: string, sizeTier: ImageSizeTier = '1K')
 /** Aspect ratios a channel without custom sizes can produce. */
 export const STANDARD_ASPECTS: readonly string[] = ['1:1', '3:2', '2:3', 'auto'];
 
+/** Closest aspect ratio the channel can produce for an example image, compared on a log scale so tall and wide shapes weigh evenly. */
+export function nearestAspect(width: number, height: number, customSizes: boolean): GenerationConfig['aspectRatio'] | null {
+  if (!(width > 0 && height > 0)) return null;
+  const candidates = (customSizes ? Object.keys(SIZE_BY_TIER_AND_RATIO['1K']) : STANDARD_ASPECTS).filter((value) => value !== 'auto');
+  const distance = (value: string) => { const [w, h] = value.split(':').map(Number); return Math.abs(Math.log(width / height) - Math.log(w / h)); };
+  return candidates.reduce((best, value) => distance(value) < distance(best) ? value : best) as GenerationConfig['aspectRatio'];
+}
+
 /** Moves a format or aspect ratio the channel cannot produce back to a supported default; returns `config` itself when nothing changes. */
 export function clampToCapabilities(config: GenerationConfig, capabilities: ImageCapabilities): GenerationConfig {
   const format = capabilities.formats.includes(config.outputFormat as ImageCapabilities['formats'][number]) ? config.outputFormat : capabilities.formats[0];

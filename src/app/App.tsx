@@ -20,7 +20,7 @@ import { recordReference, writeWorkspaceDraft } from '../lib/storage/gallery-db'
 import { recipeDraft, sourceImageDraft, styleTemplateSnapshot, type StudioDraft } from '../lib/image/recipe';
 import type { StyleRecord } from '../../shared/style-contract.mjs';
 import { GENERATION_DEFAULTS } from '../../shared/generation-contract.mjs';
-import { sizePreset, resolveSize } from '../lib/api/generation';
+import { nearestAspect, sizePreset, resolveSize } from '../lib/api/generation';
 import { randomId } from '../lib/random/id';
 import type { SeriesCard } from '../lib/image/gallery';
 import { isQueueActive } from '../lib/queue-presentation';
@@ -108,14 +108,16 @@ export function App() {
   }, [setPage]);
 
   const useStyle = useCallback(async (style: StyleRecord) => {
+    // Match the frame to the example; standard ratios stay safe until the channel capabilities have loaded.
+    const aspectRatio = nearestAspect(style.imageWidth, style.imageHeight, serverConfig?.imageCapabilities?.customSizes ?? false);
     const draft: StudioDraft = {
-      config: { mode: 'text', prompt: style.prompt, imageCount: 1, refImages: [] },
+      config: { mode: 'text', prompt: style.prompt, imageCount: 1, refImages: [], ...(aspectRatio ? { aspectRatio } : {}) },
       styleId: style.id, styleName: style.name, styleTemplate: styleTemplateSnapshot(style), refImage: null, sourceRecord: null, mask: null, maskDataUrl: '', tone: 'none',
     };
     await writeWorkspaceDraft('studio-transfer', draft);
     setStudioRevision((value) => value + 1);
     setPage('studio');
-  }, [setPage]);
+  }, [setPage, serverConfig]);
 
   const deriveSeries = useCallback(async (card: SeriesCard) => {
     try {

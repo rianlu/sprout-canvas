@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useFocusTrap } from '../hooks/useFocusTrap';
 import { useStyleCatalog } from '../hooks/useStyleCatalog';
 import { StitchIcon } from '../components/ui/StitchIcon';
+import { StyleExampleImage } from '../components/image/StyleExampleImage';
 import type { StyleRecord } from '../../shared/style-contract.mjs';
 
 interface StylesLibraryProps {
@@ -84,7 +85,7 @@ export function StylesLibrary({ onUseInStudio }: StylesLibraryProps) {
       <div className={`grid ${compact ? 'grid-cols-2 gap-3 lg:grid-cols-3 lg:gap-space-lg xl:grid-cols-4' : 'grid-cols-1 gap-space-lg sm:grid-cols-2 lg:grid-cols-3'}`}>
         {filtered.map((style) => <article key={style.id} className={`style-card group flex flex-col bg-surface-container-lowest border border-outline-variant/30 rounded-2xl shadow-[0_4px_20px_rgba(85,95,75,0.05)] ${compact ? 'p-3 lg:p-space-md' : 'p-space-md'}`}>
           <button type="button" aria-label={`放大 ${style.name}`} className={`relative w-full aspect-[4/3] overflow-hidden rounded-xl bg-surface-container-low text-left ${compact ? 'mb-3 lg:mb-4' : 'mb-4'}`} onClick={() => setDetail(style)}>
-            <img src={style.image} alt={style.name} loading="lazy" className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-[1.02]" />
+            <StyleExampleImage src={style.image} alt={style.name} className="transition-transform duration-300 group-hover:scale-[1.02]" />
             <span className="absolute top-3 left-3 px-2 py-1 rounded-lg bg-surface-bright/95 text-secondary font-meta-sm text-meta-sm">{style.category || '未分类'}</span>
           </button>
           <h3 className="font-headline-sm text-headline-sm text-on-surface truncate" title={style.name}>{style.name}</h3>

@@ -112,8 +112,14 @@ export function CreativeStudio({ onOpenStyles, onOpenGallery, onSubmitBatch, onC
       const transfer = await readWorkspaceDraft<StudioDraft>('studio-transfer');
       if (!alive) return;
       const draft = { ...stored, ...transfer, promptHistory: transfer ? null : readPromptHistory(stored?.promptHistory) };
+      const transferConfig = { ...stored?.config, ...transfer?.config };
+      // A template sets the aspect ratio only; the request size follows it at the size tier the user already chose.
+      if (transfer?.config?.aspectRatio) {
+        const size = resolveSize(transfer.config.aspectRatio, transferConfig.sizeTier || '1K');
+        Object.assign(transferConfig, { requestSize: size.size, sizeHint: size.hint });
+      }
       if (draft.config) setConfig((current) => {
-        const next = { ...current, ...stored?.config, ...transfer?.config, prompt: transfer?.config?.prompt ?? stored?.config?.prompt ?? current.prompt };
+        const next = { ...current, ...stored?.config, ...transferConfig, prompt: transfer?.config?.prompt ?? stored?.config?.prompt ?? current.prompt };
         if (LOCK_UNSUPPORTED_IMAGE_OPTIONS && next.mode !== 'edit') Object.assign(next, LOCKED_IMAGE_DEFAULTS);
         return next;
       });
@@ -128,12 +134,12 @@ export function CreativeStudio({ onOpenStyles, onOpenGallery, onSubmitBatch, onC
       const transferredStyle = transfer?.styleId && transfer.styleId !== 'default' ? transfer.styleName || '提示词模板' : '';
       if (transferredStyle) setMaskEditorOpen(false);
       if (transfer) {
-        await writeWorkspaceDraft('studio', { ...draft, config: { ...stored?.config, ...transfer.config } });
+        await writeWorkspaceDraft('studio', { ...draft, config: transferConfig });
         await writeWorkspaceDraft('studio-transfer', undefined);
       }
       if (alive) {
         setDraftLoaded(true);
-        if (transferredStyle) pushToast('success', `已载入 ${transferredStyle}, 可修改后开始绘制`);
+        if (transferredStyle) pushToast('success', `已载入 ${transferredStyle}, ${transfer?.config?.aspectRatio ? `画幅已按示例图设为 ${transfer.config.aspectRatio}, ` : ''}可修改后开始绘制`);
       }
     })().catch((error) => { if (alive) { setDraftLoaded(true); pushToast('error', error instanceof Error ? error.message : '草稿读取失败'); } });
     return () => { alive = false; };
