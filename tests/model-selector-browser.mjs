@@ -64,9 +64,10 @@ try {
   assert.equal(await models().getByRole('button', { name: '自动', exact: true }).getAttribute('aria-pressed'), 'true');
   const cells = page.getByRole('group', { name: '画面画幅比例', exact: true }).getByRole('button');
   const cellLabels = async () => (await cells.allInnerTexts()).map((label) => label.split('\n').at(-1).trim());
-  assert.deepEqual(await cellLabels(), ['1:1 方图', '3:4 竖图', '4:3 横图', '9:16 壁纸', '16:9 宽屏', '21:9 超宽', '3:2 横图', '2:3 竖图', '自动画幅']);
+  assert.deepEqual(await cellLabels(), ['自动画幅', '1:1 方图', '21:9 超宽', '4:3 横图', '3:2 横图', '16:9 宽屏', '3:4 竖图', '2:3 竖图', '9:16 壁纸']);
+  assert.equal(await cells.filter({ hasText: '自动画幅' }).getAttribute('aria-pressed'), 'true', 'automatic frame is the default');
   assert.doesNotMatch(await rail().innerText(), /\d{3,4}×\d{3,4}|自动尺寸/, 'ratio buttons show ratios only');
-  checks.push('多模型时显示生成模型, 默认自动; 九格画幅只标比例');
+  checks.push('多模型时显示生成模型, 默认自动; 九格画幅自动在首位且为默认, 只标比例');
 
   // Transparency fits only the standard-size channel, so wide frames are disabled while it is on.
   await transparent().locator('..').click();
@@ -74,7 +75,7 @@ try {
   assert.ok(await ratio('16:9 宽屏').isDisabled());
   assert.ok(await ratio('3:2 横图').isEnabled());
   assert.match(await ratio('16:9 宽屏').getAttribute('title'), /透明背景/);
-  assert.match(await rail().innerText(), /开启透明背景时, 当前模型不支持 3:4, 4:3, 9:16, 16:9, 21:9/);
+  assert.match(await rail().innerText(), /开启透明背景时, 当前模型不支持 21:9, 4:3, 16:9, 3:4, 9:16/);
   await transparent().locator('..').click();
   await ratio('16:9 宽屏').click();
   assert.ok(await transparent().isDisabled());
@@ -82,10 +83,11 @@ try {
   await screenshot('gated-desktop');
   checks.push('参数按单一通道组合判断: 透明背景禁用宽画幅, 宽画幅禁用透明背景并说明原因');
 
-  // GPT Image 2.5 offers standard sizes only: the wide frame falls back to 1:1 with a notice.
+  // GPT Image 2.5 offers standard sizes only: the wide frame falls back to automatic with a notice.
   await models().getByRole('button', { name: 'GPT Image 2.5', exact: true }).click();
-  await toast(/已按 GPT Image 2\.5 调整参数: 画幅改为 1:1/);
-  assert.deepEqual(await cellLabels(), ['1:1 方图', '3:2 横图', '2:3 竖图', '自动画幅']);
+  await toast(/已按 GPT Image 2\.5 调整参数: 画幅改为 自动/);
+  assert.deepEqual(await cellLabels(), ['自动画幅', '1:1 方图', '3:2 横图', '2:3 竖图']);
+  assert.equal(await cells.filter({ hasText: '自动画幅' }).getAttribute('aria-pressed'), 'true');
   assert.ok(await transparent().isDisabled());
   assert.match(await page.locator('#studio-transparent-hint').innerText(), /当前模型不支持透明背景/);
   await models().getByRole('button', { name: 'GPT Image 2', exact: true }).click();
@@ -105,7 +107,7 @@ try {
   await models().getByRole('button', { name: '自动', exact: true }).click();
   await nav('展馆');
   await page.getByRole('button', { name: /检视作品:/ }).first().click();
-  await page.getByRole('dialog', { name: '作品检视', exact: true }).getByRole('button', { name: '复用完整配方', exact: true }).click();
+  await page.getByRole('dialog', { name: '作品检视', exact: true }).getByRole('button', { name: '复用配方', exact: true }).click();
   await rail().locator('textarea').waitFor();
   await until(async () => await models().getByRole('button', { name: 'GPT Image 2', exact: true }).getAttribute('aria-pressed') === 'true', 'model restored from the recipe');
   assert.equal(await ratio('16:9 宽屏').getAttribute('aria-pressed'), 'true');

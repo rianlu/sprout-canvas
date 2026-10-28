@@ -2,6 +2,7 @@ import { readFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { defaultModelName } from '../shared/generation-contract.mjs';
 export const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const LOCAL_CONFIG_PATH = path.join(ROOT, 'config', 'local.config.json');
 
@@ -24,12 +25,6 @@ function normalizeProviderId(input, fallback) {
 
 // The GPT Image 2 family (2, 2.5 and their dated or suffixed variants) accepts any size within the documented limits.
 const CUSTOM_SIZE_MODEL = /^gpt-image-2(?:[.-]|$)/;
-
-/** Display and grouping name for the model selector; channels with the same name are interchangeable. */
-function defaultModelName(imageModel) {
-  const family = /^gpt-image-(\d+(?:\.\d+)?)(?:-|$)/.exec(imageModel);
-  return family ? `GPT Image ${family[1]}` : imageModel;
-}
 
 function normalizeImageProvider(provider, index) {
   const id = normalizeProviderId(provider.id || provider.name, `image-provider-${index + 1}`);

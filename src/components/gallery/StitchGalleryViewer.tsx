@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ResultRecord } from '../../types/generation';
 import { useFocusTrap } from '../../hooks/useFocusTrap';
 import { useImageMetadata } from '../../hooks/useImageMetadata';
@@ -19,6 +19,9 @@ import { useOriginalImage } from '../../hooks/useOriginalImage';
 import { StitchIcon } from '../ui/StitchIcon';
 import { RecordImage } from './RecordImage';
 import { ImageViewport } from './ImageViewport';
+import { ImagePreviewDialog } from '../image/ImagePreviewDialog';
+import { sizePreset } from '../../lib/api/generation';
+import { defaultModelName } from '../../../shared/generation-contract.mjs';
 
 interface ViewerProps {
   cards: GalleryCard[];
@@ -42,6 +45,7 @@ export function StitchGalleryViewer({ cards, initialIndex, initialSceneIndex = 0
   );
   const [layout, setLayout] = useState<'carousel' | 'waterfall'>('carousel');
   const [detailsOpen, setDetailsOpen] = useState(() => window.matchMedia('(min-width: 1024px)').matches);
+  const [fullWindow, setFullWindow] = useState(false);
 
   const dialogRef = useFocusTrap<HTMLDivElement>(true);
   const stripRef = useRef<HTMLDivElement>(null);
@@ -57,6 +61,9 @@ export function StitchGalleryViewer({ cards, initialIndex, initialSceneIndex = 0
   const title = card ? cardTitle(card) : '';
   const imageInfo = record ? metadata[record.id] : undefined;
   const format = record ? imageFileExtension(record.dataUrl, record.outputFormat).toUpperCase() : '';
+  // The model that actually ran, never the internal channel name; older recipes derive it from the upstream id.
+  const modelLabel = record?.recipe ? record.recipe.modelLabel || defaultModelName(record.recipe.model) || '模型未记录' : '模型未记录';
+  const requestedFrame = !record?.recipe ? '历史作品未记录' : record.recipe.size === 'auto' ? '自动' : sizePreset(record.recipe.size).aspectRatio === 'auto' ? '自定义' : sizePreset(record.recipe.size).aspectRatio;
 
   const changeCard = useCallback(
     (delta: number) => {
@@ -125,6 +132,13 @@ export function StitchGalleryViewer({ cards, initialIndex, initialSceneIndex = 0
       onNotify('error', '复制失败, 请检查浏览器剪贴板权限');
     }
   };
+  const copyImage = () => void copyRecordImage(record).then(() => onNotify('success', '已复制原图')).catch((error) => onNotify('error', error instanceof Error ? error.message : '复制失败, 请改用下载'));
+  const downloadCurrent = () => void downloadRecord(record).catch(() => onNotify('error', '下载失败, 请检查本地原图'));
+  const secondaryActions = [
+    ...(record.recipe && onUseRecipe ? [['复用配方', 'replay', '复用完整配方', () => { onUseRecipe(record); onClose(); }] as const] : []),
+    ...(onEditRecord ? [['局部重绘', 'brush', showSeries ? '局部重绘当前分镜' : '局部重绘此图', () => { onEditRecord(record); onClose(); }] as const] : []),
+    ...(onSplit ? [['切图拆分', 'content_cut', '切图拆分当前图片', () => onSplit(record)] as const] : []),
+  ];
   const downloadAll = async () => {
     try {
       if (series) {
@@ -148,7 +162,8 @@ export function StitchGalleryViewer({ cards, initialIndex, initialSceneIndex = 0
         role="dialog"
         aria-modal="true"
         aria-label="作品检视"
-        className="stitch-viewer-dialog relative flex h-[min(92dvh,calc(100dvh-1.5rem))] w-[min(100%,calc(100vw-1.5rem))] max-w-5xl flex-col overflow-hidden rounded-2xl bg-surface shadow-[0_20px_60px_rgba(40,48,36,0.20)] sm:h-[min(88dvh,56rem)] sm:w-[min(80vw,64rem)]"
+        inert={fullWindow}
+        className="stitch-viewer-dialog relative flex h-[min(92dvh,calc(100dvh-1.5rem))] w-[min(100%,calc(100vw-1.5rem))] max-w-7xl flex-col overflow-hidden rounded-2xl bg-surface shadow-[0_20px_60px_rgba(40,48,36,0.20)] sm:h-[min(88dvh,56rem)] sm:w-[min(80vw,80rem)]"
       >
         <div className="h-16 px-3 md:px-space-lg bg-surface-container-lowest border-b border-outline-variant/30 flex items-center justify-between gap-2 md:gap-space-md shrink-0">
           <div className="flex items-center gap-space-md min-w-0 flex-1">
@@ -160,14 +175,14 @@ export function StitchGalleryViewer({ cards, initialIndex, initialSceneIndex = 0
                 <h2 className="font-headline-sm text-headline-sm text-on-surface truncate" title={title}>
                   {title}
                 </h2>
-                <span className="hidden xl:inline px-2 py-0.5 rounded-full bg-secondary-container text-on-secondary-container font-meta-sm text-meta-sm font-medium shrink-0">
-                  {series ? `共 ${records.length} 幕分镜` : '单图创作'}
-                </span>
+                {series && <span className="hidden xl:inline px-2 py-0.5 rounded-full bg-secondary-container text-on-secondary-container font-meta-sm text-meta-sm font-medium shrink-0">
+                  共 {records.length} 幕分镜
+                </span>}
               </div>
               <div className="text-on-surface-variant font-meta-sm text-meta-sm mt-0.5 truncate">
                 {new Date(cardTimestamp(card)).toLocaleString('zh-CN', { hour12: false })} 生成
                 <span className="px-2">·</span>
-                <span>{record.providerName || '未提供'}</span>
+                <span>{modelLabel}</span>
               </div>
             </div>
           </div>
@@ -208,6 +223,15 @@ export function StitchGalleryViewer({ cards, initialIndex, initialSceneIndex = 0
                 {series ? '下载全系列 ZIP' : '下载原图'}
               </span>
             </button>
+            {supportsFileSharing() && <button
+              type="button"
+              className="viewer-tool-button"
+              aria-label="分享文件"
+              title={showSeries ? '分享全套分镜文件' : '分享原图文件'}
+              onClick={() => void shareRecords(showSeries ? records : [record]).catch((error) => { if (error?.name !== 'AbortError') onNotify('error', error instanceof Error ? error.message : '分享失败'); })}
+            >
+              <StitchIcon name="share" size={20} />
+            </button>}
             <button
               type="button"
               className="viewer-tool-button px-2 gap-1 font-body-sm text-body-sm"
@@ -265,7 +289,9 @@ export function StitchGalleryViewer({ cards, initialIndex, initialSceneIndex = 0
                 src={original.url || record.dataUrl || undefined}
                 alt={record.prompt || '生成的画作'}
                 error={original.error}
-                onCopy={() => void copyRecordImage(record).then(() => onNotify('success', '已复制原图')).catch((error) => onNotify('error', error instanceof Error ? error.message : '复制失败, 请改用下载'))}
+                onCopy={copyImage}
+                onDownload={series ? downloadCurrent : undefined}
+                onFullscreen={() => setFullWindow(true)}
               />
             ) : (
               <div className="flex-1 min-h-0 overflow-y-auto bg-surface-container-low p-4 md:p-space-lg" aria-label="连贯拼版">
@@ -287,7 +313,7 @@ export function StitchGalleryViewer({ cards, initialIndex, initialSceneIndex = 0
             )}
             {layout === 'carousel' && (
               <div className="flex items-center justify-between gap-3 px-3 py-2 bg-surface-container-lowest border-t border-outline-variant/30 font-meta-sm text-meta-sm text-on-surface-variant shrink-0">
-                <span className="truncate">{imageInfo ? `${imageInfo.size} · ${imageInfo.ratio}` : '读取画幅中'} · {format} 原图{series ? ` · 第 ${sceneIndex + 1} / ${records.length} 幕` : ''}</span>
+                <span className="truncate">{imageInfo ? `${imageInfo.size} · ${imageInfo.ratioLabel}` : '读取画幅中'} · {format} 原图{series ? ` · 第 ${sceneIndex + 1} / ${records.length} 幕` : ''}</span>
                 <span className="hidden sm:inline shrink-0">滚轮查看细节 · Ctrl 滚轮缩放</span>
               </div>
             )}
@@ -359,10 +385,6 @@ export function StitchGalleryViewer({ cards, initialIndex, initialSceneIndex = 0
           </div>
           {detailsOpen && <aside id="viewer-details" aria-label="作品详情" className="stitch-viewer-inspector flex h-full min-h-0 w-full flex-1 flex-col overflow-hidden bg-surface-container-lowest lg:w-80 lg:flex-none lg:border-l border-outline-variant/30">
             <div className="min-h-0 flex-1 space-y-space-md overflow-y-auto p-space-lg">
-              <div className="flex items-center gap-space-xs text-primary">
-                <StitchIcon name="tune" size={20} />
-                <h3 className="font-headline-sm text-headline-sm">参数与创作配方</h3>
-              </div>
               {showSeries && (
                 <div className="p-space-sm rounded-xl bg-surface-container-low space-y-1.5">
                   <div className="flex items-center justify-between gap-2 text-on-surface-variant">
@@ -404,44 +426,25 @@ export function StitchGalleryViewer({ cards, initialIndex, initialSceneIndex = 0
                 </p>
               </div>
               {versions.length > 1 && <label className="block text-body-sm">本镜版本<select aria-label="本镜版本" value={record.id} onChange={(event) => setVersionId(event.target.value)} className="w-full mt-1 p-2 rounded-lg bg-surface-container">{versions.map((item) => <option key={item.id} value={item.id}>版本 {item.version || 1} · {new Date(item.createdAt).toLocaleString()}</option>)}</select></label>}
-              {record.recipe && (
-                <div className="space-y-1.5">
-                  <span className="font-meta-sm text-meta-sm text-on-surface-variant">参考素材</span>
-                  <p className="p-2 rounded-lg bg-surface-container font-body-sm text-body-sm">
-                    {record.recipe.references.length || record.recipe.referenceImage ? [...record.recipe.references.map((ref) => ref.name), ...(record.recipe.referenceImage ? ['分镜衔接参考'] : [])].join(', ') : '文字创作'}
-                    {record.recipe.hasMask ? ' · 局部编辑蒙版' : ''}
-                  </p>
-                </div>
-              )}
               {original.error && <p role="alert" className="text-error text-body-sm">{original.error}</p>}
-              <div className="grid grid-cols-2 gap-space-xs pt-1">
+              <dl aria-label="生成配方" className="grid grid-cols-[auto_1fr] gap-x-space-md gap-y-2 rounded-xl bg-surface-container-low p-space-sm font-body-sm text-body-sm">
                 {[
-                  ['画面画幅比例', imageInfo ? `${imageInfo.ratio} (${imageInfo.size})` : '读取中'],
+                  ['目标画幅', requestedFrame],
+                  ['实际文件', imageInfo ? `${imageInfo.size} · ${imageInfo.ratioLabel} · ${format}` : '读取中', 'lg:hidden'],
+                  ['模型', modelLabel],
                   ['画风', record.recipe?.styleName || (record.recipe ? '自定义' : '历史作品未记录')],
-                  ['生成质量', ({ high: '精细', medium: '标准', low: '快速', auto: '自动' } as Record<string, string>)[record.recipe?.quality || ''] || '历史作品未记录'],
-                  ['输出格式', format],
-                ].map(([label, value]) => (
-                  <div key={label} className="p-2 rounded-lg bg-surface-container-low">
-                    <span className="font-meta-sm text-meta-sm text-on-surface-variant block">{label}</span>
-                    <span className="font-body-sm text-body-sm text-on-surface font-medium break-words">{value}</span>
-                  </div>
+                  ['参考素材', record.recipe ? `${record.recipe.references.length || record.recipe.referenceImage ? [...record.recipe.references.map((ref) => ref.name), ...(record.recipe.referenceImage ? ['分镜衔接参考'] : [])].join(', ') : '文字创作'}${record.recipe.hasMask ? ' · 局部编辑蒙版' : ''}` : '历史作品未记录'],
+                  ['背景', record.recipe?.background === 'transparent' ? '透明' : record.recipe ? '自然背景' : '历史作品未记录'],
+                  ['质量', ({ high: '精细', medium: '标准', low: '快速', auto: '自动' } as Record<string, string>)[record.recipe?.quality || ''] || '历史作品未记录'],
+                ].map(([label, value, className = '']) => (
+                  <Fragment key={label}>
+                    <dt className={`text-on-surface-variant ${className}`}>{label}</dt>
+                    <dd className={`min-w-0 break-words text-on-surface ${className}`}>{value}</dd>
+                  </Fragment>
                 ))}
-                <div className="col-span-2 p-2 rounded-lg bg-surface-container-low flex items-center justify-between">
-                  <span className="font-meta-sm text-meta-sm text-on-surface-variant">画布背景透光</span>
-                  <span className="font-body-sm text-body-sm">{record.recipe?.background === 'transparent' ? '透明' : record.recipe ? '自然背景' : '历史作品未记录'}</span>
-                </div>
-              </div>
+              </dl>
             </div>
             <div className="shrink-0 space-y-space-xs border-t border-outline-variant/30 bg-surface-container-lowest px-space-lg py-space-md">
-              {record.recipe && onUseRecipe && (
-                <button type="button" className="w-full py-2 rounded-xl bg-surface-container text-on-surface font-body-sm text-body-sm hover:bg-surface-container-high" onClick={() => { onUseRecipe(record); onClose(); }}>复用完整配方</button>
-              )}
-              {onEditRecord && (
-                <button type="button" className="w-full py-2 rounded-xl bg-secondary-container text-on-secondary-container font-body-sm text-body-sm hover:bg-secondary-fixed flex items-center justify-center gap-2" onClick={() => { onEditRecord(record); onClose(); }}><StitchIcon name="brush" size={18} />{showSeries ? '局部重绘当前分镜' : '局部重绘此图'}</button>
-              )}
-              {onSplit && (
-                <button type="button" className="w-full py-2 rounded-xl bg-surface-container text-on-surface font-body-sm text-body-sm hover:bg-surface-container-high flex items-center justify-center gap-2" onClick={() => onSplit(record)}><StitchIcon name="content_cut" size={18} />切图拆分</button>
-              )}
               <button
                 type="button"
                 className="w-full py-2.5 px-space-md rounded-xl bg-primary text-on-primary hover:bg-primary-container font-body-sm text-body-sm font-medium flex items-center justify-center gap-2 shadow-sm"
@@ -451,31 +454,40 @@ export function StitchGalleryViewer({ cards, initialIndex, initialSceneIndex = 0
                   onClose();
                 }}
               >
-                <StitchIcon name="brush" size={18} />
+                <StitchIcon name={showSeries && onUseSeries ? 'dynamic_feed' : 'add_photo_alternate'} size={18} />
                 <span>{showSeries && onUseSeries ? '基于此系列继续衍生分镜' : '用作参考图再创作'}</span>
               </button>
-              {showSeries && (
-                <button
-                  type="button"
-                  className="w-full py-2 px-space-sm rounded-xl bg-surface-container hover:bg-surface-container-high font-body-sm text-body-sm flex items-center justify-center gap-1.5"
-                  onClick={() => void downloadRecord(record).catch(() => onNotify('error', '下载失败, 请检查本地原图'))}
-                >
-                  <StitchIcon name="file_download" size={16} />
-                  下载当前分镜
-                </button>
-              )}
-              {supportsFileSharing() && <button
-                type="button"
-                className="w-full py-2 px-space-sm rounded-xl bg-surface-container hover:bg-surface-container-high font-body-sm text-body-sm flex items-center justify-center gap-1.5"
-                onClick={() => void shareRecords(showSeries ? records : [record]).catch((error) => { if (error?.name !== 'AbortError') onNotify('error', error instanceof Error ? error.message : '分享失败'); })}
-              >
-                <StitchIcon name="share" size={16} />
-                分享文件
-              </button>}
+              {secondaryActions.length > 0 && <div className={`grid gap-space-xs ${secondaryActions.length === 3 ? 'grid-cols-3' : secondaryActions.length === 2 ? 'grid-cols-2' : 'grid-cols-1'}`}>
+                {secondaryActions.map(([label, icon, hint, action]) => (
+                  <button key={label} type="button" title={hint} className="min-w-0 py-2 px-1 rounded-xl bg-surface-container text-on-surface font-body-sm text-body-sm hover:bg-surface-container-high flex items-center justify-center gap-1" onClick={action}>
+                    <StitchIcon name={icon} size={16} />
+                    <span className="truncate">{label}</span>
+                  </button>
+                ))}
+              </div>}
             </div>
           </aside>}
         </div>
       </div>
+      {fullWindow && <ImagePreviewDialog
+        fullWindow
+        label="全屏查看图片"
+        title={showSeries ? `${title} · 第 ${sceneIndex + 1} 幕` : title}
+        subtitle={`${new Date(record.createdAt).toLocaleString('zh-CN', { hour12: false })} · ${modelLabel}`}
+        imageKey={record.id}
+        src={original.url || record.dataUrl || undefined}
+        alt={record.prompt || '生成的画作'}
+        error={original.error}
+        position={showSeries ? { index: sceneIndex, count: records.length } : { index: cardIndex, count: cards.length }}
+        onPrevious={showSeries ? () => changeScene(-1) : () => changeCard(-1)}
+        onNext={showSeries ? () => changeScene(1) : () => changeCard(1)}
+        previousLabel={showSeries ? '全屏上一幕' : '全屏上一张'}
+        nextLabel={showSeries ? '全屏下一幕' : '全屏下一张'}
+        closeLabel="退出全屏查看"
+        onClose={() => setFullWindow(false)}
+        onCopy={copyImage}
+        onDownload={downloadCurrent}
+      />}
     </div>
   );
 }

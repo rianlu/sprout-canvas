@@ -21,6 +21,8 @@ export interface GenerationRecipe extends Omit<GenerationRequest, 'references' |
   version: 1; model: string; providerId: string; providerName: string; generationMode: string;
   /** The model the user chose; absent when routing was automatic. */
   modelName?: string;
+  /** Display name of the model that actually ran, shown on the work; absent in older recipes. */
+  modelLabel?: string;
   styleId: string; styleName: string; tone: string;
   references: Omit<GenerationReference, 'dataUrl'>[]; hasMask: boolean; referenceJobId?: string;
   referenceImage?: Omit<GenerationReference, 'dataUrl'>;
@@ -32,7 +34,8 @@ export const MAX_PROMPT_LENGTH: number;
 export const MAX_REFERENCE_IMAGES: number;
 export const MAX_REFERENCE_BYTES: number;
 export function validateGenerationSubmission(input: unknown): GenerationSubmission;
-export function generationRecipe(input: GenerationSubmission, provider?: { imageModel?: string; id?: string; name?: string; generationMode?: string }): GenerationRecipe;
+export function generationRecipe(input: GenerationSubmission, provider?: { imageModel?: string; modelName?: string; id?: string; name?: string; generationMode?: string }): GenerationRecipe;
+export function defaultModelName(imageModel: string): string;
 export function toImagesPayload(input: GenerationSubmission): Record<string, unknown>;
 export function requestError(message: string, statusCode?: number): Error & { statusCode: number };
 export function validateImageSize(size: string): string;

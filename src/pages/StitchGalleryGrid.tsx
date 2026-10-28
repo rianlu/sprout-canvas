@@ -374,7 +374,7 @@ export function GalleryGrid({ records, onClear, onDeleteMany, onUseRecipe, onUse
                           </div>
                           <div className="pt-2.5 px-1 flex flex-col gap-1">
                             <div className="flex items-center justify-between gap-2 text-[11px] text-on-surface-variant">
-                              <span className="font-meta-sm truncate">{info ? `${info.size} · ${info.ratio}` : '读取画幅中'}</span>
+                              <span className="font-meta-sm truncate">{info ? `${info.size} · ${info.ratioLabel}` : '读取画幅中'}</span>
                               <span className="font-meta-sm text-outline shrink-0">{cover.outputFormat?.toUpperCase()}</span>
                             </div>
                             <h3 className="font-body-md text-body-md text-on-surface font-medium truncate" title={title}>{title}</h3>

@@ -13,7 +13,7 @@ import { useQueueDelivery } from './useQueueDelivery';
 /** Whether a pending job already carries an edit whose response was lost. */
 function sameEdit(job: QueueJob, input: QueueSubmitInput) {
   // Provider fields come from the server, so only the browser's intent is compared.
-  const intent = ({ model: _model, providerId: _id, providerName: _name, generationMode: _mode, referenceImage: _reference, ...recipe }: GenerationRecipe) => JSON.stringify(recipe);
+  const intent = ({ model: _model, modelLabel: _label, providerId: _id, providerName: _name, generationMode: _mode, referenceImage: _reference, ...recipe }: GenerationRecipe) => JSON.stringify(recipe);
   return Boolean(job.recipe && JSON.stringify(job.clientContext) === JSON.stringify(input.clientContext) && intent(job.recipe) === intent(generationRecipe(input)));
 }
 

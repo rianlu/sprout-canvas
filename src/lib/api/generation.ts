@@ -70,15 +70,16 @@ export function supportsRequest(capabilities: ImageCapabilities, settings: Pick<
 
 /**
  * Fits a draft to the channels in scope: format first, then keeps the chosen frame over transparency,
- * and falls back to 1:1 only when the frame itself is unavailable. Returns `config` itself when it already fits.
+ * and falls back to `fallback` only when the frame itself is unavailable. Returns `config` itself when it already fits.
+ * Single images fall back to auto; series pass 1:1 so every scene keeps one fixed frame.
  */
-export function clampToCapabilities(config: GenerationConfig, capabilities: ImageCapabilities): GenerationConfig {
+export function clampToCapabilities(config: GenerationConfig, capabilities: ImageCapabilities, fallback: '1:1' | 'auto' = '1:1'): GenerationConfig {
   const fits = (candidate: GenerationConfig) => supportsRequest(capabilities, candidate);
   const formatSupported = capabilities.formats.includes((config.outputFormat === 'auto' ? 'png' : config.outputFormat) as ImageCapabilities['formats'][number]);
   const base = formatSupported ? config : { ...config, outputFormat: capabilities.formats[0] };
   if (fits(base)) return base;
-  const square = resolveSize('1:1');
-  const standard = { aspectRatio: '1:1' as const, sizeTier: '1K' as const, requestSize: square.size, sizeHint: square.hint };
+  const frame = resolveSize(fallback);
+  const standard = { aspectRatio: fallback, sizeTier: '1K' as const, requestSize: frame.size, sizeHint: frame.hint };
   const candidates: GenerationConfig[] = [
     { ...base, background: 'auto' },
     { ...base, ...standard },

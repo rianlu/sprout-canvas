@@ -9,7 +9,7 @@ import { LOCK_UNSUPPORTED_IMAGE_OPTIONS, LOCKED_IMAGE_DEFAULTS } from '../lib/im
 import type { QueueSubmitInput } from '../lib/api/queue';
 import { requestTextGeneration } from '../lib/api/text';
 import { getStyles } from '../lib/api/styles';
-import { MAX_REFERENCE_IMAGES } from '../../shared/generation-contract.mjs';
+import { MAX_REFERENCE_IMAGES, defaultModelName } from '../../shared/generation-contract.mjs';
 import { getCreditQuote } from '../lib/credits';
 import { brushMaskToDataUrl, brushStrokeCount, hasEditableRegion, type BrushMaskData } from '../lib/editor/brush-mask';
 import { MaskEditor } from '../components/editor/MaskEditor';
@@ -83,14 +83,15 @@ export function CreativeStudio({ onOpenStyles, onOpenGallery, onSubmitBatch, onC
   const [splitOpen, setSplitOpen] = useState(false);
   const [splitRecord, setSplitRecord] = useState<ResultRecord | null>(null);
   const [config, setConfig] = useState<GenerationConfig>(() => {
-    const size = resolveSize('1:1');
+    // New drafts let the model choose the frame from the prompt; a saved draft or template keeps its own ratio.
+    const size = resolveSize('auto');
     return {
       mode: 'text',
       generationMode: 'images',
       imageModel: '',
       prompt: readDraft(STUDIO_PROMPT_DRAFT_KEY),
       imageCount: 1,
-      aspectRatio: '1:1',
+      aspectRatio: 'auto',
       sizeTier: '1K',
       requestSize: size.size,
       sizeHint: size.hint,
@@ -112,9 +113,9 @@ export function CreativeStudio({ onOpenStyles, onOpenGallery, onSubmitBatch, onC
   // Keep every parameter within what one channel of the chosen model accepts; local edits keep the original recipe.
   useEffect(() => {
     if (!imageCapabilities || !draftLoaded || config.mode === 'edit') return;
-    const next = clampToCapabilities(config, imageCapabilities);
+    const next = clampToCapabilities(config, imageCapabilities, 'auto');
     if (next === config) return;
-    setConfig((current) => current.mode === 'edit' ? current : clampToCapabilities(current, imageCapabilities));
+    setConfig((current) => current.mode === 'edit' ? current : clampToCapabilities(current, imageCapabilities, 'auto'));
     const changes = describeClamp(config, next);
     if (changes.length) pushToast('info', `已按${config.modelName ? ` ${config.modelName} ` : '可用通道'}调整参数: ${changes.join(', ')}`);
   }, [imageCapabilities, draftLoaded, config, pushToast]);
@@ -256,7 +257,7 @@ export function CreativeStudio({ onOpenStyles, onOpenGallery, onSubmitBatch, onC
   // A saved work keeps its original channel; an uploaded original follows the model chosen before entering the edit.
   const editRecipe = sourceRecord?.recipe;
   const editModelLabel = editRecipe?.providerId
-    ? serverConfig?.providers?.find((provider) => provider.id === editRecipe.providerId)?.modelName || editRecipe.modelName || editRecipe.model || '原通道'
+    ? serverConfig?.providers?.find((provider) => provider.id === editRecipe.providerId)?.modelName || editRecipe.modelLabel || defaultModelName(editRecipe.model) || '原通道'
     : config.modelName || '自动';
   const referenceImages = useMemo(() => studioReferenceImages({ refImage, config }), [refImage, config]);
 

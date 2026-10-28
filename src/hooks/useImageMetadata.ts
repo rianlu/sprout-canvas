@@ -5,7 +5,10 @@ export interface ImageMetadata {
   width: number;
   height: number;
   size: string;
+  /** Standard ratio within 4%, used for filtering; otherwise the reduced `w:h`. */
   ratio: string;
+  /** Readable ratio for display: the standard ratio, or an approximate `约 1.09:1` instead of an unreadable fraction. */
+  ratioLabel: string;
 }
 
 export function useImageMetadata(records: ResultRecord[]) {
@@ -38,6 +41,7 @@ export function useImageMetadata(records: ResultRecord[]) {
             height,
             size: `${width}×${height}`,
             ratio: nearest ? nearest.join(':') : `${width}:${height}`,
+            ratioLabel: nearest ? nearest.join(':') : width >= height ? `约 ${(width / height).toFixed(2)}:1` : `约 1:${(height / width).toFixed(2)}`,
           },
         }));
       };

@@ -202,6 +202,11 @@ try {
   const initialView = await fittedImage(page);
   const dialogBox = await viewer.boundingBox();
   assert.ok(dialogBox && initialView.viewport.height > dialogBox.height * 0.7, 'the image gets most of the dialog height');
+  assert.ok(dialogBox.width > 1240 && dialogBox.width <= 1281, `the viewer widens to 80rem on a 1600px window: ${dialogBox.width}`);
+  await viewer.getByText(/生成\s*·\s*GPT Image 2$/).waitFor();
+  assert.doesNotMatch(await viewer.locator(':scope > div').first().innerText(), /primary|secondary/, 'the header names the model, not the channel');
+  const recipeList = viewer.getByRole('definition').filter({ hasText: 'GPT Image 2' });
+  assert.equal(await recipeList.count(), 1, 'the recipe list names the model once');
   await screenshot(page, 'viewer-single-desktop');
   const viewport = viewer.getByRole('region', { name: '图片查看区', exact: true });
   const zoomIn = viewer.getByRole('button', { name: '放大图片', exact: true });
@@ -261,6 +266,25 @@ try {
   assert.ok(await viewer.getByRole('button', { name: '下载原图', exact: true }).isVisible());
   assert.equal(await viewer.getByRole('button', { name: '下载当前图片', exact: true }).count(), 0);
   await readableViewerIcons(page);
+  // The full-window preview reuses the zoom viewport, covers the window and returns focus on Escape.
+  const openFullWindow = viewer.getByRole('button', { name: '全屏查看', exact: true });
+  await openFullWindow.click();
+  const fullWindow = page.getByRole('dialog', { name: '全屏查看图片', exact: true });
+  await fullWindow.getByRole('region', { name: '图片查看区', exact: true }).waitFor();
+  const fullBox = await fullWindow.boundingBox();
+  assert.ok(fullBox && fullBox.x <= 0.5 && fullBox.y <= 0.5 && fullBox.width >= 1599 && fullBox.height >= 999, `full-window preview covers the window: ${JSON.stringify(fullBox)}`);
+  assert.equal(await viewer.evaluate((element) => element.inert), true, 'the viewer underneath is inert');
+  assert.match(await fullWindow.innerText(), /GPT Image 2/);
+  await until(async () => await fullWindow.locator('img').evaluate((image) => image.complete && image.naturalWidth > 0), 'full-window image loads');
+  await fullWindow.getByRole('button', { name: '放大图片', exact: true }).click();
+  assert.notEqual(await fullWindow.getByLabel('缩放比例', { exact: true }).innerText(), '--');
+  await screenshot(page, 'viewer-full-window-desktop');
+  await page.keyboard.press('Escape');
+  await fullWindow.waitFor({ state: 'detached' });
+  assert.ok(await viewer.isVisible(), 'Escape leaves the work viewer open');
+  assert.equal(await viewer.evaluate((element) => element.inert), false);
+  assert.equal(await openFullWindow.evaluate((button) => button === document.activeElement), true, 'focus returns to the full-window button');
+  checks.push('查看器放宽到 80rem, 标题显示模型名而非通道名; 全屏查看复用缩放组件, 铺满窗口, Esc 退出并恢复焦点');
   for (const theme of ['light', 'dark']) {
     await page.setViewportSize({ width: 390, height: 844 });
     await page.evaluate((theme) => document.documentElement.classList.toggle('dark', theme === 'dark'), theme);
@@ -272,7 +296,7 @@ try {
     await screenshot(page, `viewer-single-mobile-${theme}`);
     await viewer.getByRole('button', { name: '查看详情', exact: true }).click();
     await viewer.getByRole('complementary', { name: '作品详情', exact: true }).waitFor();
-    assert.ok(await viewer.getByRole('button', { name: '复用完整配方', exact: true }).isVisible());
+    assert.ok(await viewer.getByRole('button', { name: '复用配方', exact: true }).isVisible());
     await screenshot(page, `viewer-details-mobile-${theme}`);
     await viewer.getByRole('button', { name: '收起详情', exact: true }).click();
     await fittedImage(page);
@@ -291,7 +315,7 @@ try {
   await download.saveAs(downloadPath);
   assert.ok((await readFile(downloadPath)).length > 1000);
   const savedRecipe = remaining[0].recipe;
-  await viewer.getByRole('button', { name: '复用完整配方' }).click();
+  await viewer.getByRole('button', { name: '复用配方', exact: true }).click();
   await page.locator('.studio-rail textarea').waitFor();
   assert.equal(await page.locator('.studio-rail textarea').inputValue(), savedRecipe.prompt);
   checks.push('2 张生成, 实际格式下载, 原子领取, 删除后刷新不重现, 时间稳定, 完整配方复用');
@@ -800,9 +824,23 @@ try {
   await op.waitForFunction(() => window.__sharedFiles?.length === 4);
   assert.ok((await op.evaluate(() => window.__sharedFiles)).every((file) => file.size > 1000 && file.type === 'image/jpeg' && file.name.endsWith('.jpg')));
   checks.push('帮助展示灵感点规则并移除通道状态, 系列文件分享传入四张原图 (模拟系统分享接口)');
+  const seriesViewer = op.getByRole('dialog', { name: '作品检视', exact: true });
+  await seriesViewer.getByRole('button', { name: '全屏查看', exact: true }).click();
+  const seriesFull = op.getByRole('dialog', { name: '全屏查看图片', exact: true });
+  await seriesFull.getByText('1 / 4', { exact: true }).waitFor();
+  assert.match(await seriesFull.locator('h2').innerText(), /第 1 幕$/);
+  await op.keyboard.press('ArrowRight');
+  await seriesFull.getByText('2 / 4', { exact: true }).waitFor();
+  assert.match(await seriesFull.locator('h2').innerText(), /第 2 幕$/);
+  await seriesFull.getByRole('button', { name: '全屏上一幕', exact: true }).click();
+  await seriesFull.getByText('1 / 4', { exact: true }).waitFor();
+  await seriesFull.getByRole('button', { name: '退出全屏查看', exact: true }).click();
+  await seriesFull.waitFor({ state: 'detached' });
+  assert.equal(await seriesViewer.getByRole('button', { name: '查看第 1 幕', exact: true }).getAttribute('aria-current'), 'true', 'closing the preview keeps the scene it ended on');
+  checks.push('系列全屏查看按幕切换 (方向键与按钮), 退出后停在当前幕');
 
   // Editing a series output must retain the original scene and all generation settings.
-  await op.getByRole('button', { name: '局部重绘当前分镜', exact: true }).click();
+  await op.getByRole('dialog', { name: '作品检视', exact: true }).getByRole('button', { name: '局部重绘', exact: true }).click();
   const seriesMask = op.getByRole('dialog', { name: /局部重绘工作区/ });
   await seriesMask.waitFor();
   await seriesMask.getByLabel('局部重绘提示词').fill('将涂抹区域的叶纹改成橙色');
@@ -902,7 +940,7 @@ try {
   await closeQueue(ep);
   await nav(ep, '展馆');
   await ep.getByRole('button', { name: /检视作品: 一只白色杯子/ }).click();
-  await ep.getByRole('button', { name: '局部重绘此图', exact: true }).click();
+  await ep.getByRole('dialog', { name: '作品检视', exact: true }).getByRole('button', { name: '局部重绘', exact: true }).click();
   await wideMask.waitFor();
   await wideMask.getByRole('button', { name: '取消', exact: true }).click();
   await assertEditSettings();

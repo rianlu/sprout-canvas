@@ -388,7 +388,7 @@ export function SeriesStudio(props: SeriesStudioProps) {
                             record={shot.record}
                           />
                           <div className="absolute bottom-2 left-2 px-2 py-0.5 rounded bg-inverse-surface/75 text-inverse-on-surface font-meta-sm text-[10px]">
-                            {info ? `${info.size} · ${info.ratio}` : '读取画幅中'}
+                            {info ? `${info.size} · ${info.ratioLabel}` : '读取画幅中'}
                           </div>
                           <div className="absolute inset-0 bg-inverse-surface/40 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity flex items-center justify-center gap-space-xs">
                             <button

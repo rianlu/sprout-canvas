@@ -224,7 +224,7 @@ try {
   await closeQueue();
   await page.getByRole('navigation', { name: '主导航', exact: true }).getByRole('link', { name: '展馆', exact: true }).click();
   await page.getByRole('button', { name: /^检视作品:/ }).first().click();
-  await page.getByRole('button', { name: '复用完整配方', exact: true }).click();
+  await page.getByRole('dialog', { name: '作品检视', exact: true }).getByRole('button', { name: '复用配方', exact: true }).click();
   await references().waitFor();
   assert.deepEqual((await draft()).config.refImages.map((ref) => ref.id), expectedReferences.map((ref) => ref.id));
   checks.push('切换局部重绘后仅提交第一张原图, 其余参考可恢复; 四图请求/outbox/配方完整, 刷新不重发, 按输出一张扣十点');

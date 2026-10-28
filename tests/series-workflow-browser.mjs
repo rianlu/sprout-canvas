@@ -254,7 +254,7 @@ try {
     }));
     assert.ok(artifacts.includes(`ref-${latest.recipe.referenceImage.id}`), 'continuity snapshot survives cleanup');
     await cards(page).nth(1).getByTitle('全屏预览大图', { exact: true }).click();
-    await page.getByRole('dialog', { name: '作品检视', exact: true }).getByRole('button', { name: '复用完整配方', exact: true }).click();
+    await page.getByRole('dialog', { name: '作品检视', exact: true }).getByRole('button', { name: '复用配方', exact: true }).click();
     const studioReferences = page.getByLabel('已载入参考图', { exact: true });
     await until(async () => await studioReferences.getByRole('img').count() === 5, 'full recipe keeps all four references and continuity image');
     assert.ok(await page.getByRole('button', { name: /^开始绘制/ }).isDisabled(), 'five imported images cannot be submitted from single-image studio');

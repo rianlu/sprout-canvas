@@ -7,6 +7,8 @@ interface ImageViewportProps {
   error?: string;
   onDownload?: () => void;
   onCopy?: () => void;
+  /** Opens the same image in the full-window preview. */
+  onFullscreen?: () => void;
 }
 
 type Point = { x: number; y: number };
@@ -15,7 +17,7 @@ type Size = { width: number; height: number };
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 
 /** Keep viewport controls outside the image transform; percentages refer to original pixels. */
-export function ImageViewport({ src, alt, error, onDownload, onCopy }: ImageViewportProps) {
+export function ImageViewport({ src, alt, error, onDownload, onCopy, onFullscreen }: ImageViewportProps) {
   const viewportRef = useRef<HTMLDivElement>(null);
   const [viewport, setViewport] = useState<Size>({ width: 0, height: 0 });
   const [natural, setNatural] = useState<Size>({ width: 0, height: 0 });
@@ -128,6 +130,7 @@ export function ImageViewport({ src, alt, error, onDownload, onCopy }: ImageView
         <span className="flex-1" />
         {onCopy && <button type="button" className="viewer-tool-button" aria-label="复制原图" title="复制原图" disabled={!ready} onClick={onCopy}><StitchIcon name="content_copy" size={20} /></button>}
         {onDownload && <button type="button" className="viewer-tool-button" aria-label="下载当前图片" title="下载当前图片" onClick={onDownload}><StitchIcon name="download" size={20} /></button>}
+        {onFullscreen && <button type="button" className="viewer-tool-button" aria-label="全屏查看" title="全屏查看" disabled={!src || Boolean(error)} onClick={onFullscreen}><StitchIcon name="fullscreen" size={20} /></button>}
       </div>
       <div
         ref={viewportRef}

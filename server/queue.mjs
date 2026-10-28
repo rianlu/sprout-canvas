@@ -220,7 +220,7 @@ export function updatePendingGeneration(jobId, userId, input, provider, session)
   if (!providerSupportsRequest(cfg, job.upstreamPath, job.contentType, Buffer.from(JSON.stringify(toImagesPayload(input))))) throw requestError('当前通道不支持这些生成参数');
   const extra = Buffer.byteLength(JSON.stringify(input)) - requestBytes(job);
   if (extra > 0) assertRetainedBytes(userId, extra, '参考图片过大, 请稍后再试');
-  const next = { ...job, submission: input, clientContext: input.clientContext, requestHash: submissionHash(input), recipe: generationRecipe(input, { id: job.providerId, name: job.providerName, imageModel: job.recipe.model, generationMode: job.recipe.generationMode }) };
+  const next = { ...job, submission: input, clientContext: input.clientContext, requestHash: submissionHash(input), recipe: generationRecipe(input, { id: job.providerId, name: job.providerName, imageModel: job.recipe.model, modelName: job.recipe.modelLabel, generationMode: job.recipe.generationMode }) };
   persist(next);
   Object.assign(job, next);
   return publicJob(job, userId);

@@ -8,6 +8,7 @@ const directory = await mkdtemp(path.join(tmpdir(), 'sprout-config-test-'));
 await mkdir(path.join(directory, 'server'));
 await mkdir(path.join(directory, 'config'));
 await cp(new URL('../server/config.mjs', import.meta.url), path.join(directory, 'server/config.mjs'));
+await cp(new URL('../shared', import.meta.url), path.join(directory, 'shared'), { recursive: true });
 const config = {
   defaultImageProvider: 'primary', secureCookies: true, trustProxy: true,
   imageProviders: ['primary', 'secondary'].map((id) => ({ id, baseUrl: `https://${id}.invalid`, apiKey: `fixture-${id}`, imageModel: 'gpt-image-2' })),

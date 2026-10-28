@@ -69,18 +69,18 @@ export interface StitchStudioRailProps {
   editModelLabel?: string;
 }
 
-/** 画幅比例选择格 (稿: grid-cols-3; 自定义尺寸通道九格, 标准通道四格). 只标比例, 实际像素以生成文件为准. */
+/** 画幅比例选择格 (稿: grid-cols-3). 自动排第一并作为默认; 横图与竖图上下成对. 只标比例, 实际像素以生成文件为准. */
 function AspectRatioGrid({ value, onChange, customSizes = true, unavailable }: { value: AspectRatio; onChange: (v: AspectRatio) => void; customSizes?: boolean; unavailable: (ratio: AspectRatio) => string }) {
   const ratios: { id: AspectRatio; name: string; box: string; title?: string }[] = [
-    { id: '1:1', name: '1:1 方图', box: 'w-4 h-4' },
-    { id: '3:4', name: '3:4 竖图', box: 'w-3 h-4' },
-    { id: '4:3', name: '4:3 横图', box: 'w-4 h-3' },
-    { id: '9:16', name: '9:16 壁纸', box: 'w-2.5 h-4' },
-    { id: '16:9', name: '16:9 宽屏', box: 'w-4 h-2.5' },
-    { id: '21:9', name: '21:9 超宽', box: 'w-5 h-2' },
-    { id: '3:2', name: '3:2 横图', box: 'w-4 h-3' },
-    { id: '2:3', name: '2:3 竖图', box: 'w-3 h-4' },
     { id: 'auto', name: '自动画幅', box: 'w-4 h-4 border-dashed', title: '由模型按提示词内容决定横竖' },
+    { id: '1:1', name: '1:1 方图', box: 'w-4 h-4' },
+    { id: '21:9', name: '21:9 超宽', box: 'w-5 h-2' },
+    { id: '4:3', name: '4:3 横图', box: 'w-4 h-3' },
+    { id: '3:2', name: '3:2 横图', box: 'w-4 h-[11px]' },
+    { id: '16:9', name: '16:9 宽屏', box: 'w-4 h-2.5' },
+    { id: '3:4', name: '3:4 竖图', box: 'w-3 h-4' },
+    { id: '2:3', name: '2:3 竖图', box: 'w-[11px] h-4' },
+    { id: '9:16', name: '9:16 壁纸', box: 'w-2.5 h-4' },
   ];
   const visible = customSizes ? ratios : ratios.filter((r) => STANDARD_ASPECTS.includes(r.id) || r.id === value);
   return (
@@ -106,7 +106,7 @@ function AspectRatioGrid({ value, onChange, customSizes = true, unavailable }: {
               <div className="flex h-5 w-5 items-center justify-center">
                 <div className={`${r.box} rounded-sm border-2 ${active ? 'border-primary bg-primary/20' : 'border-outline/60'}`} />
               </div>
-              {r.id === '1:1' && (
+              {r.id === 'auto' && (
                 <span className="px-1 rounded text-[9px] bg-primary-fixed text-on-primary-fixed font-meta-sm font-medium">
                   默认
                 </span>
@@ -206,7 +206,7 @@ export function StitchStudioRail(props: StitchStudioRailProps) {
   };
   const transparentUnavailable = !capabilities || config.background === 'transparent' || supportsRequest(capabilities, { ...config, background: 'transparent' }) ? ''
     : capabilities.channels?.some((channel) => channel.transparent) ? '当前画幅不支持透明背景, 可改用 1:1, 3:2, 2:3 或自动' : '当前模型不支持透明背景';
-  const blockedRatios = config.background === 'transparent' && !isEdit ? (['1:1', '3:4', '4:3', '9:16', '16:9', '21:9', '3:2', '2:3', 'auto'] as AspectRatio[]).filter((ratio) => (capabilities?.customSizes || STANDARD_ASPECTS.includes(ratio)) && ratioUnavailable(ratio)) : [];
+  const blockedRatios = config.background === 'transparent' && !isEdit ? (['1:1', '21:9', '4:3', '3:2', '16:9', '3:4', '2:3', '9:16'] as AspectRatio[]).filter((ratio) => (capabilities?.customSizes || STANDARD_ASPECTS.includes(ratio)) && ratioUnavailable(ratio)) : [];
   const referenceSlots = <ReferenceImageSlots references={props.referenceImages} maxReferences={props.maxReferences} disabled={imagesDisabled} busy={props.imageBusy} onAdd={() => chooseFiles()} onUpload={(files) => props.onUploadRefs(files)} onReplace={chooseFiles} onRemove={props.onRemoveRef} />;
 
   return (

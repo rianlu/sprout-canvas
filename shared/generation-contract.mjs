@@ -11,6 +11,12 @@ export const MAX_PROMPT_LENGTH = 24000;
 export const MAX_REFERENCE_IMAGES = 4;
 export const MAX_REFERENCE_BYTES = 12 * 1024 * 1024;
 
+/** Display name for an upstream model id, e.g. `gpt-image-2.5` -> `GPT Image 2.5`; channels may override it with `modelName`. */
+export function defaultModelName(imageModel) {
+  const family = /^gpt-image-(\d+(?:\.\d+)?)(?:-|$)/.exec(imageModel || '');
+  return family ? `GPT Image ${family[1]}` : imageModel || '';
+}
+
 export function validateImageSize(size) {
   if (size === 'auto') return size;
   const match = typeof size === 'string' && /^(\d+)x(\d+)$/.exec(size);
@@ -136,6 +142,7 @@ export function generationRecipe(input, provider = {}) {
     version: 1, ...parameters, model: provider.imageModel || '', providerId: provider.id || '',
     providerName: provider.name || '', generationMode: provider.generationMode || '',
     ...(input.modelName ? { modelName: input.modelName } : {}),
+    ...(provider.imageModel ? { modelLabel: provider.modelName || defaultModelName(provider.imageModel) } : {}),
     styleId: input.clientContext.styleId || '', styleName: input.clientContext.styleName || '', tone: input.clientContext.tone || '',
     references: references.map(({ dataUrl: _image, ...ref }) => ref), hasMask: Boolean(mask),
     ...(input.referenceJobId ? { referenceJobId: input.referenceJobId } : {}),
