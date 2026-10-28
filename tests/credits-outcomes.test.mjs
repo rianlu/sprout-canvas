@@ -6,6 +6,7 @@ import { readFile, writeFile } from 'node:fs/promises';
 import { DatabaseSync } from 'node:sqlite';
 import path from 'node:path';
 import { startHarness, until } from './server-harness.mjs';
+import { UNKNOWN_OUTCOME_REFUND } from '../server/credits-store.mjs';
 import { PNG_BASE64, submission } from './fixtures.mjs';
 
 const imageInput = (app, cookie, extra = {}) => ({ ...submission(randomUUID()), creditQuote: app.quote(cookie), ...extra });
@@ -32,7 +33,7 @@ async function unusedUrl() {
 }
 const sendJson = (response, status, body) => { response.writeHead(status, { 'Content-Type': 'application/json' }); response.end(JSON.stringify(body)); return true; };
 
-test('网关超时或未知网关错误不换通道, 图片和文字保留一次预占', async (t) => {
+test('网关超时或未知网关错误不换通道, 图片和文字各调用一次并自动返还', async (t) => {
   for (const status of [408, 504, 524, 502, 500]) await t.test('HTTP ' + status, async () => {
     const app = await startHarness();
     try {
@@ -44,17 +45,21 @@ test('网关超时或未知网关错误不换通道, 图片和文字保留一次
       };
       const input = imageInput(app, cookie), accepted = await postImage(app, cookie, input);
       const job = await completed(app, cookie, accepted.data.id);
-      assert.equal(job.outcomeUnknown, true); assert.equal(job.credit.state, 'unknown');
+      assert.equal(job.outcomeUnknown, true); assert.equal(job.credit.state, 'refunded');
       assert.equal(app.calls.length, 1);
       assert.equal((await postImage(app, cookie, input)).data.id, job.id);
-      await checkLedger(app, cookie, job.credit, ['reserve', 'unknown']);
+      await checkLedger(app, cookie, job.credit, ['reserve', 'refund']);
       const textInput = app.textInput(cookie);
       const text = await app.api('/api/text', { cookie, method: 'POST', body: textInput });
-      assert.equal(text.data.code, 'OUTCOME_UNKNOWN'); assert.equal(text.data.credit.state, 'unknown');
-      assert.equal((await app.api('/api/text', { cookie, method: 'POST', body: textInput })).data.credit.id, text.data.credit.id);
+      assert.equal(text.data.code, 'OUTCOME_UNKNOWN'); assert.equal(text.data.credit.state, 'refunded');
+      assert.match(text.data.error, /结果未知, 本次不扣点/);
+      const replay = await app.api('/api/text', { cookie, method: 'POST', body: textInput });
+      assert.equal(replay.data.code, 'OUTCOME_UNKNOWN'); assert.equal(replay.data.credit.id, text.data.credit.id);
       assert.equal(app.calls.length, 2);
-      await checkBalance(app, cookie, [999989, 11, 0]);
-      await checkLedger(app, cookie, text.data.credit, ['reserve', 'unknown']);
+      await checkBalance(app, cookie, [1000000, 0, 0]);
+      await checkLedger(app, cookie, text.data.credit, ['reserve', 'refund']);
+      const { entries } = (await app.api('/api/admin/access-codes/' + app.quote(cookie).accessCodeId + '/ledger', { cookie: app.adminCookie })).data;
+      assert.deepEqual(entries.filter((entry) => entry.event === 'refund').map((entry) => entry.reason), [UNKNOWN_OUTCOME_REFUND, UNKNOWN_OUTCOME_REFUND]);
     } finally { await app.close(); }
   });
 });
@@ -153,14 +158,14 @@ test('多图部分失败和排队取消按单张结算, 生成中的取消请求
 test('HTTP 200 错误正文和 Responses 终止事件按照实际结果结算', async (t) => {
   const cases = [
     { name: 'Images 明确错误', mode: 'images', body: { error: { code: 'content_policy_violation', message: 'fixture rejected' } }, state: 'refunded' },
-    { name: 'Images 包装的超时', mode: 'images', body: { error: { code: 'upstream_timeout', message: 'upstream timed out' } }, state: 'unknown' },
-    { name: 'Images 结果丢失', mode: 'images', body: { data: [] }, state: 'unknown' },
+    { name: 'Images 包装的超时', mode: 'images', body: { error: { code: 'upstream_timeout', message: 'upstream timed out' } }, state: 'refunded', unknown: true },
+    { name: 'Images 结果丢失', mode: 'images', body: { data: [] }, state: 'refunded', unknown: true },
     { name: 'Responses JSON 失败', mode: 'responses', body: { status: 'failed', error: { code: 'server_error', message: 'fixture failed' } }, state: 'refunded' },
     { name: 'Responses 流式失败', mode: 'responses', events: [{ type: 'response.failed', response: { status: 'failed', error: { code: 'server_error', message: 'fixture failed' } } }], state: 'refunded' },
     { name: 'Responses 流式拒绝', mode: 'responses', events: [{ type: 'error', code: 'invalid_request_error', message: 'fixture rejected' }], state: 'refunded' },
     { name: 'Responses 输出上限终止', mode: 'responses', events: [{ type: 'response.incomplete', response: { status: 'incomplete', incomplete_details: { reason: 'max_output_tokens' } } }], state: 'refunded' },
-    { name: 'Responses 流式超时', mode: 'responses', events: [{ type: 'response.failed', response: { error: { code: 'upstream_timeout', message: 'upstream timed out' } } }], state: 'unknown' },
-    { name: 'Responses 截断流', mode: 'responses', events: [{ type: 'response.created', response: { status: 'in_progress' } }], state: 'unknown' },
+    { name: 'Responses 流式超时', mode: 'responses', events: [{ type: 'response.failed', response: { error: { code: 'upstream_timeout', message: 'upstream timed out' } } }], state: 'refunded', unknown: true },
+    { name: 'Responses 截断流', mode: 'responses', events: [{ type: 'response.created', response: { status: 'in_progress' } }], state: 'refunded', unknown: true },
     { name: 'Responses 完整图片后返回失败事件', mode: 'responses', events: [{ type: 'response.output_item.done', item: { id: 'complete-image', type: 'image_generation_call', status: 'completed', result: PNG_BASE64 } }, { type: 'response.failed', response: { error: { code: 'server_error', message: 'later response failed' } } }], state: 'charged' },
   ];
   for (const scenario of cases) await t.test(scenario.name, async () => {
@@ -174,15 +179,15 @@ test('HTTP 200 错误正文和 Responses 终止事件按照实际结果结算', 
       };
       const input = imageInput(app, cookie, { providerId: 'primary' });
       const job = await completed(app, cookie, (await postImage(app, cookie, input)).data.id);
-      assert.equal(job.credit.state, scenario.state); assert.equal(job.outcomeUnknown, scenario.state === 'unknown');
+      assert.equal(job.credit.state, scenario.state); assert.equal(job.outcomeUnknown, Boolean(scenario.unknown));
       await postImage(app, cookie, input); assert.equal(app.calls.length, 1);
-      await checkBalance(app, cookie, scenario.state === 'refunded' ? [1000000, 0, 0] : scenario.state === 'charged' ? [999990, 0, 10] : [999990, 10, 0]);
-      await checkLedger(app, cookie, job.credit, ['reserve', { refunded: 'refund', charged: 'charge', unknown: 'unknown' }[scenario.state]]);
+      await checkBalance(app, cookie, scenario.state === 'refunded' ? [1000000, 0, 0] : [999990, 0, 10]);
+      await checkLedger(app, cookie, job.credit, ['reserve', { refunded: 'refund', charged: 'charge' }[scenario.state]]);
     } finally { await app.close(); }
   });
 });
 
-test('包装在成功 HTTP 响应中的文字超时不会自动换通道或退款', async () => {
+test('包装在成功 HTTP 响应中的文字超时不会自动换通道, 自动返还且只调用一次', async () => {
   const app = await startHarness();
   try {
     const cookie = await app.login();
@@ -190,7 +195,7 @@ test('包装在成功 HTTP 响应中的文字超时不会自动换通道或退�
     app.controls.respond = (_call, response) => sendJson(response, 200, { error: { code: 'upstream_timeout', message: 'upstream timed out' } });
     const text = await app.api('/api/text', { cookie, method: 'POST', body: app.textInput(cookie) });
     assert.equal(text.data.code, 'OUTCOME_UNKNOWN'); assert.equal(app.calls.length, 1);
-    await checkBalance(app, cookie, [999999, 1, 0]);
+    await checkBalance(app, cookie, [1000000, 0, 0]);
   } finally { await app.close(); }
 });
 
@@ -249,7 +254,7 @@ test('用户输入导致的无效拆解或润色结果不熔断文字通道, 其
   } finally { await app.close(); }
 });
 
-test('JPEG 截断与连接中途断开不扣成功点数, 不重新调用', async (t) => {
+test('JPEG 截断与连接中途断开不扣点, 不重新调用', async (t) => {
   const photo = await readFile(new URL('../public/assets/stitch/studio-01.jpg', import.meta.url));
   for (const mode of ['truncated-jpeg', 'reset']) await t.test(mode, async () => {
     const app = await startHarness();
@@ -260,26 +265,26 @@ test('JPEG 截断与连接中途断开不扣成功点数, 不重新调用', asyn
         return sendJson(response, 200, { data: [{ b64_json: photo.subarray(0, Math.floor(photo.length / 2)).toString('base64') }] });
       };
       const job = await completed(app, cookie, (await postImage(app, cookie, imageInput(app, cookie))).data.id);
-      assert.equal(job.credit.state, 'unknown'); assert.equal(app.calls.length, 1);
-      await checkBalance(app, cookie, [999990, 10, 0]);
+      assert.equal(job.outcomeUnknown, true); assert.equal(job.credit.state, 'refunded'); assert.equal(app.calls.length, 1);
+      await checkBalance(app, cookie, [1000000, 0, 0]);
     } finally { await app.close(); }
   });
 });
 
 test('首镜明确失败或结果未知时, 尚未执行的后续分镜全部返还', async (t) => {
-  for (const state of ['refunded', 'unknown']) await t.test(state, async () => {
+  for (const outcome of ['rejected', 'unknown']) await t.test(outcome, async () => {
     const app = await startHarness();
     try {
       const cookie = await app.login();
-      app.controls.respond = (_call, response) => sendJson(response, state === 'unknown' ? 504 : 400, { error: { message: state === 'unknown' ? 'gateway timeout' : 'content_policy_violation' } });
+      app.controls.respond = (_call, response) => sendJson(response, outcome === 'unknown' ? 504 : 400, { error: { message: outcome === 'unknown' ? 'gateway timeout' : 'content_policy_violation' } });
       const first = imageInput(app, cookie), rest = [1, 2, 3].map(() => imageInput(app, cookie, { referenceJobId: first.requestId }));
       const accepted = await app.api('/api/jobs/batch', { cookie, method: 'POST', body: { jobs: [first, ...rest] } });
       assert.equal(accepted.status, 202);
       const jobs = await Promise.all(accepted.data.jobs.map((job) => completed(app, cookie, job.id)));
-      assert.deepEqual(jobs.map((job) => job.credit.state), [state, 'refunded', 'refunded', 'refunded']);
-      assert.equal(app.calls.length, 1);
-      await checkBalance(app, cookie, state === 'unknown' ? [999990, 10, 0] : [1000000, 0, 0]);
-      for (const job of jobs.slice(1)) await checkLedger(app, cookie, job.credit, ['reserve', 'refund']);
+      assert.deepEqual(jobs.map((job) => job.credit.state), ['refunded', 'refunded', 'refunded', 'refunded']);
+      assert.equal(jobs[0].outcomeUnknown, outcome === 'unknown'); assert.equal(app.calls.length, 1);
+      await checkBalance(app, cookie, [1000000, 0, 0]);
+      for (const job of jobs) await checkLedger(app, cookie, job.credit, ['reserve', 'refund']);
     } finally { await app.close(); }
   });
 });

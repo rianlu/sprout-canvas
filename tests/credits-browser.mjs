@@ -190,24 +190,14 @@ try {
 
   app.controls.respond = (_call, response) => { response.destroy(); return true; };
   const textId = randomUUID(); const current = await auth(a);
-  const unknown = await api(a, '/api/text', 'POST', { requestId: textId, kind: 'prompt', creditQuote: { accessCodeId: current.accessCodeId, userId: current.userId, version: current.prices.version }, input: [{ role: 'user', content: [{ type: 'input_text', text: '测试结果待核实' }] }] });
-  assert.equal(unknown.data.credit.state, 'unknown');
+  const unknown = await api(a, '/api/text', 'POST', { requestId: textId, kind: 'prompt', creditQuote: { accessCodeId: current.accessCodeId, userId: current.userId, version: current.prices.version }, input: [{ role: 'user', content: [{ type: 'input_text', text: '测试结果未知' }] }] });
+  assert.equal(unknown.data.code, 'OUTCOME_UNKNOWN'); assert.equal(unknown.data.credit.state, 'refunded');
   await card(admin, '朋友长期共享').getByRole('button', { name: /^用量明细 / }).click();
   dialog = admin.getByRole('dialog', { name: '用量明细', exact: true });
   assert.equal(await admin.getByRole('dialog', { name: '管理访问码', exact: true }).count(), 0, '用量图标不触发卡片编辑');
-  await screenshot(admin, 'usage-review');
-  const resolutions = []; let loseResolution = true;
-  await admin.route('**/api/admin/credit-operations/*/resolve', async (route) => {
-    resolutions.push(route.request().postDataJSON().requestId);
-    if (!loseResolution) return route.continue();
-    loseResolution = false; assert.equal((await route.fetch()).status(), 200); await route.abort('failed');
-  });
-  await dialog.getByRole('button', { name: '返还点数', exact: true }).click();
-  await dialog.getByRole('alert').waitFor();
-  await dialog.getByRole('button', { name: '返还点数', exact: true }).click();
-  await dialog.getByText('核实结果已保存', { exact: true }).waitFor();
-  await admin.unroute('**/api/admin/credit-operations/*/resolve');
-  assert.equal(resolutions.length, 2); assert.equal(resolutions[0], resolutions[1], 'a retry after a lost response reuses the original request');
+  await dialog.getByText('上游结果未知, 已自动返还占用, 未自动重新调用', { exact: true }).waitFor();
+  assert.equal(await dialog.getByRole('button', { name: /返还点数|扣除点数/ }).count(), 0, '结果未知无需人工核实');
+  await screenshot(admin, 'usage-auto-refund');
   assert.equal((await api(a, `/api/text/${textId}`)).data.credit.state, 'refunded');
   await dialog.getByLabel('关闭访问码弹窗').click();
   const record = (await api(admin, `/api/admin/access-codes/${sharedId}`)).data.accessCode;

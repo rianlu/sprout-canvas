@@ -3,6 +3,7 @@ import { CREDIT_DEFAULTS, CREDIT_LIMITS, creditError, creditInteger, creditReque
 import { requestError } from '../shared/generation-contract.mjs';
 
 export const secretHash = (value) => createHash('sha256').update(String(value)).digest('hex');
+export const UNKNOWN_OUTCOME_REFUND = '上游结果未知, 已自动返还占用, 未自动重新调用';
 const intentHash = (value) => secretHash(JSON.stringify(value));
 const publicCharge = (row) => row && ({ id: row.id, kind: row.kind, points: row.points, state: row.state, priceVersion: row.price_version, unlimited: Boolean(row.unlimited) });
 const DAY_MS = 86400000;
@@ -127,11 +128,10 @@ export function createCreditsStore(db, transaction) {
     ledger(code(row.id), 'reserve', -reserved, { id, kind });
     return operation(id);
   }
-  function settle(id, state, { result = null, error = '', reason = '', manual = false } = {}) {
+  function settle(id, state, { result = null, error = '', reason = '' } = {}) {
     const op = operation(id);
     if (!op) throw new Error('任务缺少灵感点预占记录');
     if (op.state === state || ['charged', 'refunded'].includes(op.state)) return op;
-    if (op.state === 'unknown' && !manual) return op;
     const reserved = op.unlimited ? 0 : op.points;
     if (state === 'charged' || state === 'refunded') {
       if (state === 'charged') {
@@ -140,10 +140,14 @@ export function createCreditsStore(db, transaction) {
         db.prepare('UPDATE access_codes SET reserved=reserved-?,points=points-?,spent=spent+? WHERE id=?').run(reserved, reserved, op.points, op.code_id);
       } else db.prepare('UPDATE access_codes SET reserved=reserved-? WHERE id=?').run(reserved, op.code_id);
       ledger(code(op.code_id), state === 'charged' ? 'charge' : 'refund', state === 'refunded' ? reserved : 0, { ...op, reason });
-    } else if (state === 'unknown') ledger(code(op.code_id), 'unknown', 0, { ...op, reason });
+    }
     db.prepare('UPDATE credit_operations SET state=?,result=?,error=?,updated_at=? WHERE id=?').run(state, result ? JSON.stringify(result) : op.result, error, Date.now(), id);
     return operation(id);
   }
+  // Earlier releases held unknown outcomes for manual review. Release them once so no reservation stays locked.
+  transaction(() => {
+    for (const op of db.prepare("SELECT id, error FROM credit_operations WHERE state='unknown'").all()) settle(op.id, 'refunded', { error: op.error, reason: UNKNOWN_OUTCOME_REFUND });
+  });
   return {
     prices, authorized, checkQuote, operation, byRequest,
     balance(id) { return balance(code(id)); },
@@ -153,7 +157,7 @@ export function createCreditsStore(db, transaction) {
       const accessCodes = { ...db.prepare(`SELECT count(*) AS total, coalesce(sum(enabled),0) AS enabled,
         coalesce(sum(1-enabled),0) AS disabled, coalesce(sum(unlimited),0) AS unlimited
         FROM access_codes WHERE deleted_at=0`).get() };
-      // Charged updated_at is stable across replays, result cleanup and restarts. Manual resolutions count on their settlement date.
+      // Charged updated_at is stable across replays, result cleanup and restarts.
       // Use Beijing dates explicitly so host and Docker timezone settings cannot change the reporting boundaries.
       const dateKey = (timestamp) => new Date(timestamp + REPORTING_OFFSET).toISOString().slice(0, 10);
       const endDate = dateKey(now);
@@ -176,14 +180,7 @@ export function createCreditsStore(db, transaction) {
           return { date, images: row.images, texts: row.texts, points: row.points };
         }),
       };
-      const pendingReview = { ...db.prepare(`SELECT count(*) AS total, count(DISTINCT code_id) AS codeCount,
-        coalesce(sum(CASE WHEN unlimited=0 THEN points ELSE 0 END),0) AS reserved
-        FROM credit_operations WHERE state='unknown'`).get() };
-      pendingReview.codes = db.prepare(`SELECT c.id, c.note, c.tail, count(*) AS count,
-        sum(CASE WHEN o.unlimited=0 THEN o.points ELSE 0 END) AS reserved, min(o.updated_at) AS oldestAt
-        FROM credit_operations o JOIN access_codes c ON c.id=o.code_id WHERE o.state='unknown'
-        GROUP BY c.id ORDER BY oldestAt,c.id LIMIT 6`).all().map((row) => ({ ...row }));
-      return { accessCodes, usage, usagePeriods, activity, pendingReview, prices: prices() };
+      return { accessCodes, usage, usagePeriods, activity, prices: prices() };
     },
     list({ search = '', status = 'all', cursor = 0, limit = 30 } = {}) {
       creditInteger(cursor, '页码', 0, Number.MAX_SAFE_INTEGER); creditInteger(limit, '每页数量', 1, 100);
@@ -260,8 +257,8 @@ export function createCreditsStore(db, transaction) {
       const reason = creditText(input.reason ?? '管理员删除访问码', '删除原因', CREDIT_LIMITS.reason, true);
       return adminAction(input.requestId, `delete:${id}`, { reason, version: input.version }, () => {
         requiredCode(id, input.version);
-        const active = db.prepare("SELECT count(*) AS count FROM credit_operations WHERE code_id=? AND state IN ('running','unknown')").get(id).count;
-        if (active) throw creditError('此访问码还有执行中或待核实任务, 请先停用并在任务结束或核实后删除', 'ACCESS_CODE_HAS_UNSETTLED_TASKS');
+        const active = db.prepare("SELECT count(*) AS count FROM credit_operations WHERE code_id=? AND state='running'").get(id).count;
+        if (active) throw creditError('此访问码还有执行中的任务, 请先停用并在任务结束后删除', 'ACCESS_CODE_HAS_UNSETTLED_TASKS');
         db.prepare('UPDATE access_codes SET enabled=0,deleted_at=?,epoch=epoch+1,version=version+1,updated_at=? WHERE id=?').run(Date.now(), Date.now(), id);
         for (const op of db.prepare("SELECT id FROM credit_operations WHERE code_id=? AND state='reserved'").all(id)) settle(op.id, 'refunded', { reason: '删除访问码, 取消未执行任务' });
         ledger(code(id), 'delete', 0, { reason });
@@ -282,22 +279,6 @@ export function createCreditsStore(db, transaction) {
       requiredCode(id); creditInteger(cursor, '流水游标', 1, Number.MAX_SAFE_INTEGER); creditInteger(limit, '每页数量', 1, 100);
       const rows = db.prepare('SELECT l.*,o.points AS operation_points,o.unlimited AS operation_unlimited FROM credit_ledger l LEFT JOIN credit_operations o ON o.id=l.operation_id WHERE l.code_id=? AND l.id<? ORDER BY l.id DESC LIMIT ?').all(id, cursor, limit + 1);
       return { entries: rows.slice(0, limit).map((row) => ({ id: row.id, operationId: row.operation_id, operationPoints: row.operation_points || undefined, operationUnlimited: row.operation_unlimited === null ? undefined : Boolean(row.operation_unlimited), kind: row.kind, event: row.event, points: row.points, available: row.available, reserved: row.reserved, unlimited: Boolean(row.unlimited), reason: row.reason, createdAt: row.created_at })), nextCursor: rows.length > limit ? rows[limit - 1].id : null };
-    },
-    unresolved(id, { cursor = Number.MAX_SAFE_INTEGER, limit = 30 } = {}) {
-      requiredCode(id);
-      creditInteger(cursor, '任务游标', 1, Number.MAX_SAFE_INTEGER); creditInteger(limit, '每页数量', 1, 100);
-      const rows = db.prepare("SELECT rowid AS cursor,* FROM credit_operations WHERE code_id=? AND state='unknown' AND rowid<? ORDER BY rowid DESC LIMIT ?").all(id, cursor, limit + 1);
-      return { operations: rows.slice(0, limit).map((op) => ({ ...publicCharge(op), requestId: op.request_id, createdAt: op.created_at, updatedAt: op.updated_at })), nextCursor: rows.length > limit ? rows[limit - 1].cursor : null };
-    },
-    resolve(id, input) {
-      if (!['charge', 'refund'].includes(input.decision)) throw requestError('结算选项无效');
-      const reason = creditText(input.reason ?? '', '核实原因', CREDIT_LIMITS.reason)
-        || (input.decision === 'charge' ? '管理员确认已完成, 按原额度规则结算' : '管理员确认未产出结果, 返还占用点数');
-      return adminAction(input.requestId, `resolve:${id}`, { decision: input.decision, reason }, () => {
-        const op = operation(id);
-        if (!op || op.state !== 'unknown') throw creditError('此任务不再需要核实, 请刷新明细', 'VERSION_CONFLICT');
-        return { charge: publicCharge(settle(id, input.decision === 'charge' ? 'charged' : 'refunded', { reason, manual: true })) };
-      });
     },
     reserveBatch(jobs, session) {
       return transaction(() => {
@@ -334,14 +315,15 @@ export function createCreditsStore(db, transaction) {
       if (op && job.status === 'pending' && op.state === 'reserved' && op.request_hash !== job.requestHash) db.prepare('UPDATE credit_operations SET request_hash=? WHERE id=?').run(job.requestHash, job.creditId);
       if (job.status === 'running') settle(job.creditId, 'running');
       else if (job.status === 'succeeded' || job.status === 'expired') settle(job.creditId, 'charged');
-      else if (['failed', 'interrupted', 'canceled'].includes(job.status)) settle(job.creditId, job.outcomeUnknown ? 'unknown' : 'refunded', { error: job.error || '' });
+      // Unknown outcomes are refunded too. The outcomeUnknown flag on the job still blocks automatic resubmission.
+      else if (['failed', 'interrupted', 'canceled'].includes(job.status)) settle(job.creditId, 'refunded', { error: job.error || '', reason: job.outcomeUnknown ? UNKNOWN_OUTCOME_REFUND : '' });
     },
     recoverText() {
       transaction(() => {
         for (const op of db.prepare("SELECT * FROM credit_operations WHERE kind!='image' AND state IN ('reserved','running')").all()) {
           const unknown = op.state === 'running';
-          const error = unknown ? '服务重启前的文字处理结果未知, 占用点数待管理员核实. 不会自动重新调用' : '文字任务在发出前中断, 已返还占用点数';
-          settle(op.id, unknown ? 'unknown' : 'refunded', { error, result: { status: unknown ? 409 : 503, unknown, body: { error, code: unknown ? 'OUTCOME_UNKNOWN' : 'TEXT_FAILED' } } });
+          const error = unknown ? '服务重启前的文字处理结果未知, 本次不扣点, 不会自动重新调用' : '文字任务在发出前中断, 已返还占用点数';
+          settle(op.id, 'refunded', { error, reason: unknown ? UNKNOWN_OUTCOME_REFUND : '', result: { status: unknown ? 409 : 503, unknown, body: { error, code: unknown ? 'OUTCOME_UNKNOWN' : 'TEXT_FAILED' } } });
         }
       });
     },

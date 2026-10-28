@@ -23,7 +23,6 @@ export function AdminPage({ onBack }: { onBack: () => void }) {
   const { theme, toggle } = useTheme();
   const [session, setSession] = useState<{ configured: boolean; authenticated: boolean } | null>(null);
   const [tab, setTab] = useState<AdminTab>(currentTab);
-  const [reviewCodeId, setReviewCodeId] = useState<string | null>(null);
   const [editStyleId, setEditStyleId] = useState<string | null>(null);
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -48,7 +47,6 @@ export function AdminPage({ onBack }: { onBack: () => void }) {
     if (location.hash !== hash) history.pushState(null, '', hash);
     window.scrollTo({ top: 0 });
   }, []);
-  const reviewOpened = useCallback(() => setReviewCodeId(null), []);
   const styleOpened = useCallback(() => setEditStyleId(null), []);
   async function run(action: () => Promise<void>) {
     if (lock.current) return;
@@ -83,8 +81,8 @@ export function AdminPage({ onBack }: { onBack: () => void }) {
       </form>}
     </AuthLayout>}
     {authenticated && error && <p role="alert" className="admin-page !py-3 text-error">{error}</p>}
-    <div hidden={!authenticated || tab !== 'overview'}><AdminDashboard active={authenticated && tab === 'overview'} onNavigate={navigate} onReview={(id) => { setReviewCodeId(id); navigate('access'); }} onEditStyle={(id) => { setEditStyleId(id); navigate('styles'); }} /></div>
+    <div hidden={!authenticated || tab !== 'overview'}><AdminDashboard active={authenticated && tab === 'overview'} onNavigate={navigate} onEditStyle={(id) => { setEditStyleId(id); navigate('styles'); }} /></div>
     <div hidden={!authenticated || tab !== 'styles'}><StyleManager active={authenticated && tab === 'styles'} editStyleId={editStyleId} onStyleOpened={styleOpened} /></div>
-    <div hidden={!authenticated || tab !== 'access'}><AccessCodeManager active={authenticated && tab === 'access'} reviewCodeId={reviewCodeId} onReviewOpened={reviewOpened} /></div>
+    <div hidden={!authenticated || tab !== 'access'}><AccessCodeManager active={authenticated && tab === 'access'} /></div>
   </div>;
 }

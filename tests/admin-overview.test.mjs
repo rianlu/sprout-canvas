@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { createStateStore } from '../server/state-store.mjs';
+import { UNKNOWN_OUTCOME_REFUND } from '../server/credits-store.mjs';
 import { startHarness } from './server-harness.mjs';
 
 test('仪表盘按结算快照汇总, 排除预占和返还, 保留无限额度与删除码历史', () => {
@@ -20,33 +21,26 @@ test('仪表盘按结算快照汇总, 排除预占和返还, 保留无限额度�
   try {
     assert.deepEqual(credits.overview().accessCodes, { total: 0, enabled: 0, disabled: 0, unlimited: 0 });
     assert.equal(credits.overview().usage.points, 0);
-    assert.equal(credits.overview().pendingReview.total, 0);
     const finite = create('朋友共享'), unlimited = create('无限测试', true), disabled = create('暂时停用'), removed = create('已删除');
     credits.update(disabled.id, { requestId: randomUUID(), version: 1, enabled: false });
     for (let i = 0; i < 2; i++) credits.settle(reserve(finite), 'charged');
     credits.settle(reserve(finite, 'prompt'), 'charged');
     credits.settle(reserve(finite, 'series'), 'refunded');
-    const pendingFinite = reserve(finite); credits.settle(pendingFinite, 'unknown');
+    credits.settle(reserve(finite), 'refunded', { reason: UNKNOWN_OUTCOME_REFUND });
     reserve(finite);
     credits.settle(reserve(finite, 'prompt'), 'running');
     credits.settle(reserve(unlimited), 'charged');
-    const pendingUnlimited = reserve(unlimited, 'series'); credits.settle(pendingUnlimited, 'unknown');
+    const delayedUnlimited = reserve(unlimited, 'series'); credits.settle(delayedUnlimited, 'running');
     credits.settle(reserve(removed), 'charged');
     credits.remove(removed.id, { requestId: randomUUID(), version: 1 });
     const overview = credits.overview();
     assert.deepEqual(overview.accessCodes, { total: 3, enabled: 2, disabled: 1, unlimited: 1 });
     assert.deepEqual(overview.usage, { images: 4, texts: 1, imagePoints: 40, textPoints: 1, points: 41, deducted: 31 });
-    assert.equal(overview.pendingReview.total, 2);
-    assert.equal(overview.pendingReview.codeCount, 2);
-    assert.equal(overview.pendingReview.reserved, 10);
-    assert.equal(overview.pendingReview.codes.find((code) => code.id === unlimited.id).reserved, 0);
-    assert.equal(overview.pendingReview.codes.find((code) => code.id === finite.id).tail, finite.tail);
+    assert.equal('pendingReview' in overview, false);
     credits.update(unlimited.id, { requestId: randomUUID(), version: 1, unlimited: false });
     credits.setPrices({ requestId: randomUUID(), version: 1, image: 20, text: 2 });
     assert.deepEqual(credits.overview().usage, overview.usage, '模式和点值变更不重算历史用量');
-    credits.resolve(pendingFinite, { requestId: randomUUID(), decision: 'refund', reason: '确认未生成' });
-    credits.resolve(pendingUnlimited, { requestId: randomUUID(), decision: 'charge', reason: '确认已完成' });
-    assert.deepEqual(credits.overview().pendingReview, { total: 0, codeCount: 0, reserved: 0, codes: [] });
+    credits.settle(delayedUnlimited, 'charged');
     assert.equal(credits.overview().usage.points, 42);
     assert.equal(credits.overview().usage.deducted, 31);
     credits.create({ requestId: randomUUID(), note: '分页记录', initialPoints: 0, count: 35 });
@@ -111,14 +105,14 @@ test('日/月用量与 365 天热力图按北京时间的稳定结算日期统�
   try {
     credits.settle(reserve(), 'charged');
     at('2023-03-03T00:00:00.000+08:00'); credits.settle(reserve('series'), 'charged');
-    at('2024-02-28T12:00:00+08:00'); const unknown = reserve('series'); credits.settle(unknown, 'unknown');
+    at('2024-02-28T12:00:00+08:00'); const delayed = reserve('series'); credits.settle(delayed, 'running');
     at('2024-02-29T23:59:59.999+08:00');
     const leap = reserve(); credits.settle(leap, 'charged');
     const crossesMonth = reserve();
     at('2024-03-01T00:00:00.000+08:00'); credits.settle(crossesMonth, 'charged');
     at('2024-03-01T00:01:00+08:00'); credits.settle(reserve('prompt', unlimited), 'charged');
-    credits.resolve(unknown, { requestId: randomUUID(), decision: 'charge', reason: '按核实结算日期统计' });
-    credits.settle(reserve(), 'refunded'); credits.settle(reserve(), 'unknown');
+    credits.settle(delayed, 'charged');
+    credits.settle(reserve(), 'refunded'); reserve();
     credits.settle(leap, 'charged');
     credits.setPrices({ requestId: randomUUID(), version: 1, image: 25, text: 3 });
     credits.update(unlimited.id, { requestId: randomUUID(), version: 1, unlimited: false });
@@ -137,7 +131,6 @@ test('日/月用量与 365 天热力图按北京时间的稳定结算日期统�
     assert.deepEqual(day('2024-02-29'), { date: '2024-02-29', images: 1, texts: 0, points: 10 });
     assert.deepEqual(day('2024-02-28'), { date: '2024-02-28', images: 0, texts: 0, points: 0 });
     assert.equal(report.activity.days.reduce((sum, item) => sum + item.points, 0), 23);
-    assert.equal(report.pendingReview.total, 1);
     at('2024-03-02T00:00:00+08:00');
     assert.equal(credits.overview().usagePeriods.today.points, 0);
     assert.equal(credits.overview().usagePeriods.month.points, 12);

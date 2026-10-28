@@ -43,7 +43,7 @@ test('无限额度零余额可共享使用, 图片与文字记录用量且不产
   } finally { store.close(); }
 });
 
-test('有限与无限切换保留余额, 在途成功与未知结果按原模式结算, 旧页面需重新确认', () => {
+test('有限与无限切换保留余额, 在途任务按原模式结算, 旧页面需重新确认', () => {
   const store = createStateStore(':memory:');
   try {
     const access = create(store, 40), session = store.identities.login(access.code).session;
@@ -55,8 +55,7 @@ test('有限与无限切换保留余额, 在途成功与未知结果按原模式
     update(store, access.id, { unlimited: false, delta: 5, reason: '切回有限并加点', note: '统一保存' });
     assert.throws(() => store.acceptImageJobs([job(session, true)], session), (error) => error.code === 'CREDIT_MODE_CHANGED');
     store.credits.settle(limited.creditId, 'charged');
-    store.credits.settle(infinite.creditId, 'unknown');
-    store.credits.resolve(infinite.creditId, { requestId: randomUUID(), decision: 'charge', reason: '确认成功' });
+    store.credits.settle(infinite.creditId, 'charged');
     const balance = store.credits.balance(access.id);
     assert.deepEqual([balance.unlimited, balance.available, balance.reserved, balance.spent], [false, 35, 0, 20]);
     assert.equal(store.credits.getCode(access.id).note, '统一保存');
@@ -83,16 +82,14 @@ test('恢复未执行任务保持原额度模式, 无限变有限不补扣, 有�
   } finally { store.close(); }
 });
 
-test('删除立即失效并返还排队预占, 保留账本与幂等记录, 不可删除运行中和待核实任务', () => {
+test('删除立即失效并返还排队预占, 保留账本与幂等记录, 不可删除运行中任务', () => {
   const store = createStateStore(':memory:');
   try {
     const access = create(store, 20), identity = store.identities.login(access.code), session = identity.session;
     const tasks = [job(session), job(session)]; store.acceptImageJobs(tasks, session);
     store.credits.settle(tasks[0].creditId, 'running');
     assert.throws(() => remove(store, access.id), (error) => error.code === 'ACCESS_CODE_HAS_UNSETTLED_TASKS');
-    store.credits.settle(tasks[0].creditId, 'unknown');
-    assert.throws(() => remove(store, access.id), /待核实/);
-    store.credits.resolve(tasks[0].creditId, { requestId: randomUUID(), decision: 'charge', reason: '确认成功' });
+    store.credits.settle(tasks[0].creditId, 'charged');
     assert.throws(() => store.credits.remove(access.id, { requestId: randomUUID(), version: 2 }), /已被更新/);
     const input = { requestId: randomUUID(), version: 1 };
     store.credits.remove(access.id, input); assert.equal(store.credits.remove(access.id, input).replayed, true);
@@ -106,8 +103,8 @@ test('删除立即失效并返还排队预占, 保留账本与幂等记录, 不�
     assert.throws(() => store.credits.getCode(access.id), /已删除/);
     assert.throws(() => store.credits.update(access.id, { requestId: randomUUID(), version: 2, enabled: true }), /已删除/);
     const infinite = create(store, 0, true), free = store.identities.login(infinite.code).session;
-    const unknown = job(free, true); store.acceptImageJobs([unknown], free); store.credits.settle(unknown.creditId, 'unknown');
-    assert.throws(() => remove(store, infinite.id), /待核实/);
+    const running = job(free, true); store.acceptImageJobs([running], free); store.credits.settle(running.creditId, 'running');
+    assert.throws(() => remove(store, infinite.id), /执行中/);
   } finally { store.close(); }
 });
 
@@ -162,10 +159,8 @@ test('无限额度 API 支持零余额图片和文字, 切回有限后旧报价�
     assert.deepEqual([balance.available, balance.reserved, balance.spent], [0, 0, 11]);
     app.controls.respond = (_call, response) => { response.destroy(); return true; };
     const unknown = await app.api('/api/text', { cookie, method: 'POST', body: app.textInput(cookie) });
-    assert.equal(unknown.data.credit.state, 'unknown');
-    assert.match(unknown.data.error, /无限额度, 未占用或扣减点数/);
-    assert.equal((await admin(app, `access-codes/${access.id}`, { requestId: randomUUID(), version: 1 }, 'DELETE')).data.code, 'ACCESS_CODE_HAS_UNSETTLED_TASKS');
-    await admin(app, `credit-operations/${unknown.data.credit.id}/resolve`, { requestId: randomUUID(), decision: 'refund', reason: '无限任务确认失败' });
+    assert.equal(unknown.data.code, 'OUTCOME_UNKNOWN'); assert.equal(unknown.data.credit.state, 'refunded');
+    assert.match(unknown.data.error, /无限额度, 未扣减点数/);
     app.controls.respond = undefined;
     assert.equal((await admin(app, `access-codes/${access.id}`, { requestId: randomUUID(), version: 1, unlimited: false, delta: 10, reason: '限额' }, 'PATCH')).status, 200);
     const before = app.calls.length;

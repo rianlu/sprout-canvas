@@ -584,24 +584,29 @@ try {
     assert.ok(latest.recipe.prompt.includes('小熊站在彩虹桥上'));
   });
 
-  await scenario('结果未知时明确确认重新计费, 取消后不提交新任务', async (page) => {
+  await scenario('结果未知自动返还且不自动重发, 批量重绘和调整重试直接提交新任务', async (page) => {
+    const dialogs = [];
+    page.on('dialog', (dialog) => { dialogs.push(dialog.message()); void dialog.dismiss(); });
     await completePlan(page); rejectImage = 'unknown';
-    await cards(page).nth(1).getByTitle('重新绘制本镜', { exact: true }).click();
-    await until(async () => (await jobs(page)).some((job) => job.outcomeUnknown), 'unknown paid result');
-    await cards(page).nth(1).getByRole('button', { name: /^重新尝试/ }).waitFor();
-    await closeQueue(page);
-    const before = imageCalls(); let notice;
-    page.once('dialog', async (dialog) => { notice = dialog.message(); await dialog.dismiss(); });
+    const unknown = async (sceneIndex) => {
+      await cards(page).nth(sceneIndex).getByTitle('重新绘制本镜', { exact: true }).click();
+      const job = await until(async () => (await jobs(page)).find((value) => value.outcomeUnknown && value.clientContext.sceneIndex === sceneIndex && !value.supersededBy), 'unknown result');
+      assert.equal(job.credit.state, 'refunded');
+      await cards(page).nth(sceneIndex).getByRole('button', { name: /^重新尝试/ }).waitFor();
+      await closeQueue(page);
+    };
+    await unknown(1);
+    const before = imageCalls(); rejectImage = false;
+    assert.equal(imageCalls(), before, 'unknown outcome is not resent automatically');
     await page.getByRole('button', { name: /^批量重新绘制/ }).click();
-    assert.match(notice, /结果未知/);
-    assert.equal(imageCalls(), before);
-    await cards(page).nth(1).getByRole('button', { name: '调整并重试', exact: true }).click();
-    const editor = page.getByRole('dialog', { name: '调整第 2 镜', exact: true });
-    page.once('dialog', (dialog) => dialog.dismiss());
+    await settled(page, 8); assert.equal(imageCalls(), before + 4);
+    rejectImage = 'unknown'; await unknown(2); rejectImage = false;
+    await cards(page).nth(2).getByRole('button', { name: '调整并重试', exact: true }).click();
+    const editor = page.getByRole('dialog', { name: '调整第 3 镜', exact: true });
     await editor.getByRole('button', { name: /^保存并重新生成/ }).click();
-    assert.ok(await editor.isVisible());
-    assert.equal(imageCalls(), before);
-    await editor.getByLabel('关闭本镜设置').click();
+    await editor.waitFor({ state: 'hidden' });
+    await settled(page, 9); assert.equal(imageCalls(), before + 6);
+    assert.deepEqual(dialogs, [], '结果未知后重新生成不再弹出确认');
   });
   await writeFile(path.join(output, 'report.json'), JSON.stringify({ checks, failures, errors }, null, 2));
   assert.equal(failures.length, 0, failures.map((failure) => failure.name).join('; '));

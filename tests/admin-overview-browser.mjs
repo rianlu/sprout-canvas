@@ -86,7 +86,8 @@ try {
   await page.getByRole('region', { name: '后台概览统计' }).waitFor();
   assert.equal(await nav('仪表盘').getAttribute('aria-pressed'), 'true');
   assert.ok((await page.getByRole('region', { name: '后台概览统计' }).innerText()).includes('36'));
-  await page.getByText('暂无待核实任务', { exact: true }).waitFor();
+  await page.getByRole('region', { name: '创作使用概览' }).getByText('实际扣减 0 点 · 无限额度用量 0 点', { exact: true }).waitFor();
+  assert.equal(await page.getByText(/待核实/).count(), 0);
   checks.push('默认进入仪表盘, 读取失败可重试, 空用量显示真实零值');
 
   const create = async (note, unlimited = false) => (await app.api('/api/admin/access-codes', { cookie: app.adminCookie, method: 'POST', body: { requestId: randomUUID(), note, initialPoints: unlimited ? 0 : 100, unlimited } })).data.codes[0];
@@ -99,12 +100,12 @@ try {
     if (!call.path.includes('/images/')) return false;
     res.writeHead(504, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'Gateway timeout' })); return true;
   };
-  assert.equal((await submitImage(finiteCookie)).credit.state, 'unknown');
+  const uncertain = await submitImage(finiteCookie);
+  assert.equal(uncertain.outcomeUnknown, true); assert.equal(uncertain.credit.state, 'refunded');
   const data = await overview();
-  assert.equal(data.usage.points, 12); assert.equal(data.usage.deducted, 11); assert.equal(data.pendingReview.total, 1);
+  assert.equal(data.usage.points, 12); assert.equal(data.usage.deducted, 11); assert.equal('pendingReview' in data, false);
   await page.getByRole('button', { name: '刷新概览', exact: true }).click();
-  await page.getByRole('button', { name: '核实 朋友共享' }).waitFor();
-  assert.ok((await page.getByRole('region', { name: '创作使用概览' }).innerText()).includes('实际扣减 11 点'));
+  await page.getByRole('region', { name: '创作使用概览' }).getByText('实际扣减 11 点 · 无限额度用量 1 点', { exact: true }).waitFor();
   await page.waitForFunction(() => [...document.querySelectorAll('main:where(:not([hidden])) img')].filter((img) => img.getClientRects().length).every((img) => img.complete && img.naturalWidth > 0));
   for (const [width, height] of [[1440, 1000], [1024, 900], [768, 1024], [390, 844], [320, 740]]) {
     await page.setViewportSize({ width, height });
@@ -185,20 +186,19 @@ try {
   await nav('仪表盘').click();
   checks.push('最近风格直达对应编辑表单, 管理页保留真实内容与操作');
 
-  await page.getByRole('button', { name: '核实 朋友共享' }).click();
+  await nav('访问码管理').click();
+  await page.getByRole('button', { name: '用量明细 朋友共享', exact: true }).click();
   const dialog = page.getByRole('dialog', { name: '用量明细', exact: true });
-  await dialog.getByRole('heading', { name: '待核实任务', exact: true }).waitFor();
-  assert.equal(await page.getByRole('dialog', { name: '管理访问码', exact: true }).count(), 0);
+  await dialog.getByText('上游结果未知, 已自动返还占用, 未自动重新调用', { exact: true }).waitFor();
   assert.ok((await dialog.innerText()).includes(finite.tail));
-  await screenshot('dashboard-review-dialog');
-  await dialog.getByRole('button', { name: '返还点数', exact: true }).click();
-  await dialog.getByRole('status').filter({ hasText: '核实结果已保存' }).waitFor();
+  assert.equal(await dialog.getByRole('button', { name: /返还点数|扣除点数/ }).count(), 0);
+  await screenshot('access-usage-auto-refund');
   await dialog.getByRole('button', { name: '关闭访问码弹窗' }).click();
   await nav('仪表盘').click();
-  await page.getByText('暂无待核实任务', { exact: true }).waitFor();
+  await page.getByRole('region', { name: '后台概览统计' }).waitFor();
+  assert.equal(await page.getByText(/待核实/).count(), 0);
   assert.equal((await overview()).usage.deducted, 11);
-  assert.equal((await overview()).pendingReview.reserved, 0);
-  checks.push('仪表盘直达对应访问码的核实弹窗, 处理后统计刷新且不重复扣点');
+  checks.push('结果未知自动返还, 流水记录原因, 后台无需人工核实且不重复扣点');
 
   await page.route('**/api/admin/overview', (route) => route.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ error: '刷新暂时失败' }) }));
   await page.getByRole('button', { name: '刷新概览', exact: true }).click();

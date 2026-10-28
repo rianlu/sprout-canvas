@@ -39,7 +39,7 @@ async function drainMicrotasks(check) {
   throw new Error('Work did not complete');
 }
 
-test('只有确定尚未建立连接的错误可以当作未执行, 混合错误保持待核实', () => {
+test('只有确定尚未建立连接的错误可以当作未执行, 混合错误按结果未知处理', () => {
   for (const code of ['ECONNREFUSED', 'ENOTFOUND', 'EAI_AGAIN', 'ENETUNREACH', 'EHOSTUNREACH', 'UND_ERR_CONNECT_TIMEOUT']) {
     assert.equal(isDefiniteConnectionFailure(new TypeError('fetch failed', { cause: Object.assign(new Error(), { code }) })), true, code);
   }
@@ -111,17 +111,17 @@ test('优雅关闭等待图片结算写入恢复, 不重复调用生成接口', 
   assert.equal(f.calls.length, 1);
 });
 
-test('图片请求本机等待超时只保留预占, 不自动调用备用通道', async (t) => {
+test('图片请求本机等待超时自动返还, 不自动调用备用通道', async (t) => {
   const f = await fixture(t, { timeout: true });
   const accepted = f.start();
   const job = await until(() => {
     const value = f.queue.getJobStatus(accepted.id, f.session.userId);
     return value.status === 'failed' && value;
   }, 'image timeout');
-  assert.equal(job.outcomeUnknown, true); assert.equal(job.credit.state, 'unknown');
+  assert.equal(job.outcomeUnknown, true); assert.equal(job.credit.state, 'refunded');
   assert.equal(f.calls.length, 1);
   const balance = f.store.credits.balance(f.access.id);
-  assert.deepEqual([balance.available, balance.reserved, balance.spent], [90, 10, 0]);
+  assert.deepEqual([balance.available, balance.reserved, balance.spent], [100, 0, 0]);
 });
 
 const rejection = (message) => new Response(JSON.stringify({ error: { message } }), { status: 400, headers: { 'Content-Type': 'application/json' } });

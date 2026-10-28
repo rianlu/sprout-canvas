@@ -46,7 +46,7 @@ function statusLabel(job: QueueJob, open: boolean): {
 } {
   if (job.supersededBy) return { title: jobTitle(job), meta: '已重新提交', icon: 'failed' };
   if (job.status === 'failed') return { title: jobTitle(job), meta: '生成失败 · 可换服务商重试', icon: 'failed' };
-  if (job.status === 'interrupted') return { title: jobTitle(job), meta: job.outcomeUnknown ? '结果未知 · 需手动处理' : '等待恢复排队', icon: 'failed' };
+  if (job.status === 'interrupted') return { title: jobTitle(job), meta: job.outcomeUnknown ? '结果未知 · 未自动重发' : '等待恢复排队', icon: 'failed' };
   if (job.status === 'expired') return { title: jobTitle(job), meta: '临时结果已过期', icon: 'failed' };
   if (job.status === 'submitting') return { title: jobTitle(job), meta: '正在提交 · 等待确认', icon: 'running' };
   if (job.status === 'unsubmitted') return { title: jobTitle(job), meta: '提交待确认 · 可继续提交', icon: 'queued' };

@@ -11,7 +11,6 @@ export interface AdminOverview {
   usage: AdminUsage;
   usagePeriods: { today: AdminUsage; month: AdminUsage };
   activity: { timeZone: string; startDate: string; endDate: string; days: AdminActivityDay[] };
-  pendingReview: { total: number; codeCount: number; reserved: number; codes: { id: string; note: string; tail: string; count: number; reserved: number; oldestAt: number }[] };
   prices: CreditPrices;
 }
 

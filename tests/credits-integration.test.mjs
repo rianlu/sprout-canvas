@@ -154,7 +154,7 @@ test('调价须确认, 重置或停用取消排队且保留在途领取, 重放�
   } finally { release?.(); await app.close(); }
 });
 
-test('文字重复请求和丢响应只调用一次, 未知结果不切换通道且可以核实结算', async () => {
+test('文字重复请求和丢响应只调用一次, 未知结果不切换通道且自动返还', async () => {
   const app = await startHarness(); let release;
   try {
     const access = await code(app, 10); const a = await app.login('a', access.code), b = await app.login('b', access.code);
@@ -179,14 +179,12 @@ test('文字重复请求和丢响应只调用一次, 未知结果不切换通道
     await writeFile(path.join(app.directory, 'config/local.config.json'), JSON.stringify(app.config));
     app.controls.respond = (_call, response) => { response.destroy(); return true; };
     const unknownBody = app.textInput(a); const unknown = await app.api('/api/text', { cookie: a, method: 'POST', body: unknownBody });
-    assert.equal(unknown.data.code, 'OUTCOME_UNKNOWN'); assert.equal(unknown.data.credit.state, 'unknown');
+    assert.equal(unknown.data.code, 'OUTCOME_UNKNOWN'); assert.equal(unknown.data.credit.state, 'refunded');
     assert.equal(app.calls.length, 2, 'unknown outcome must not switch to the backup');
-    await balance(app, a, [8, 1, 1]);
-    const resolve = { requestId: randomUUID(), decision: 'refund', reason: '上游确认未产出' };
-    assert.equal((await admin(app, `credit-operations/${unknown.data.credit.id}/resolve`, resolve)).status, 200);
-    assert.equal((await admin(app, `credit-operations/${unknown.data.credit.id}/resolve`, resolve)).data.replayed, true);
+    await balance(app, a, [9, 0, 1]);
     const replay = await app.api(`/api/text/${unknownBody.requestId}`, { cookie: a });
-    assert.equal(replay.data.credit.state, 'refunded'); assert.match(replay.data.error, /已由管理员返还/);
+    assert.equal(replay.data.code, 'OUTCOME_UNKNOWN'); assert.match(replay.data.error, /本次不扣点/);
+    assert.notEqual((await admin(app, `credit-operations/${unknown.data.credit.id}/resolve`, { requestId: randomUUID(), decision: 'charge' })).status, 200, 'manual settlement is no longer exposed');
     await balance(app, a, [9, 0, 1]); assert.equal(app.calls.length, 2);
     assert.doesNotMatch(app.logs(), new RegExp(access.code));
   } finally { release?.(); await app.close(); }
@@ -230,13 +228,11 @@ test('重启时区分已发送与未发送, 账本不受任务清理影响, 旧�
     await app.stop('SIGKILL'); release(); app.controls.respond = null; await app.start();
     const first = (await app.api(`/api/jobs/${accepted.data.jobs[0].id}`, { cookie: a })).data;
     const second = (await app.api(`/api/jobs/${accepted.data.jobs[1].id}`, { cookie: a })).data;
-    assert.equal(first.credit.state, 'unknown'); assert.equal(second.credit.state, 'refunded');
-    await balance(app, a, [999990, 10, 0]);
+    assert.equal(first.outcomeUnknown, true); assert.equal(first.credit.state, 'refunded'); assert.equal(second.credit.state, 'refunded');
+    await balance(app, a, [1000000, 0, 0]);
     assert.equal((await app.api(`/api/jobs/${first.id}/resume`, { cookie: a, method: 'POST', body: values[0] })).status, 409);
-    const resolved = await admin(app, `credit-operations/${first.credit.id}/resolve`, { requestId: randomUUID(), decision: 'charge', reason: '确认上游已经完成' });
-    assert.equal(resolved.status, 200);
     await app.api(`/api/jobs/${second.id}/resume`, { cookie: a, method: 'POST', body: values[1] });
-    await finished(app, a, second.id); await balance(app, a, [999980, 0, 20]);
+    await finished(app, a, second.id); await balance(app, a, [999990, 0, 10]);
     await app.stop();
     db = new DatabaseSync(path.join(app.directory, 'data/runtime.sqlite'));
     db.prepare('DELETE FROM jobs WHERE id=?').run(first.id);
@@ -245,12 +241,12 @@ test('重启时区分已发送与未发送, 账本不受任务清理影响, 旧�
     db.prepare('INSERT INTO jobs VALUES (?,?,?,?,?)').run(legacyId, legacyUser, null, JSON.stringify({ id: legacyId, userId: legacyUser, status: 'succeeded', acknowledgedAt: Date.now(), queuedAt: Date.now(), finishedAt: Date.now(), clientContext: { kind: 'single', placeholderId: 'legacy-picture' } }), Date.now());
     db.close(); db = null; await app.start();
     assert.equal((await submit(app, a, values[0])).data.code, 'REQUEST_ALREADY_ACCEPTED');
-    assert.equal(imageCalls(app).length, 2); await balance(app, a, [999980, 0, 20]);
+    assert.equal(imageCalls(app).length, 2); await balance(app, a, [999990, 0, 10]);
     const migrated = await app.api('/api/auth/login', { method: 'POST', cookie: `img_auth_max=${legacyToken}`, body: { code: app.accessCode } });
     assert.equal(migrated.status, 200); assert.equal(migrated.data.userId, legacyUser);
     const legacy = await app.api(`/api/jobs/${legacyId}`, { cookie: app.responseCookie(migrated) });
     assert.equal(legacy.status, 200); assert.equal(legacy.data.credit, null);
-    await balance(app, a, [999980, 0, 20]);
+    await balance(app, a, [999990, 0, 10]);
   } finally { release?.(); db?.close(); await app.close(); }
 });
 
@@ -288,7 +284,7 @@ test('零余额免费操作, 参数与登录限流, 点数调整幂等以及账�
   } finally { await app.close(); }
 });
 
-test('文字真实超时与在途重启保留预占, 不重发请求或自动切换备用通道', { timeout: 80000 }, async () => {
+test('文字真实超时与在途重启自动返还, 不重发请求或自动切换备用通道', { timeout: 80000 }, async () => {
   const app = await startHarness();
   try {
     const a = await app.login();
@@ -298,18 +294,16 @@ test('文字真实超时与在途重启保留预占, 不重发请求或自动切
     const timeoutBody = app.textInput(a);
     const timedOut = await app.api('/api/text', { cookie: a, method: 'POST', body: timeoutBody });
     assert.equal(timedOut.status, 409); assert.equal(timedOut.data.code, 'OUTCOME_UNKNOWN');
-    assert.equal(timedOut.data.credit.state, 'unknown'); assert.equal(app.calls.length, 1);
+    assert.equal(timedOut.data.credit.state, 'refunded'); assert.equal(app.calls.length, 1);
     assert.equal(timedOut.data.attempts[0].timeout, true);
     const restartBody = app.textInput(a);
     const interrupted = app.api('/api/text', { cookie: a, method: 'POST', body: restartBody }).catch(() => null);
     await until(() => app.calls.length === 2, 'in-flight text before restart');
     await app.stop('SIGKILL'); await interrupted; await app.start();
     const restored = await app.api(`/api/text/${restartBody.requestId}`, { cookie: a });
-    assert.equal(restored.data.code, 'OUTCOME_UNKNOWN'); assert.equal(restored.data.credit.state, 'unknown');
+    assert.equal(restored.data.code, 'OUTCOME_UNKNOWN'); assert.equal(restored.data.credit.state, 'refunded');
+    assert.match(restored.data.error, /本次不扣点/);
     assert.equal((await app.api('/api/text', { cookie: a, method: 'POST', body: restartBody })).data.credit.id, restored.data.credit.id);
-    await balance(app, a, [999998, 2, 0]); assert.equal(app.calls.length, 2);
-    await admin(app, `credit-operations/${restored.data.credit.id}/resolve`, { requestId: randomUUID(), decision: 'refund', reason: '重启前上游确认失败' });
-    assert.match((await app.api(`/api/text/${restartBody.requestId}`, { cookie: a })).data.error, /已由管理员返还/);
-    await balance(app, a, [999999, 1, 0]);
+    await balance(app, a, [1000000, 0, 0]); assert.equal(app.calls.length, 2);
   } finally { await app.close(); }
 });

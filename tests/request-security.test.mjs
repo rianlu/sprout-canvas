@@ -233,7 +233,7 @@ test('text requests enforce shared-user and global concurrency and release faile
     assert.equal(failure.status, 502); assert.equal(failure.data.credit.state, 'refunded');
     app.controls.respond = async (_call, res) => { res.writeHead(500); res.end('fixture gateway failure'); return true; };
     const unknown = await text(first);
-    assert.equal(unknown.status, 409); assert.equal(unknown.data.credit.state, 'unknown');
+    assert.equal(unknown.status, 409); assert.equal(unknown.data.code, 'OUTCOME_UNKNOWN'); assert.equal(unknown.data.credit.state, 'refunded');
     app.controls.respond = async (_call, res) => { res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ choices: [{ message: { content: 'recovered' } }] })); return true; };
     assert.equal((await text(first)).status, 200);
   } finally { release?.(); await app.close(); }

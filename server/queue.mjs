@@ -91,7 +91,7 @@ export function initializePersistence(store) {
       job.interruptionReason = job.status === 'running' ? 'running-restart' : 'pending-restart';
       job.status = 'interrupted';
       job.finishedAt = Date.now();
-      job.error = job.outcomeUnknown ? '服务重启前已开始请求, 上游结果未知. 重新生成可能重复计费.' : '服务重启前尚未执行, 可从此浏览器恢复排队.';
+      job.error = job.outcomeUnknown ? '服务重启前已开始请求, 上游结果未知, 本次不扣点. 未自动重新调用, 可手动重新生成.' : '服务重启前尚未执行, 可从此浏览器恢复排队.';
       persist(job);
     } else if (job.status === 'succeeded' && !job.acknowledgedAt) {
       job.status = 'expired';

@@ -2,8 +2,8 @@ import { useCallback, useEffect, useId, useRef, useState, type FormEvent, type R
 import { StitchIcon } from '../components/ui/StitchIcon';
 import { AdminEmpty, AdminHeading, AdminLoading, adminButton, adminField, adminPanel } from '../components/admin/AdminUI';
 import { useFocusTrap } from '../hooks/useFocusTrap';
-import { CREDIT_LIMITS, type AccessCodeRecord, type CreditLedgerEntry, type CreditOperation, type CreditPrices } from '../../shared/credits-contract.mjs';
-import { listAccessCodes, createAccessCodes, updateAccessCode, deleteAccessCode, resetAccessCode, accessCodeLedger, unresolvedCredits, resolveCredits, getCreditPrices, saveCreditPrices, getAccessCode } from '../lib/api/credits';
+import { CREDIT_LIMITS, type AccessCodeRecord, type CreditLedgerEntry, type CreditPrices } from '../../shared/credits-contract.mjs';
+import { listAccessCodes, createAccessCodes, updateAccessCode, deleteAccessCode, resetAccessCode, accessCodeLedger, getCreditPrices, saveCreditPrices, getAccessCode } from '../lib/api/credits';
 import { randomId } from '../lib/random/id';
 import { compactPoints } from '../lib/credits';
 import { ApiError } from '../lib/api/client';
@@ -12,11 +12,12 @@ const button = adminButton;
 const field = adminField;
 const time = (value: number) => value ? new Date(value).toLocaleString('zh-CN', { hour12: false }) : '尚未使用';
 const kinds: Record<string, string> = { image: '图片生成', prompt: '提示词优化', series: '分镜拆解', admin: '管理操作' };
-const events: Record<string, string> = { create: '初始额度', reserve: '预占', charge: '扣除', refund: '返还', adjust: '调整', unknown: '待核实', enable: '启用', disable: '停用', reset: '重置码', quota: '额度模式', delete: '删除' };
-const unlimitedEvents: Record<string, string> = { reserve: '已受理', charge: '已完成', refund: '未扣点', unknown: '待核实' };
+// `unknown` only labels ledger rows written before unknown outcomes were refunded automatically.
+const events: Record<string, string> = { create: '初始额度', reserve: '预占', charge: '扣除', refund: '返还', adjust: '调整', unknown: '结果未知', enable: '启用', disable: '停用', reset: '重置码', quota: '额度模式', delete: '删除' };
+const unlimitedEvents: Record<string, string> = { reserve: '已受理', charge: '已完成', refund: '未扣点', unknown: '结果未知' };
 type Creation = { requestId: string; note: string; count: number; points: number; unlimited: boolean };
 type Manager = { record: AccessCodeRecord; requestId: string; note: string; enabled: boolean; unlimited: boolean; delta: number; reason: string };
-type Usage = { entries: CreditLedgerEntry[]; operations: CreditOperation[]; nextCursor: number | null; unresolvedCursor: number | null };
+type Usage = { entries: CreditLedgerEntry[]; nextCursor: number | null };
 const editRecord = (record: AccessCodeRecord): Manager => ({ record, requestId: randomId(), note: record.note, enabled: record.enabled, unlimited: record.unlimited, delta: 0, reason: '' });
 
 function Dialog({ title, busy, onClose, children, icon = 'lock' }: { title: string; busy: boolean; onClose: () => void; children: ReactNode; icon?: string }) {
@@ -54,7 +55,7 @@ function Balance({ record }: { record: AccessCodeRecord }) {
   return <dl className="grid grid-cols-3 gap-2">{[['可用灵感点', record.unlimited ? '无限' : compactPoints(record.available), record.available], [record.unlimited ? '原额度占用' : '占用', compactPoints(record.reserved), record.reserved], ['累计用量', compactPoints(record.spent), record.spent]].map(([label, value, exact]) => <div key={label}><dt className="text-on-surface-variant font-meta-sm text-meta-sm">{label}</dt><dd title={value === '无限' ? '无限额度' : `${exact.toLocaleString()} 点`} className="mt-1 font-headline-sm text-headline-sm tabular-nums">{value}</dd></div>)}</dl>;
 }
 
-export function AccessCodeManager({ active, reviewCodeId, onReviewOpened }: { active: boolean; reviewCodeId?: string | null; onReviewOpened?: () => void }) {
+export function AccessCodeManager({ active }: { active: boolean }) {
   const [codes, setCodes] = useState<AccessCodeRecord[]>([]);
   const [total, setTotal] = useState(0); const [nextCursor, setNextCursor] = useState<number | null>(null);
   const [search, setSearch] = useState(''); const [status, setStatus] = useState('all');
@@ -69,7 +70,7 @@ export function AccessCodeManager({ active, reviewCodeId, onReviewOpened }: { ac
   const [danger, setDanger] = useState<{ kind: 'reset' | 'delete'; requestId: string } | null>(null);
   const [prices, setPrices] = useState<CreditPrices | null>(null); const [priceError, setPriceError] = useState('');
   const [priceRequestId, setPriceRequestId] = useState(randomId);
-  const lock = useRef(false); const sequence = useRef(0); const settlementRequests = useRef(new Map<string, string>());
+  const lock = useRef(false); const sequence = useRef(0);
   const refresh = useCallback(async () => {
     const version = ++sequence.current; setLoading(true);
     try { const result = await listAccessCodes(search, status); if (version === sequence.current) { setCodes(result.codes); setTotal(result.total); setNextCursor(result.nextCursor); } }
@@ -116,36 +117,15 @@ export function AccessCodeManager({ active, reviewCodeId, onReviewOpened }: { ac
     setManager(null); setUsageRecord(record); setUsage(null);
     void run(() => loadUsage(record.id));
   }
-  function settleUnknown(id: string, decision: 'charge' | 'refund') {
-    const codeId = usageRecord?.id;
-    if (!codeId) return;
-    // A retry after a lost response must replay the same decision, not look like a second settlement.
-    const key = `${id}:${decision}`;
-    const requestId = settlementRequests.current.get(key) || randomId();
-    settlementRequests.current.set(key, requestId);
-    void run(async () => {
-      await resolveCredits(id, { requestId, decision });
-      settlementRequests.current.delete(key);
-      await loadUsage(codeId);
-      await refresh();
-      setMessage('核实结果已保存');
-    });
-  }
   async function loadUsage(id: string) {
-    const results = await Promise.allSettled([accessCodeLedger(id), unresolvedCredits(id), getAccessCode(id)]);
+    const results = await Promise.allSettled([accessCodeLedger(id), getAccessCode(id)]);
     const failure = results.find((result) => result.status === 'rejected'); if (failure?.status === 'rejected') throw failure.reason;
-    const [ledger, pending, latest] = results;
-    if (ledger.status !== 'fulfilled' || pending.status !== 'fulfilled' || latest.status !== 'fulfilled') return;
-    setUsage({ entries: ledger.value.entries, operations: pending.value.operations, nextCursor: ledger.value.nextCursor, unresolvedCursor: pending.value.nextCursor });
+    const [ledger, latest] = results;
+    if (ledger.status !== 'fulfilled' || latest.status !== 'fulfilled') return;
+    setUsage({ entries: ledger.value.entries, nextCursor: ledger.value.nextCursor });
     setUsageRecord(latest.value.accessCode);
     setCodes((old) => old.map((record) => record.id === id ? latest.value.accessCode : record));
   }
-  useEffect(() => {
-    if (!active || !reviewCodeId || busy || lock.current) return;
-    onReviewOpened?.();
-    setCreation(null); setManager(null); setSecrets(null); setUsageRecord(null); setUsage(null); setDanger(null);
-    void run(() => loadUsage(reviewCodeId));
-  }, [active, reviewCodeId, onReviewOpened, busy]);
   function saveCreation(event: FormEvent) {
     event.preventDefault(); if (!creation) return; const value = creation;
     void run(async () => {
@@ -217,7 +197,7 @@ export function AccessCodeManager({ active, reviewCodeId, onReviewOpened }: { ac
         <section className="pt-4 border-t border-outline-variant/30 space-y-3" aria-label="访问码操作">
           {!danger ? <div className="flex flex-wrap gap-3"><button type="button" disabled={busy || managerStale} className={`${button} bg-surface-container text-on-surface`} onClick={() => { setError(''); setMessage(''); setDanger({ kind: 'reset', requestId: randomId() }); }}><StitchIcon name="refresh" size={17} />重置访问码</button><button type="button" disabled={busy || managerStale} className={`${button} bg-error-container/60 text-on-error-container`} onClick={() => { setError(''); setMessage(''); setDanger({ kind: 'delete', requestId: randomId() }); }}><StitchIcon name="delete_outline" size={17} />删除访问码</button></div> : <form onSubmit={confirmDanger}><fieldset disabled={busy} className="p-4 rounded-xl bg-surface-container-low space-y-3">
             <h3 className="font-body-md text-body-md font-medium">{danger.kind === 'reset' ? '确认重置访问码' : '确认删除访问码'}</h3>
-            <p className="font-body-sm text-body-sm text-on-surface-variant">{danger.kind === 'reset' ? '旧码将失效, 原额度与流水保留. 未执行的任务会取消, 已开始的任务正常收尾.' : '删除后旧码立即失效, 从列表移除且无法恢复. 未执行任务会取消, 历史流水保留用于核对. 执行中或待核实的任务需先处理完毕.'}</p>
+            <p className="font-body-sm text-body-sm text-on-surface-variant">{danger.kind === 'reset' ? '旧码将失效, 原额度与流水保留. 未执行的任务会取消, 已开始的任务正常收尾.' : '删除后旧码立即失效, 从列表移除且无法恢复. 未执行任务会取消, 历史流水保留用于核对. 执行中的任务需先结束.'}</p>
             <p className="font-meta-sm text-meta-sm text-outline">此操作不会保存上方尚未提交的设置.</p>
             <div className="flex flex-wrap justify-end gap-2"><button type="button" className={`${button} bg-surface-container`} onClick={() => setDanger(null)}>取消操作</button><button type="submit" disabled={managerStale} className={`${button} ${danger.kind === 'delete' ? 'bg-error text-on-error' : 'bg-primary text-on-primary'}`}>{danger.kind === 'reset' ? '确认重置并显示新码' : '确认删除'}</button></div>
           </fieldset></form>}
@@ -231,17 +211,6 @@ export function AccessCodeManager({ active, reviewCodeId, onReviewOpened }: { ac
         <div className="flex flex-wrap items-center justify-between gap-2"><p className="font-meta-sm text-meta-sm text-on-surface-variant">累计用量包含无限额度任务的等值点数, 不代表余额扣减.</p><button type="button" disabled={busy} className={`${button} bg-surface-container`} onClick={() => void run(() => loadUsage(usageRecord.id))}><StitchIcon name="refresh" size={16} />刷新明细</button></div>
         {!usage && <p role="status" className="font-body-sm text-body-sm text-on-surface-variant">{busy ? '正在读取用量...' : '请刷新明细以重新读取用量.'}</p>}
         {usage && <>
-          {usage.operations.length > 0 && <section aria-label="待核实任务" className="p-3 rounded-xl border border-outline-variant/40 space-y-3">
-            <h3 className="font-body-md text-body-md font-medium">待核实任务</h3><p className="font-meta-sm text-meta-sm text-on-surface-variant">核对上游实际结果后再结算. 无限额度任务仅记录结果, 不扣减余额.</p>
-            {usage.operations.map((op) => <div key={op.id} className="flex flex-wrap items-center justify-between gap-2 font-body-sm text-body-sm">
-              <span>{kinds[op.kind]} · {op.unlimited ? '无限额度' : `${op.points} 点`} · {time(op.createdAt)}</span>
-              <div className="flex items-center gap-2">
-                <button type="button" disabled={busy} className={`${button} bg-primary text-on-primary`} onClick={() => settleUnknown(op.id, 'refund')}>返还点数</button>
-                <button type="button" disabled={busy} className={`${button} bg-surface-container`} onClick={() => settleUnknown(op.id, 'charge')}>扣除点数</button>
-              </div>
-            </div>)}
-          </section>}
-          {usage.unresolvedCursor !== null && <button type="button" disabled={busy} className={`${button} bg-surface-container`} onClick={() => void run(async () => { const result = await unresolvedCredits(usageRecord.id, usage.unresolvedCursor!); setUsage((old) => old && { ...old, operations: [...old.operations, ...result.operations], unresolvedCursor: result.nextCursor }); })}>加载更多待核实任务</button>}
           <ol className="space-y-2">{usage.entries.map((entry) => <li key={entry.id} className="p-3 rounded-xl bg-surface-container-low">
             <div className="flex flex-wrap items-center justify-between gap-2 font-body-sm text-body-sm"><span>{kinds[entry.kind] || entry.kind} · {entry.operationUnlimited ? unlimitedEvents[entry.event] || events[entry.event] : events[entry.event] || entry.event}{entry.operationUnlimited ? ` · 无限额度 (等值 ${entry.operationPoints} 点)` : entry.operationPoints ? ` ${entry.operationPoints} 点` : entry.points ? ` ${entry.points > 0 ? '+' : ''}${entry.points} 点` : ''}</span><span className="text-on-surface-variant">{entry.unlimited ? '无限额度' : `可用 ${entry.available}`} · 占用 {entry.reserved}</span></div>
             <p className="mt-1 font-meta-sm text-meta-sm text-outline">{time(entry.createdAt)}{entry.operationId ? ` · ${entry.operationId.slice(-8)}` : ''}</p>{entry.reason && <p className="mt-1 font-body-sm text-body-sm break-words text-on-surface-variant">{entry.reason}</p>}

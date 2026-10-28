@@ -162,26 +162,22 @@ try {
     response.writeHead(504, { 'Content-Type': 'application/json' });
     response.end(JSON.stringify({ error: { message: 'upstream timeout' } })); return true;
   };
-  const uncertain = await createImage('结果未知时由用户确认后重新生成');
-  assert.equal((await finished(uncertain.id)).credit.state, 'unknown'); await accounting(10);
+  const uncertain = await createImage('结果未知时自动返还, 由用户手动重新生成');
+  const uncertainJob = await finished(uncertain.id);
+  assert.equal(uncertainJob.outcomeUnknown, true); assert.equal(uncertainJob.credit.state, 'refunded'); await accounting();
+  const beforeUnknown = app.calls.length, dialogs = [];
   await ready(); await retryButton().waitFor();
-  const beforeUnknown = app.calls.length, submittedUnknown = batches.length;
-  page.once('dialog', (dialog) => { assert.match(dialog.message(), /结果未知/); return dialog.dismiss(); });
-  await retryButton().click();
-  await page.getByRole('alert').filter({ hasText: '已取消重新生成' }).waitFor();
-  assert.equal(app.calls.length, beforeUnknown); assert.equal(batches.length, submittedUnknown); await accounting(10);
+  assert.equal(app.calls.length, beforeUnknown, 'unknown outcome is not resent automatically');
+  const recordDialog = (dialog) => { dialogs.push(dialog.message()); void dialog.dismiss(); };
+  page.on('dialog', recordDialog);
   app.controls.respond = normalResponse;
-  page.once('dialog', (dialog) => dialog.accept());
   await retryButton().click();
-  const replacement = await until(async () => (await api('/api/jobs/me')).data.jobs.find((value) => value.retryOf === uncertain.id), 'confirmed new generation');
-  await finished(replacement.id); expectedSpent += 10; expectedRecords++; await saved(); await accounting(10);
+  const replacement = await until(async () => (await api('/api/jobs/me')).data.jobs.find((value) => value.retryOf === uncertain.id), 'manual new generation');
+  assert.notEqual(replacement.requestId, uncertain.requestId);
+  await finished(replacement.id); expectedSpent += 10; expectedRecords++; await saved(); await accounting();
   assert.equal(app.calls.length, beforeUnknown + 1);
-  const resolution = await app.api('/api/admin/credit-operations/' + uncertain.credit.id + '/resolve', {
-    cookie: app.adminCookie, method: 'POST', body: { requestId: randomUUID(), decision: 'refund', reason: '隔离上游确认原请求未产出' },
-  });
-  assert.equal(resolution.status, 200);
   await page.reload(); await ready(); await saved(); await accounting();
-  checks.push('结果未知保留原预占, 取消重试不调用模型, 确认后才建立新请求, 管理员返还不影响新任务结算');
+  checks.push('结果未知自动返还且不自动重发, 手动重试直接建立新请求, 只为新任务扣点');
 
   hold();
   const beforeText = app.calls.length;
@@ -226,30 +222,23 @@ try {
   checks.push('系列拆解格式无效或分镜不完整时不扣文字点数, 有效草稿才扣一次, 确认之前不生成图片');
 
   await page.getByRole('navigation', { name: '主导航', exact: true }).getByRole('link', { name: '单图创作', exact: true }).click(); await ready();
-  await page.locator('.studio-rail textarea').fill('文字超时后先确认旧请求再决定重新处理');
+  await page.locator('.studio-rail textarea').fill('文字结果未知后手动重新处理');
   app.controls.respond = (_call, response) => {
     response.writeHead(504, { 'Content-Type': 'application/json' });
     response.end(JSON.stringify({ error: { message: 'upstream timeout' } })); return true;
   };
   await page.getByRole('button', { name: /^润色扩写/ }).click();
-  await page.getByRole('alert').filter({ hasText: '文字处理结果未知' }).waitFor(); await accounting(1);
+  await page.getByRole('alert').filter({ hasText: '文字处理结果未知, 本次不扣点' }).waitFor(); await accounting();
   const uncertainTextId = textRequests.at(-1).requestId, textCount = textRequests.length, modelCount = app.calls.length;
-  page.once('dialog', (dialog) => { assert.match(dialog.message(), /重新处理预计消耗/); return dialog.dismiss(); });
-  await page.getByRole('button', { name: /^润色扩写/ }).click();
-  await page.getByRole('alert').filter({ hasText: '已取消重新处理' }).waitFor();
-  assert.equal(textRequests.length, textCount); assert.equal(app.calls.length, modelCount); await accounting(1);
+  assert.equal((await api('/api/text/' + uncertainTextId)).data.credit.state, 'refunded');
   app.controls.respond = normalResponse;
-  page.once('dialog', (dialog) => dialog.accept());
   await page.getByRole('button', { name: /^润色扩写/ }).click();
-  await until(async () => (await page.locator('.studio-rail textarea').inputValue()) === '一片绿色的叶子', 'confirmed text retry');
-  expectedSpent++; await accounting(1);
+  await until(async () => (await page.locator('.studio-rail textarea').inputValue()) === '一片绿色的叶子', 'manual text retry');
+  expectedSpent++; await accounting();
   assert.equal(textRequests.length, textCount + 1); assert.notEqual(textRequests.at(-1).requestId, uncertainTextId);
-  const unknownText = await api('/api/text/' + uncertainTextId);
-  await app.api('/api/admin/credit-operations/' + unknownText.data.credit.id + '/resolve', {
-    cookie: app.adminCookie, method: 'POST', body: { requestId: randomUUID(), decision: 'refund', reason: '隔离文字上游确认未产出' },
-  });
-  await accounting();
-  checks.push('文字结果未知时保留预占, 再次处理先核实原请求, 取消不再调用, 确认新请求后仅新增一次扣点');
+  assert.equal(app.calls.length, modelCount + 1);
+  page.off('dialog', recordDialog); assert.deepEqual(dialogs, [], '结果未知后重新生成不再弹出确认');
+  checks.push('文字结果未知时自动返还, 再次点击直接建立新请求, 仅新增一次扣点');
 
   const { entries } = (await app.api('/api/admin/access-codes/' + app.accessCodeRecord.id + '/ledger', { cookie: app.adminCookie })).data;
   assert.equal(entries.filter((entry) => entry.event === 'charge').length, expectedRecords + 3);

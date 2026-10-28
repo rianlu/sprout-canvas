@@ -6,7 +6,7 @@ import { rankedTextProviders, recordTextProviderFailure, recordTextProviderSucce
 import { requestError } from '../shared/generation-contract.mjs';
 import { createTextLimiter } from './request-guards.mjs';
 import { creditError, creditRequestId, validateCreditQuote } from '../shared/credits-contract.mjs';
-import { secretHash } from './credits-store.mjs';
+import { secretHash, UNKNOWN_OUTCOME_REFUND } from './credits-store.mjs';
 import { parseSeriesPlan } from '../shared/series-planning.mjs';
 import { validatePolishedPrompt } from '../shared/prompt-polish.mjs';
 const TEXT_UPSTREAM_TIMEOUT_MS = 60_000;
@@ -89,7 +89,7 @@ async function callJsonUpstream(config, upstreamPath, payload) {
     return JSON.parse(body.toString('utf8'));
   } catch (error) {
     if (!error.definiteFailure && !error.upstreamStatus && isTimeoutError(error)) {
-      const timeoutError = new Error(`文本上游 ${Math.round(TEXT_UPSTREAM_TIMEOUT_MS / 1000)}s 内未响应, 结果待核实`);
+      const timeoutError = new Error(`文本上游 ${Math.round(TEXT_UPSTREAM_TIMEOUT_MS / 1000)}s 内未响应, 结果未知`);
       timeoutError.isTextTimeout = true;
       timeoutError.outcomeUnknown = true;
       throw timeoutError;
@@ -117,9 +117,9 @@ function validateTextInput(payload) {
 }
 
 function commitResult(op, response) {
-  const state = response.unknown ? 'unknown' : response.status === 200 ? 'charged' : 'refunded';
+  const state = response.status === 200 ? 'charged' : 'refunded';
   try {
-    stateStore.credits.settle(op.id, state, { result: response, error: response.body.error || '' });
+    stateStore.credits.settle(op.id, state, { result: response, error: response.body.error || '', reason: response.unknown ? UNKNOWN_OUTCOME_REFUND : '' });
     clearTimeout(pendingSettlements.get(op.id));
     pendingSettlements.delete(op.id);
     if (!pendingSettlements.size) { for (const resolve of settlementWaiters) resolve(); settlementWaiters.clear(); }
@@ -136,18 +136,14 @@ function commitResult(op, response) {
 
 function replyText(res, op, response) {
   const credit = stateStore.credits.publicCharge(op.id);
-  const body = credit?.unlimited && response.status !== 200
-    ? { ...response.body, error: response.unknown ? `文字处理结果未知, 本次使用无限额度, 未占用或扣减点数. ${['charged', 'refunded'].includes(credit.state) ? '管理员已核实记录, 不会自动重新调用' : '请管理员核实结果, 不会自动重新调用'}` : '文字处理未完成, 本次使用无限额度, 未扣减点数' }
-    : response.unknown && ['charged', 'refunded'].includes(credit?.state)
-    ? { ...response.body, error: `文字处理结果仍未知, 原占用的 ${credit.points} 灵感点已由管理员${credit.state === 'charged' ? '扣除' : '返还'}. 不会自动重新调用` }
-    : response.body;
+  const body = response.status === 200 || !credit?.unlimited ? response.body
+    : { ...response.body, error: response.unknown ? '文字处理结果未知, 本次使用无限额度, 未扣减点数. 不会自动重新调用' : '文字处理未完成, 本次使用无限额度, 未扣减点数' };
   return json(res, response.status, { ...body, requestId: op.request_id, credit, settlementPending: pendingSettlements.has(op.id) });
 }
 
 async function replayText(res, op) {
   if (inFlight.has(op.id)) return replyText(res, op, await inFlight.get(op.id));
   if (op.result) return replyText(res, op, JSON.parse(op.result));
-  if (op.state === 'unknown') return replyText(res, op, { status: 409, unknown: true, body: { error: '上次文字处理结果未知, 占用点数待管理员核实. 不会自动重新调用', code: 'OUTCOME_UNKNOWN' } });
   if (['reserved', 'running'].includes(op.state)) return json(res, 202, { requestId: op.request_id, status: 'running' });
   throw creditError('此文字请求已结束, 临时文字结果已过期. 再次处理需要新建请求', 'TEXT_RESULT_EXPIRED', 409);
 }
@@ -184,7 +180,7 @@ export async function handleTextGeneration(req, res, session) {
 }
 
 function unknownTextResult(attempts = []) {
-  return { status: 409, unknown: true, body: { error: '文字处理结果未知, 占用灵感点待管理员核实. 不会自动重新调用', code: 'OUTCOME_UNKNOWN', attempts } };
+  return { status: 409, unknown: true, body: { error: '文字处理结果未知, 本次不扣点. 不会自动重新调用', code: 'OUTCOME_UNKNOWN', attempts } };
 }
 
 async function generateText(payload, op, session, execution) {

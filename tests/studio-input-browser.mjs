@@ -189,7 +189,7 @@ try {
         const open = indexedDB.open('img-gen-gallery'); open.onerror = () => reject(open.error);
         open.onsuccess = () => {
           const db = open.result, tx = db.transaction('drafts', 'readwrite');
-          tx.objectStore('drafts').put({ version: 1, data: { requestId, signature: JSON.stringify({ system, content }), unknown: false } }, 'text-request-prompt-' + creditQuote.userId);
+          tx.objectStore('drafts').put({ version: 1, data: { requestId, signature: JSON.stringify({ system, content }) } }, 'text-request-prompt-' + creditQuote.userId);
           tx.oncomplete = () => { db.close(); resolve(); }; tx.onerror = () => { db.close(); reject(tx.error); };
         };
       });

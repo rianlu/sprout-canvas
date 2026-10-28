@@ -224,15 +224,9 @@ export function useSeriesStudio({ onSubmit, onSubmitBatch, onUpdate, results, jo
     return { requestId: identity.requestId, request, creditQuote, ...(referenceJobId ? { referenceJobId } : {}), ...(continuityReference ? { referenceImage: { id: continuityReference.id, name: continuityReference.name, dataUrl: continuityReference.dataUrl, recordId: continuityReference.recordId } } : {}), clientContext: { kind: 'series', placeholderId: identity.placeholderId, prompt: task.prompt, mode: request.references.length || referenceJobId || continuityReference ? 'reference' : 'text', seriesId: identity.seriesId, sceneId: identity.sceneId, sceneIndex: index, version, parentId: previous?.id, masterPrompt: brief.trim() } } satisfies QueueSubmitInput;
   }
 
-  function confirmUnknown(affected: ShotState[]) {
-    const unknown = affected.filter((shot) => shot.kind === 'failed' && shot.job?.outcomeUnknown);
-    return !unknown.length || window.confirm(`有 ${unknown.length} 幕上次生成结果未知, 原点数需管理员核实. 重新绘制会创建新任务并按当前额度计费, 是否继续?`);
-  }
-
   async function submitBatch(redraw = false) {
     if (lock.current || !ready || referenceLock.current || editing || preview || (activeJobs && !canContinue) || (redraw && (activeJobs || canContinue))) return;
     if (!canContinue && tasks.some((task) => !task.prompt.trim())) { pushToast('error', '请先完成并检查所有分镜提示词, 再确认生成'); return; }
-    if (redraw && !confirmUnknown(shots)) return;
     if (!redraw && !canContinue && !shots[0]?.record && shots[0]?.kind !== 'planned') { pushToast('error', '请先重试并完成首镜, 再生成后续分镜'); return; }
     lock.current = true; setSubmitting(true);
     try {
@@ -315,7 +309,6 @@ export function useSeriesStudio({ onSubmit, onSubmitBatch, onUpdate, results, jo
     const shot = shots[index];
     if (lock.current || referenceLock.current || !shot || ['generating', 'waiting', 'submitting', 'unsubmitted', 'receiving'].includes(shot.kind)) return;
     if (!(promptOverride ?? shot.task.prompt).trim()) { pushToast('error', '请先填写并检查本镜提示词'); return; }
-    if (!confirmUnknown([shot])) return;
     lock.current = true; setSubmitting(true);
     try {
       await submitShot(index, override, promptOverride);
@@ -337,7 +330,6 @@ export function useSeriesStudio({ onSubmit, onSubmitBatch, onUpdate, results, jo
       if (['generating', 'submitting', 'unsubmitted', 'receiving'].includes(shot.kind)) throw new Error('本镜正在提交或处理, 请等待完成后再调整');
       if (shot.job?.status !== 'pending' && (shot.record || shot.kind === 'failed')) {
         if (shot.kind === 'failed' && !shot.job?.canRetry) throw new Error('本镜暂时无法重新生成, 请先在我的任务中查看处理状态');
-        if (!confirmUnknown([shot])) return;
         setSubmitting(true);
         await submitShot(index, settings, prompt);
         if (alive.current) setEditing(null);

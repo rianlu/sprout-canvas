@@ -3,7 +3,7 @@ import { requestError } from '../shared/generation-contract.mjs';
 
 export function createCreditRoutes({ credits, adminAuth, readConfig, revokeAccessCode }) {
   return async (req, res, url) => {
-    if (!/^\/api\/admin\/(access-codes|credit-prices|credit-operations)(\/|$)/.test(url.pathname)) return false;
+    if (!/^\/api\/admin\/(access-codes|credit-prices)(\/|$)/.test(url.pathname)) return false;
     adminAuth.require(req, await readConfig());
     const body = async () => {
       const input = await readJson(req, 16384);
@@ -18,12 +18,11 @@ export function createCreditRoutes({ credits, adminAuth, readConfig, revokeAcces
       if (req.method === 'GET') { json(res, 200, { prices: credits.prices() }); return true; }
       if (req.method === 'PUT') { json(res, 200, credits.setPrices(await body())); return true; }
     }
-    const match = url.pathname.match(/^\/api\/admin\/access-codes\/([A-Za-z0-9_-]+)(?:\/(points|reset|ledger|unresolved))?$/);
+    const match = url.pathname.match(/^\/api\/admin\/access-codes\/([A-Za-z0-9_-]+)(?:\/(points|reset|ledger))?$/);
     if (match) {
       const [, id, action] = match;
       if (req.method === 'GET' && !action) { json(res, 200, { accessCode: credits.getCode(id) }); return true; }
       if (req.method === 'GET' && action === 'ledger') { json(res, 200, credits.ledger(id, { cursor: Number(url.searchParams.get('cursor') || Number.MAX_SAFE_INTEGER) })); return true; }
-      if (req.method === 'GET' && action === 'unresolved') { json(res, 200, credits.unresolved(id, { cursor: Number(url.searchParams.get('cursor') || Number.MAX_SAFE_INTEGER) })); return true; }
       let result;
       if (req.method === 'PATCH' && !action) result = credits.update(id, await body());
       if (req.method === 'DELETE' && !action) result = credits.remove(id, await body());
@@ -34,8 +33,6 @@ export function createCreditRoutes({ credits, adminAuth, readConfig, revokeAcces
         json(res, 200, result); return true;
       }
     }
-    const resolve = url.pathname.match(/^\/api\/admin\/credit-operations\/([A-Za-z0-9_-]+)\/resolve$/);
-    if (resolve && req.method === 'POST') { json(res, 200, credits.resolve(resolve[1], await body())); return true; }
     throw requestError('接口不存在', 404);
   };
 }

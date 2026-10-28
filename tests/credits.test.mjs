@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { createStateStore } from '../server/state-store.mjs';
-import { secretHash } from '../server/credits-store.mjs';
+import { secretHash, UNKNOWN_OUTCOME_REFUND } from '../server/credits-store.mjs';
 
 const requestId = () => randomUUID();
 function create(store, points = 100, extra = {}) { return store.credits.create({ requestId: requestId(), initialPoints: points, note: '测试访问码', ...extra }).codes[0]; }
@@ -136,26 +136,40 @@ test('不同浏览器竞争同一码不能超扣, 报价变更须重新确认, �
   } finally { store.close(); }
 });
 
-test('结果未知保留预占, 管理员核实幂等, 已结束请求不会重新计点', () => {
+test('结果未知自动返还并记录原因, 已结算请求不会重复返还或扣点', () => {
   const store = createStateStore(':memory:');
   try {
     const access = create(store); const { session } = store.identities.login(access.code); const task = job(session);
     store.acceptImageJobs([task], session);
     task.status = 'running'; store.saveJob(task);
-    task.status = 'failed'; task.outcomeUnknown = true; store.saveJob(task);
-    assert.equal(store.credits.balance(access.id).reserved, 10);
-    assert.equal(store.credits.unresolved(access.id).operations.length, 1);
-    store.credits.settle(task.creditId, 'refunded');
-    assert.equal(store.credits.balance(access.id).reserved, 10);
-    const input = { requestId: requestId(), decision: 'refund' };
-    store.credits.resolve(task.creditId, input); store.credits.resolve(task.creditId, input);
-    assert.equal(store.credits.balance(access.id).available, 100);
-    assert.equal(store.credits.ledger(access.id).entries.find((entry) => entry.event === 'refund')?.reason, '管理员确认未产出结果, 返还占用点数');
-    assert.throws(() => store.credits.resolve(task.creditId, { ...input, requestId: requestId() }), /不再需要/);
+    task.status = 'failed'; task.outcomeUnknown = true; store.saveJob(task); store.saveJob(task);
+    assert.equal(store.credits.publicCharge(task.creditId).state, 'refunded');
+    assert.deepEqual([store.credits.balance(access.id).available, store.credits.balance(access.id).reserved], [100, 0]);
+    assert.deepEqual(store.credits.ledger(access.id).entries.filter((entry) => entry.event === 'refund').map((entry) => [entry.points, entry.reason]), [[10, UNKNOWN_OUTCOME_REFUND]]);
+    store.credits.settle(task.creditId, 'charged');
+    assert.equal(store.credits.balance(access.id).spent, 0);
   } finally { store.close(); }
 });
 
-test('文字完成结果可跨重启复用, 在途文字重启后保持待核实', () => {
+test('升级时一次性返还旧版待核实预占, 保留原错误且不重复记账', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'sprout-credit-legacy-')); const file = join(dir, 'state.sqlite');
+  let store = createStateStore(file);
+  try {
+    const access = create(store); const { session } = store.identities.login(access.code);
+    const op = store.credits.reserveText({ requestId: requestId(), kind: 'prompt', creditQuote: { accessCodeId: access.id, userId: session.userId, version: 1 } }, session, 'legacy-hash');
+    store.close();
+    const db = new DatabaseSync(file);
+    db.prepare("UPDATE credit_operations SET state='unknown', error='旧版结果未知' WHERE id=?").run(op.id); db.close();
+    store = createStateStore(file);
+    assert.equal(store.credits.publicCharge(op.id).state, 'refunded');
+    assert.equal(store.credits.operation(op.id).error, '旧版结果未知');
+    assert.deepEqual([store.credits.balance(access.id).available, store.credits.balance(access.id).reserved], [100, 0]);
+    store.close(); store = createStateStore(file);
+    assert.deepEqual(store.credits.ledger(access.id).entries.filter((entry) => entry.event === 'refund').map((entry) => entry.reason), [UNKNOWN_OUTCOME_REFUND]);
+  } finally { store.close(); rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('文字完成结果可跨重启复用, 在途文字重启后自动返还且不重新调用', () => {
   const dir = mkdtempSync(join(tmpdir(), 'sprout-credit-text-')); const file = join(dir, 'state.sqlite');
   let store = createStateStore(file);
   try {
@@ -167,10 +181,11 @@ test('文字完成结果可跨重启复用, 在途文字重启后保持待核实
     store.credits.settle(unknown.id, 'running');
     store.close(); store = createStateStore(file); store.credits.recoverText();
     assert.equal(JSON.parse(store.credits.byRequest(session.userId, input.requestId).result).body.text, '分镜草稿');
-    assert.equal(store.credits.publicCharge(unknown.id).state, 'unknown');
-    assert.equal(store.credits.balance(access.id).available, 98);
+    assert.equal(store.credits.publicCharge(unknown.id).state, 'refunded');
+    assert.equal(JSON.parse(store.credits.operation(unknown.id).result).body.code, 'OUTCOME_UNKNOWN');
+    assert.equal(store.credits.balance(access.id).available, 99);
     assert.equal(store.credits.balance(access.id).spent, 1);
-    assert.equal(store.credits.balance(access.id).reserved, 1);
+    assert.equal(store.credits.balance(access.id).reserved, 0);
     assert.throws(() => store.credits.reserveText({ ...input, kind: 'prompt' }, session, 'stable-hash'), /不同内容/);
   } finally { store.close(); rmSync(dir, { recursive: true, force: true }); }
 });

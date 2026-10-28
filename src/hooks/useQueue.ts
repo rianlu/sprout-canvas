@@ -234,9 +234,6 @@ export function useQueue(onResult: (records: ResultRecord[], jobId: string) => P
       await tick();
       return job;
     }
-    const settlement = source.credit?.unlimited ? '原任务使用无限额度, 未占用点数' : source.credit?.state === 'charged' ? '原占用点数已扣除' : source.credit?.state === 'refunded' ? '原占用点数已返还' : '占用点数待管理员核实';
-    const nextCharge = quote.unlimited ? '当前为无限额度, 重新生成不扣减余额' : '重新生成会作为新任务扣点';
-    if (source.outcomeUnknown && !window.confirm(`上一次生成的结果未知, ${settlement}. ${nextCharge}, 是否继续?`)) throw new Error('已取消重新生成');
     const queuedRetry = (await listOutbox()).find((row) => row.input.retryOf === jobId);
     if (queuedRetry) {
       const retryInput = await getOutboxInput(queuedRetry.requestId);

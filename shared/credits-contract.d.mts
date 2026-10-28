@@ -1,11 +1,10 @@
 export interface CreditPrices { image: number; text: number; version: number }
 export interface CreditQuote { accessCodeId: string; userId: string; version: number; unlimited?: boolean }
 export interface CreditBalance { accessCodeId: string; tail: string; available: number; reserved: number; spent: number; enabled: boolean; unlimited: boolean }
-export type CreditState = 'reserved' | 'running' | 'charged' | 'refunded' | 'unknown';
+export type CreditState = 'reserved' | 'running' | 'charged' | 'refunded';
 export interface CreditCharge { id: string; points: number; state: CreditState; kind: 'image' | 'prompt' | 'series'; priceVersion: number; unlimited: boolean }
 export interface AccessCodeRecord extends CreditBalance { id: string; note: string; version: number; createdAt: number; updatedAt: number; lastUsedAt: number }
 export interface CreditLedgerEntry { id: number; operationId: string; operationPoints?: number; operationUnlimited?: boolean; kind: string; event: string; points: number; available: number; reserved: number; unlimited: boolean; reason: string; createdAt: number }
-export interface CreditOperation extends CreditCharge { requestId: string; createdAt: number; updatedAt: number }
 export const CREDIT_LIMITS: Readonly<{ points: number; price: number; batch: number; note: number; reason: number }>;
 export const CREDIT_DEFAULTS: Readonly<{ image: number; text: number }>;
 export const ACCESS_CODE_PATTERN: RegExp;

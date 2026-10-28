@@ -51,5 +51,5 @@ export function upstreamFailure(status, body) {
 export function formatUpstreamFailure(failure, config) {
   const message = redactProviderSecrets(stripHtml(failure.message), config).slice(0, 360);
   const prefix = failure.upstreamStatus >= 400 ? '上游 API 返回 HTTP ' + failure.upstreamStatus : '上游 API 返回生成错误';
-  return prefix + ': ' + message + (failure.outcomeUnknown ? '. 结果待核实, 未自动重复调用.' : '');
+  return prefix + ': ' + message + (failure.outcomeUnknown ? '. 结果未知, 本次不扣点, 未自动重复调用.' : '');
 }
