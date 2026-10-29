@@ -100,9 +100,7 @@ export function AppShell({ page, onPageChange, onOpenHelp, onSignOut, queueCount
       </header>
       {children}
       <footer className="w-full bg-surface-container-low py-space-xl mt-auto">
-        <div
-          className={`w-full flex flex-col sm:flex-row items-center justify-between gap-space-md text-on-surface-variant font-body-sm text-body-sm ${page === 'gallery' ? 'max-w-[1560px] mx-auto px-4 sm:px-6 lg:px-8' : 'px-gutter-canvas'}`}
-        >
+        <div className="w-full px-gutter-canvas flex flex-col sm:flex-row items-center justify-between gap-space-md text-on-surface-variant font-body-sm text-body-sm">
           <div className="flex items-center gap-space-xs">
             <span className="font-meta-md text-meta-md text-on-surface">芽绘台 SproutCanvas</span>
             <span>· 自然生机 AI 创作工作室</span>

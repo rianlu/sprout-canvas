@@ -113,7 +113,7 @@ export function createStyleStore(directory, { seedDirectory = new URL('./style-s
   }
   function checkVersion(record, version) {
     if (!record) throw requestError('风格不存在或已删除', 404);
-    if (record.version !== version) throw requestError('这条风格已在其他页面修改, 请重新打开后编辑', 409);
+    if (record.version !== version) throw Object.assign(requestError('这条风格已在其他页面修改, 请刷新数据后核对再保存', 409), { code: 'VERSION_CONFLICT' });
   }
   function archivePlan(archive) {
     if (!archive || archive.format !== STYLE_ARCHIVE_FORMAT || archive.version !== 1 || !Array.isArray(archive.styles) || !Array.isArray(archive.images)) throw requestError('请选择芽绘台导出的风格备份文件');

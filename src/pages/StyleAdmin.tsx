@@ -4,6 +4,9 @@ import { StyleExampleImage } from '../components/image/StyleExampleImage';
 import { AdminEmpty, AdminHeading, AdminLoading, adminButton, adminField, adminPanel } from '../components/admin/AdminUI';
 import { Dialog } from '../components/ui/Dialog';
 import { useConfirm } from '../components/ui/ConfirmDialog';
+import { NumberInput } from '../components/ui/NumberInput';
+import { Switch } from '../components/ui/Switch';
+import { ApiError } from '../lib/api/client';
 import { useStyleCatalog } from '../hooks/useStyleCatalog';
 import { useFileDrop } from '../hooks/useFileDrop';
 import { getStyles, saveStyle, deleteStyle, exportStyles, previewStylesImport, importStyles } from '../lib/api/styles';
@@ -13,7 +16,15 @@ import { STYLE_CATEGORIES, STYLE_LIMITS, type StyleInput, type StyleRecord, type
 type Editor = { record: StyleRecord | null; input: StyleInput };
 const button = adminButton;
 const field = adminField;
+const EDITABLE_FIELDS = ['name', 'prompt', 'author', 'category', 'sourceUrl', 'published', 'sortOrder'] as const;
 function editInput(style: StyleRecord): StyleInput { return { name: style.name, prompt: style.prompt, author: style.author, category: style.category, sourceUrl: style.sourceUrl, published: style.published, sortOrder: style.sortOrder, version: style.version }; }
+const conflict = (cause: unknown) => cause instanceof ApiError && cause.code === 'VERSION_CONFLICT';
+/** After another page saved the same style: take its fields the editor left alone, keep the ones it changed. */
+function mergeLatest(editor: Editor & { record: StyleRecord }, latest: StyleRecord): Editor {
+  const before = editInput(editor.record), merged = editInput(latest);
+  for (const key of EDITABLE_FIELDS) if (editor.input[key] !== before[key]) Object.assign(merged, { [key]: editor.input[key] });
+  return { record: latest, input: { ...merged, ...(editor.input.imageDataUrl ? { imageDataUrl: editor.input.imageDataUrl } : {}) } };
+}
 
 export function StyleManager({ active, editStyleId, onStyleOpened }: { active: boolean; editStyleId?: string | null; onStyleOpened?: () => void }) {
   const [error, setError] = useState('');
@@ -21,6 +32,8 @@ export function StyleManager({ active, editStyleId, onStyleOpened }: { active: b
   const [working, setWorking] = useState(false);
   const lock = useRef(false);
   const [editor, setEditor] = useState<Editor | null>(null);
+  // Set when saving hit a version conflict; saving waits until the latest data has been merged in.
+  const [editorStale, setEditorStale] = useState(false);
   const [imageBusy, setImageBusy] = useState(false);
   const imageSequence = useRef(0);
   const [search, setSearch] = useState('');
@@ -31,7 +44,7 @@ export function StyleManager({ active, editStyleId, onStyleOpened }: { active: b
   const catalog = useStyleCatalog(true, active);
   const modalOpen = Boolean(active && (editor || pendingImport));
   const confirm = useConfirm();
-  const closeModal = () => { imageSequence.current++; setEditor(null); setPendingImport(null); };
+  const closeModal = () => { imageSequence.current++; setEditor(null); setEditorStale(false); setPendingImport(null); };
   async function run(action: () => Promise<void>) {
     if (lock.current) return;
     lock.current = true; setWorking(true); setError(''); setMessage('');
@@ -39,8 +52,26 @@ export function StyleManager({ active, editStyleId, onStyleOpened }: { active: b
     catch (cause) { setError(cause instanceof Error ? cause.message : '操作失败, 请重试'); }
     finally { lock.current = false; setWorking(false); }
   }
+  /** Card actions carry the listed version; on a conflict, show the latest list so the next press uses it. */
+  async function cardAction(action: () => Promise<void>) {
+    try { await action(); }
+    catch (cause) {
+      if (!conflict(cause)) throw cause;
+      await catalog.refresh();
+      throw new Error('这条风格已在其他页面修改, 列表已刷新, 请核对后重试');
+    }
+  }
+  async function refreshEditor() {
+    if (!editor?.record) return;
+    const latest = (await getStyles(true)).styles.find((style) => style.id === editor.record?.id);
+    if (!latest) throw new Error('这份风格已在其他页面删除, 可复制需要的内容后关闭');
+    setEditor((current) => current?.record?.id === latest.id ? mergeLatest(current as Editor & { record: StyleRecord }, latest) : current);
+    setEditorStale(false);
+    await catalog.refresh();
+    setMessage('数据已刷新, 已保留尚未保存的修改, 请核对后保存');
+  }
   function openEditor(record: StyleRecord | null) {
-    imageSequence.current++; setImageBusy(false); setError(''); setMessage('');
+    imageSequence.current++; setImageBusy(false); setEditorStale(false); setError(''); setMessage('');
     setEditor({ record, input: record ? editInput(record) : { name: '', prompt: '', author: '', category: '', sourceUrl: '', published: true, sortOrder: 0 } });
   }
   useEffect(() => {
@@ -69,10 +100,10 @@ export function StyleManager({ active, editStyleId, onStyleOpened }: { active: b
   }
   function submitEditor(event: FormEvent) {
     event.preventDefault();
-    if (!editor || imageBusy) return;
+    if (!editor || imageBusy || editorStale) return;
     const value = editor;
     void run(async () => {
-      const saved = await saveStyle(value.input, value.record?.id);
+      const saved = await saveStyle(value.input, value.record?.id).catch((cause) => { if (conflict(cause)) setEditorStale(true); throw cause; });
       setEditor(null); imageSequence.current++;
       await catalog.refresh();
       setMessage(`已保存 ${saved.style.name}${saved.style.published ? ', 已在风格库上架' : ', 暂未上架'}`);
@@ -111,8 +142,8 @@ export function StyleManager({ active, editStyleId, onStyleOpened }: { active: b
           <div className="relative aspect-[16/10] shrink-0 rounded-xl overflow-hidden bg-surface-container-low"><StyleExampleImage src={style.image} alt={style.name} className="group-hover:scale-[1.02] transition-transform duration-200" /><span className="absolute top-2 left-2 px-2 py-1 rounded-lg bg-surface-bright/95 text-secondary font-meta-sm text-meta-sm">{style.published ? '已上架' : '未上架'}</span></div>
           <div className="min-w-0 flex-1 flex flex-col gap-2 px-1 pt-4"><h2 className="font-body-md text-body-md font-medium line-clamp-2 break-words">{style.name}</h2><p className="font-meta-sm text-meta-sm text-secondary truncate">{style.author || '未注明作者'} · {style.category || '未分类'}</p><p className="font-body-sm text-body-sm text-on-surface-variant line-clamp-2 break-words leading-relaxed mb-3">{style.prompt}</p>
             <div className="flex items-center justify-between gap-2 font-body-sm text-body-sm pt-2 mt-auto border-t border-outline-variant/25"><span className="inline-flex items-center gap-1 text-outline font-meta-sm text-meta-sm"><StitchIcon name="edit_note" size={16} />编辑详情</span><div className="flex items-center gap-1">
-              <button type="button" className="relative z-10 px-2 py-2 rounded-lg text-primary hover:bg-secondary-container/50 disabled:opacity-50" disabled={working} onClick={() => void run(async () => { await saveStyle({ ...editInput(style), published: !style.published }, style.id); await catalog.refresh(); setMessage(style.published ? '已下架, 风格库不再展示这条内容' : '已上架'); })}>{style.published ? '下架' : '上架'}</button>
-              <button type="button" className="relative z-10 px-2 py-2 rounded-lg text-on-surface-variant hover:bg-error-container/60 hover:text-on-error-container disabled:opacity-50" disabled={working} onClick={() => void confirm({ title: '删除风格', description: `永久删除 ${style.name}? 此操作会清理不再使用的示例图.`, confirmLabel: '删除', danger: true }).then((ok) => { if (ok) void run(async () => { await deleteStyle(style); await catalog.refresh(); setMessage('已删除风格'); }); })}>删除</button>
+              <button type="button" className="relative z-10 px-2 py-2 rounded-lg text-primary hover:bg-secondary-container/50 disabled:opacity-50" disabled={working} onClick={() => void run(() => cardAction(async () => { await saveStyle({ ...editInput(style), published: !style.published }, style.id); await catalog.refresh(); setMessage(style.published ? '已下架, 风格库不再展示这条内容' : '已上架'); }))}>{style.published ? '下架' : '上架'}</button>
+              <button type="button" className="relative z-10 px-2 py-2 rounded-lg text-on-surface-variant hover:bg-error-container/60 hover:text-on-error-container disabled:opacity-50" disabled={working} onClick={() => void confirm({ title: '删除风格', description: `永久删除 ${style.name}? 此操作会清理不再使用的示例图.`, confirmLabel: '删除', danger: true }).then((ok) => { if (ok) void run(() => cardAction(async () => { await deleteStyle(style); await catalog.refresh(); setMessage('已删除风格'); })); })}>删除</button>
             </div></div>
           </div>
           <button type="button" aria-label={`编辑 ${style.name}`} onClick={() => openEditor(style)} disabled={working} className="absolute inset-0 rounded-2xl outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2" />
@@ -124,6 +155,7 @@ export function StyleManager({ active, editStyleId, onStyleOpened }: { active: b
         <div className="sticky top-0 z-10 bg-surface-container-lowest flex items-center justify-between px-5 sm:px-7 py-5 border-b border-outline-variant/30"><div><h2 className="font-headline-sm text-headline-sm">{editor ? editor.record ? '编辑风格' : '添加风格' : '确认导入备份'}</h2><p className="mt-1 font-meta-sm text-meta-sm text-on-surface-variant">{editor ? '图片与提示词为必填, 其他信息按需补充.' : '核对备份内容后再导入.'}</p></div><button type="button" aria-label="关闭管理弹窗" className="w-9 h-9 rounded-xl bg-surface-container-low hover:bg-surface-container flex items-center justify-center" disabled={working} onClick={closeModal}><StitchIcon name="close" size={20} /></button></div>
         {editor ? <form onSubmit={submitEditor} onPaste={paste} className="px-5 pt-5 sm:px-7 sm:pt-6 flex flex-col gap-5">
           {feedback}
+          {editorStale && <button type="button" disabled={working} className={`${button} self-start bg-surface-container hover:bg-surface-container-high`} onClick={() => void run(refreshEditor)}><StitchIcon name="refresh" size={17} />刷新数据</button>}
           <fieldset disabled={working} className="contents">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <div className="flex flex-col gap-2">
@@ -149,12 +181,12 @@ export function StyleManager({ active, editStyleId, onStyleOpened }: { active: b
               <label className="flex flex-col gap-2 font-body-sm text-body-sm font-medium"><span>提示词 <span className="text-primary">*</span></span><textarea aria-label="风格提示词" className={`${field} resize-y leading-relaxed min-h-44`} rows={7} required maxLength={STYLE_LIMITS.prompt} value={editor.input.prompt} onChange={(event) => update({ prompt: event.target.value })} placeholder="粘贴收集到的完整提示词, 保留原文即可." /></label>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <label className="flex flex-col gap-1.5 font-body-sm text-body-sm">作者<input className={field} maxLength={200} value={editor.input.author || ''} onChange={(event) => update({ author: event.target.value })} placeholder="原作者名称" /></label>
-                <label className="flex flex-col gap-1.5 font-body-sm text-body-sm">排序 (越小越靠前)<input className={field} type="number" min={0} max={999999} step={1} value={editor.input.sortOrder ?? 0} onChange={(event) => update({ sortOrder: Number(event.target.value) })} /></label>
+                <label className="flex flex-col gap-1.5 font-body-sm text-body-sm">排序 (越小越靠前)<NumberInput className={field} min={0} max={999999} value={editor.input.sortOrder ?? 0} onChange={(sortOrder) => update({ sortOrder })} /></label>
               </div>
               <label className="flex flex-col gap-1.5 font-body-sm text-body-sm">来源链接<input className={field} type="url" maxLength={2048} value={editor.input.sourceUrl || ''} onChange={(event) => update({ sourceUrl: event.target.value })} placeholder="原始帖子或作品地址" /></label>
             </div>
           </div>
-          <div className="sticky bottom-0 z-10 -mx-5 sm:-mx-7 px-5 sm:px-7 py-4 bg-surface-container-lowest border-t border-outline-variant/30 flex flex-wrap items-center justify-between gap-3"><label className="flex items-center gap-2 font-body-sm text-body-sm"><input type="checkbox" className="accent-primary w-4 h-4" checked={editor.input.published} onChange={(event) => update({ published: event.target.checked })} />在风格库上架</label><div className="flex items-center gap-2"><button type="button" disabled={working} className={`${button} bg-surface-container`} onClick={() => { imageSequence.current++; setEditor(null); }}>取消</button><button type="submit" disabled={working || imageBusy || !editor.input.prompt.trim() || !(editor.input.imageDataUrl || editor.record?.image)} className={`${button} bg-primary text-on-primary hover:bg-primary-container`}>{working ? '保存中...' : '保存风格'}</button></div></div>
+          <div className="sticky bottom-0 z-10 -mx-5 sm:-mx-7 px-5 sm:px-7 py-4 bg-surface-container-lowest border-t border-outline-variant/30 flex flex-wrap items-center justify-between gap-3"><label className="flex items-center gap-2 font-body-sm text-body-sm cursor-pointer"><Switch label="在风格库上架" checked={Boolean(editor.input.published)} onChange={(published) => update({ published })} /><span aria-hidden="true">在风格库上架</span></label><div className="flex items-center gap-2"><button type="button" disabled={working} className={`${button} bg-surface-container`} onClick={closeModal}>取消</button><button type="submit" disabled={working || imageBusy || editorStale || !editor.input.prompt.trim() || !(editor.input.imageDataUrl || editor.record?.image)} className={`${button} bg-primary text-on-primary hover:bg-primary-container`}>{working ? '保存中...' : '保存风格'}</button></div></div>
           </fieldset>
         </form> : pendingImport && <div className="p-5 flex flex-col gap-4">{feedback}<p className="font-body-sm text-body-sm break-words">{pendingImport.filename}</p><p>新增 {pendingImport.preview.added} 条, 更新 {pendingImport.preview.updated} 条, 相同 {pendingImport.preview.unchanged} 条.</p><p className="font-body-sm text-body-sm text-on-surface-variant">同一编号的内容将按备份更新. 其他已有风格会保留.</p><button type="button" disabled={working} className={`${button} bg-primary text-on-primary`} onClick={() => void run(async () => { const result = await importStyles(pendingImport.archive, pendingImport.preview.revision); setPendingImport(null); await catalog.refresh(); setMessage(`导入完成, 新增 ${result.added} 条, 更新 ${result.updated} 条`); })}>{working ? '导入中...' : '确认导入'}</button></div>}
     </Dialog>}

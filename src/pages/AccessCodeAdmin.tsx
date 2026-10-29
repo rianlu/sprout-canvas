@@ -3,6 +3,7 @@ import { StitchIcon } from '../components/ui/StitchIcon';
 import { AdminEmpty, AdminHeading, AdminLoading, adminButton, adminField, adminPanel } from '../components/admin/AdminUI';
 import { Dialog } from '../components/ui/Dialog';
 import { Switch } from '../components/ui/Switch';
+import { NumberInput } from '../components/ui/NumberInput';
 import { CREDIT_LIMITS, type AccessCodeRecord, type CreditLedgerEntry, type CreditPrices } from '../../shared/credits-contract.mjs';
 import { listAccessCodes, createAccessCodes, updateAccessCode, deleteAccessCode, resetAccessCode, accessCodeLedger, getCreditPrices, saveCreditPrices, getAccessCode } from '../lib/api/credits';
 import { randomId } from '../lib/random/id';
@@ -21,8 +22,8 @@ type Manager = { record: AccessCodeRecord; requestId: string; note: string; enab
 type Usage = { entries: CreditLedgerEntry[]; nextCursor: number | null };
 const editRecord = (record: AccessCodeRecord): Manager => ({ record, requestId: randomId(), note: record.note, enabled: record.enabled, unlimited: record.unlimited, delta: 0, reason: '' });
 
-function AdminDialog({ title, busy, onClose, children, icon = 'lock' }: { title: string; busy: boolean; onClose: () => void; children: ReactNode; icon?: string }) {
-  return <Dialog label={title} busy={busy} dismissOnOutsidePress={false} onClose={onClose} className="w-full max-w-2xl max-h-[92dvh] overflow-y-auto rounded-3xl bg-surface-container-lowest border border-outline-variant/30 shadow-2xl">
+function AdminDialog({ title, busy, onClose, children, icon = 'lock', dismissOnEscape = true }: { title: string; busy: boolean; onClose: () => void; children: ReactNode; icon?: string; dismissOnEscape?: boolean }) {
+  return <Dialog label={title} busy={busy} dismissOnOutsidePress={false} dismissOnEscape={dismissOnEscape} onClose={onClose} className="w-full max-w-2xl max-h-[92dvh] overflow-y-auto rounded-3xl bg-surface-container-lowest border border-outline-variant/30 shadow-2xl">
       <div className="sticky top-0 z-10 bg-surface-container-lowest px-5 sm:px-7 py-5 flex items-center justify-between border-b border-outline-variant/30">
         <h2 className="font-headline-sm text-headline-sm flex items-center gap-3"><span className="flex w-9 h-9 items-center justify-center rounded-xl bg-surface-container-low text-primary"><StitchIcon name={icon} size={19} /></span>{title}</h2><button type="button" aria-label="关闭访问码弹窗" disabled={busy} onClick={onClose} className="w-9 h-9 flex items-center justify-center rounded-xl bg-surface-container-low hover:bg-surface-container"><StitchIcon name="close" size={20} /></button>
       </div><div className="p-5 sm:p-7 space-y-5">{children}</div>
@@ -33,7 +34,7 @@ function QuotaInput({ label, value, unlimited, onValueChange, onUnlimitedChange,
   return <div className="space-y-2">
     <label htmlFor={id} className="block font-body-sm text-body-sm">{label}</label>
     <div className="flex items-center min-h-12 rounded-xl border border-outline-variant/40 bg-surface-container-low/70 focus-within:border-primary transition-colors">
-      <input id={id} aria-describedby={`${id}-hint`} className="w-full min-w-0 flex-1 bg-transparent px-3 py-3 font-body-md text-body-md tabular-nums outline-none focus-visible:!outline-none disabled:text-outline disabled:cursor-not-allowed" type="number" min={min} max={CREDIT_LIMITS.points} step={1} required disabled={unlimited} value={value} onChange={(event) => onValueChange(Number(event.target.value))} />
+      <NumberInput id={id} describedBy={`${id}-hint`} rootClassName="min-w-0 flex-1" className="w-full min-w-0 bg-transparent px-3 py-3 font-body-md text-body-md tabular-nums outline-none focus-visible:!outline-none disabled:text-outline disabled:cursor-not-allowed" min={min} max={CREDIT_LIMITS.points} required disabled={unlimited} value={value} onChange={onValueChange} />
       <span aria-hidden="true" className="pr-3 font-body-sm text-body-sm text-outline">点</span>
       <label className="flex shrink-0 self-stretch items-center gap-2 border-l border-outline-variant/40 px-3 cursor-pointer font-body-sm text-body-sm"><span aria-hidden="true">无限额度</span><Switch label="无限额度" checked={unlimited} onChange={onUnlimitedChange} /></label>
     </div>
@@ -50,6 +51,8 @@ export function AccessCodeManager({ active }: { active: boolean }) {
   const [search, setSearch] = useState(''); const [status, setStatus] = useState('all');
   const [loading, setLoading] = useState(false); const [busy, setBusy] = useState(false);
   const [error, setError] = useState(''); const [message, setMessage] = useState('');
+  // The list read keeps its own error, so a later successful read clears it without hiding an action's failure.
+  const [listError, setListError] = useState('');
   const [creation, setCreation] = useState<Creation | null>(null);
   const [manager, setManager] = useState<Manager | null>(null);
   const [managerStale, setManagerStale] = useState(false);
@@ -62,8 +65,8 @@ export function AccessCodeManager({ active }: { active: boolean }) {
   const lock = useRef(false); const sequence = useRef(0);
   const refresh = useCallback(async () => {
     const version = ++sequence.current; setLoading(true);
-    try { const result = await listAccessCodes(search, status); if (version === sequence.current) { setCodes(result.codes); setTotal(result.total); setNextCursor(result.nextCursor); } }
-    catch (cause) { if (version === sequence.current) setError(cause instanceof Error ? cause.message : '读取访问码失败'); }
+    try { const result = await listAccessCodes(search, status); if (version === sequence.current) { setCodes(result.codes); setTotal(result.total); setNextCursor(result.nextCursor); setListError(''); } }
+    catch (cause) { if (version === sequence.current) setListError(cause instanceof Error ? cause.message : '读取访问码失败'); }
     finally { if (version === sequence.current) setLoading(false); }
   }, [search, status]);
   useEffect(() => { if (!active) return; const timer = window.setTimeout(() => void refresh(), 250); return () => { window.clearTimeout(timer); sequence.current++; }; }, [active, refresh]);
@@ -144,11 +147,12 @@ export function AccessCodeManager({ active }: { active: boolean }) {
       <button type="button" disabled={busy || loading} className={`${button} bg-surface-container-low hover:bg-surface-container`} onClick={() => void refresh()}><StitchIcon name="refresh" size={18} />刷新列表</button><button type="button" disabled={busy} className={`${button} bg-primary text-on-primary hover:bg-primary-container`} onClick={() => { setError(''); setMessage(''); setCreation({ requestId: randomId(), note: '', count: 1, points: 100, unlimited: false }); }}><StitchIcon name="add" size={18} />创建访问码</button>
     </AdminHeading>
     {!creation && !secrets && !manager && !usageRecord && feedback}
+    {listError && <div role="alert" className="flex flex-wrap items-center justify-between gap-3 p-3 rounded-xl bg-error-container text-on-error-container font-body-sm text-body-sm"><span>{listError}{codes.length > 0 && '. 当前显示上次读取的列表.'}</span><button type="button" disabled={loading} className="underline" onClick={() => void refresh()}>重新读取</button></div>}
     <section aria-label="灵感点消耗设置" className={`${adminPanel} p-5 sm:p-6 flex flex-col xl:flex-row xl:items-center justify-between gap-5`}>
       <div className="max-w-sm"><h2 className="font-headline-sm text-headline-sm flex items-center gap-2"><StitchIcon name="spa" size={20} className="text-primary" />灵感点消耗</h2><p className="font-body-sm text-body-sm text-on-surface-variant mt-2">图片生成与文字处理的统一点值.<br />保存后对新任务生效, 已受理任务沿用原点值.</p></div>
       {prices ? <form onSubmit={(event) => { event.preventDefault(); void run(async () => { const result = await saveCreditPrices({ ...prices, requestId: priceRequestId }); setPrices(result.prices); setPriceRequestId(randomId()); setMessage('点值已保存, 已受理任务继续沿用原点值'); }); }}><fieldset disabled={busy} className="flex flex-wrap items-end gap-3">
-        <label className="font-body-sm text-body-sm flex flex-col gap-2">每张图片<input aria-label="图片灵感点" title="适用于文生图, 参考图生成和蒙版编辑" type="number" required min={1} max={CREDIT_LIMITS.price} step={1} className={`${field} max-w-28`} value={prices.image} onChange={(event) => setPrices({ ...prices, image: Number(event.target.value) })} /></label>
-        <label className="font-body-sm text-body-sm flex flex-col gap-2">每次文字处理<input aria-label="文字灵感点" title="适用于提示词优化和分镜拆解" type="number" required min={1} max={CREDIT_LIMITS.price} step={1} className={`${field} max-w-28`} value={prices.text} onChange={(event) => setPrices({ ...prices, text: Number(event.target.value) })} /></label>
+        <label className="font-body-sm text-body-sm flex flex-col gap-2">每张图片<NumberInput label="图片灵感点" title="适用于文生图, 参考图生成和蒙版编辑" required min={1} max={CREDIT_LIMITS.price} className={`${field} max-w-28`} value={prices.image} onChange={(image) => setPrices({ ...prices, image })} /></label>
+        <label className="font-body-sm text-body-sm flex flex-col gap-2">每次文字处理<NumberInput label="文字灵感点" title="适用于提示词优化和分镜拆解" required min={1} max={CREDIT_LIMITS.price} className={`${field} max-w-28`} value={prices.text} onChange={(text) => setPrices({ ...prices, text })} /></label>
         <button type="submit" className={`${button} bg-primary text-on-primary`}>保存点值</button><button type="button" className={`${button} bg-surface-container-low hover:bg-surface-container`} onClick={() => void run(readPrices)}>读取最新点值</button>
       </fieldset></form> : <div className="flex items-center gap-3 text-body-sm text-on-surface-variant"><p role={priceError ? 'alert' : 'status'}>{priceError || '正在读取点值...'}</p>{priceError && <button type="button" className={`${button} bg-surface-container`} onClick={() => void readPrices()}>重新读取点值</button>}</div>}
     </section>
@@ -160,12 +164,12 @@ export function AccessCodeManager({ active }: { active: boolean }) {
       <button type="button" aria-label={`管理访问码 ${record.note || record.tail}`} disabled={busy} onClick={() => openRecord(record)} className="absolute inset-0 !m-0 rounded-2xl outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2" />
       <div className="flex items-center justify-between gap-2 pt-3 border-t border-outline-variant/25"><p className="font-meta-sm text-meta-sm text-outline">最近使用: {time(record.lastUsedAt)}</p><button type="button" aria-label={`用量明细 ${record.note || record.tail}`} title="查看用量明细" disabled={busy} onClick={() => openUsage(record)} className="relative z-10 flex items-center justify-center w-9 h-9 shrink-0 rounded-xl bg-surface-container-low text-secondary hover:bg-secondary-container hover:text-on-secondary-container transition-colors focus-visible:outline-primary"><StitchIcon name="view_timeline" size={19} /></button></div>
     </article>)}</div>
-    {!loading && !error && !codes.length && <AdminEmpty icon="lock" title={search || status !== 'all' ? '没有匹配的访问码' : '创建第一份访问额度'} description={search || status !== 'all' ? '试试其他名称或尾号, 也可以调整状态筛选.' : '创建访问码后复制给使用者, 即可开始创作.'} />}
+    {!loading && !listError && !codes.length && <AdminEmpty icon="lock" title={search || status !== 'all' ? '没有匹配的访问码' : '创建第一份访问额度'} description={search || status !== 'all' ? '试试其他名称或尾号, 也可以调整状态筛选.' : '创建访问码后复制给使用者, 即可开始创作.'} />}
     {nextCursor !== null && <button type="button" disabled={busy} className={`${button} bg-surface-container`} onClick={() => void run(async () => { const version = sequence.current; const result = await listAccessCodes(search, status, nextCursor); if (version === sequence.current) { setCodes((old) => [...old, ...result.codes]); setNextCursor(result.nextCursor); } })}>加载更多访问码</button>}
 
     {active && creation && <AdminDialog title="创建访问码" busy={busy} onClose={close}>{feedback}<form onSubmit={saveCreation}><fieldset disabled={busy} className="space-y-4">
       <label className="flex flex-col gap-2 font-body-sm text-body-sm">访问名称(用户可见)<input aria-label="访问名称(用户可见)" className={field} maxLength={CREDIT_LIMITS.note} value={creation.note} onChange={(event) => setCreation({ ...creation, note: event.target.value })} placeholder="例如: 朋友共用, 第一轮测试" /><span className="font-meta-sm text-meta-sm text-on-surface-variant">显示在用户菜单中, 共用此码的人显示相同名称. 留空显示创作者.</span></label>
-      <label className="flex flex-col gap-2 font-body-sm text-body-sm">创建数量<input aria-label="创建数量" className={field} type="number" min={1} max={CREDIT_LIMITS.batch} step={1} required value={creation.count} onChange={(event) => setCreation({ ...creation, count: Number(event.target.value) })} /><span className="text-on-surface-variant font-meta-sm text-meta-sm">支持一次创建 1 到 100 个码, 批量名称自动添加序号.</span></label>
+      <label className="flex flex-col gap-2 font-body-sm text-body-sm">创建数量<NumberInput label="创建数量" className={field} min={1} max={CREDIT_LIMITS.batch} required value={creation.count} onChange={(count) => setCreation({ ...creation, count })} /><span className="text-on-surface-variant font-meta-sm text-meta-sm">支持一次创建 1 到 100 个码, 批量名称自动添加序号.</span></label>
       <QuotaInput label="每个码的初始灵感点" value={creation.points} unlimited={creation.unlimited} onValueChange={(points) => setCreation({ ...creation, points })} onUnlimitedChange={(unlimited) => setCreation({ ...creation, unlimited })} description={creation.unlimited ? '无限额度不扣减余额, 仍记录用量. 随时可以改回有限额度.' : '每个访问码独立分配此额度. 打开右侧开关可设为无限额度.'} />
       <div className="flex justify-end"><button type="submit" className={`${button} bg-primary text-on-primary`}>{busy ? '创建中...' : '创建并显示访问码'}</button></div>
     </fieldset></form></AdminDialog>}
@@ -177,7 +181,7 @@ export function AccessCodeManager({ active }: { active: boolean }) {
         <form onSubmit={saveManager}><fieldset disabled={busy || Boolean(danger)} className="space-y-4">
           <label className="flex flex-col gap-2 font-body-sm text-body-sm">访问名称(用户可见)<input aria-label="访问名称(用户可见)" className={field} maxLength={CREDIT_LIMITS.note} value={manager.note} onChange={(event) => patch({ note: event.target.value })} placeholder="例如: 朋友共用, 第一轮测试" /><span className="font-meta-sm text-meta-sm text-on-surface-variant">显示在用户菜单中, 共用此码的人显示相同名称. 留空显示创作者.</span></label>
           <QuotaInput label="调整点数 (正数追加, 负数扣减)" value={manager.delta} min={-CREDIT_LIMITS.points} unlimited={manager.unlimited} onValueChange={(delta) => patch({ delta })} onUnlimitedChange={(unlimited) => patch({ unlimited })} description={manager.unlimited ? `原可用余额 ${manager.record.available.toLocaleString()} 点保留. 新任务不扣减余额, 已受理任务按原规则结算.` : `不调整时保持 0. 保存后可用约 ${(manager.record.available + manager.delta).toLocaleString()} 点, 最终以任务实时结算为准.`} />
-          <label className="flex items-center justify-between gap-3 font-body-sm text-body-sm p-3 rounded-xl bg-surface-container-low"><span>允许使用此访问码</span><input type="checkbox" checked={manager.enabled} onChange={(event) => patch({ enabled: event.target.checked })} className="w-4 h-4 accent-primary" /></label>
+          <label className="flex items-center justify-between gap-3 font-body-sm text-body-sm p-3 rounded-xl bg-surface-container-low cursor-pointer"><span aria-hidden="true">允许使用此访问码</span><Switch label="允许使用此访问码" checked={manager.enabled} onChange={(enabled) => patch({ enabled })} /></label>
           {!manager.enabled && manager.record.enabled && <p className="font-meta-sm text-meta-sm text-on-surface-variant">保存后停止新建任务, 未执行的任务会取消并释放占用点数. 已开始的任务正常收尾.</p>}
           <div className="flex flex-wrap items-center justify-end gap-2">
             <button type="submit" disabled={managerStale} className={`${button} bg-primary text-on-primary`}>{busy ? '保存中...' : '保存修改'}</button>
@@ -209,8 +213,9 @@ export function AccessCodeManager({ active }: { active: boolean }) {
       </div>
     </AdminDialog>}
 
-    {active && secrets && <AdminDialog title="保存访问码" busy={busy} onClose={close}>
-      <p className="font-body-sm text-body-sm text-on-surface-variant">完整访问码仅在本次操作显示, 请复制保存. 忘记后可在列表中重置, 额度和流水不会丢失.</p>{feedback}
+    {/* Full codes appear only here, so a stray Escape must not discard them; the close button still works. */}
+    {active && secrets && <AdminDialog title="保存访问码" busy={busy} onClose={close} dismissOnEscape={false}>
+      <p className="font-body-sm text-body-sm text-on-surface-variant">完整访问码仅在本次操作显示, 请复制保存后点右上角关闭. 忘记后可在列表中重置, 额度和流水不会丢失.</p>{feedback}
       {secrets.map((record) => <div key={record.id} className="rounded-xl p-3 bg-surface-container-low space-y-2"><p className="font-body-sm text-body-sm">{record.note || '未命名访问码'} · {record.unlimited ? '无限额度' : `可用 ${record.available} 点`}</p>{record.code ? <div className="flex gap-2"><input aria-label={`完整访问码 ${record.tail}`} readOnly value={record.code} className={`${field} font-mono min-w-0`} /><button type="button" className={`${button} bg-primary text-on-primary shrink-0`} onClick={() => void run(async () => { await navigator.clipboard.writeText(record.code!); setMessage('已复制访问码'); })}>复制</button></div> : <p role="status" className="font-body-sm text-body-sm text-error">该操作已成功, 完整码不再重复返回. 请关闭弹窗后重置尾号 {record.tail} 的访问码.</p>}</div>)}
       {secrets.some((record) => record.code) && <button type="button" className={`${button} bg-primary text-on-primary`} onClick={() => void run(async () => { await navigator.clipboard.writeText(secrets.filter((record) => record.code).map((record) => `${record.note || '访问码'}: ${record.code}`).join('\n')); setMessage('已复制全部访问码'); })}>复制全部</button>}
     </AdminDialog>}

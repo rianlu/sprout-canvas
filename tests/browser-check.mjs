@@ -773,6 +773,9 @@ try {
           assert.deepEqual(await typography(page.locator('main section h2').first()), libraryTypography.section, `${device} ${theme}: gallery section headings use the shared typography`);
           assert.equal(await page.locator('.stitch-page').evaluate((element) => getComputedStyle(element).backgroundColor), libraryTypography.background);
         }
+        // The footer shares the page gutter on every page, so its text lines up with the title above.
+        const [titleLeft, footerLeft] = await Promise.all([page.locator('h1').first().evaluate((element) => element.getBoundingClientRect().left), page.locator('footer > div').evaluate((element) => element.firstElementChild.getBoundingClientRect().left)]);
+        if (device !== 'mobile' && (key === 'styles' || key === 'gallery')) assert.ok(Math.abs(titleLeft - footerLeft) < 1, `${device} ${key}: footer aligns with the page title (${titleLeft} vs ${footerLeft})`);
         await screenshot(page, `${key}-${device}-${theme}`);
       }
     }
@@ -1170,6 +1173,11 @@ try {
     await closeQueue(rp);
   }
   assert.equal(await failureCards.count(), 1);
+  await rp.getByRole('button', { name: /任务队列/ }).click();
+  const failureQueue = rp.getByRole('dialog', { name: '任务队列', exact: true });
+  await failureQueue.getByText('生成失败 · 可重新生成', { exact: true }).first().waitFor();
+  assert.doesNotMatch(await failureQueue.innerText(), /服务商/, 'failures never mention the internal channel');
+  await closeQueue(rp);
   const originalFailure = (await jobs(rp)).find((job) => job.clientContext.prompt === retryPrompt);
   const untouchedFailure = (await jobs(rp)).find((job) => job.clientContext.prompt === untouchedPrompt);
   await rp.getByLabel('画面提示词', { exact: true }).fill('另一段尚未提交的提示词');

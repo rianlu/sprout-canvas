@@ -14,6 +14,8 @@ interface DialogProps {
   busy?: boolean;
   /** Outside press closes the dialog unless disabled, e.g. for forms with unsaved input. */
   dismissOnOutsidePress?: boolean;
+  /** Escape closes the dialog unless disabled, e.g. when it shows a secret that cannot be shown again. */
+  dismissOnEscape?: boolean;
   className?: string;
   backdropClassName?: string;
   viewportClassName?: string;
@@ -29,7 +31,7 @@ interface DialogProps {
  * Modal dialog on Base UI: focus trap and return, Escape, scroll lock, inert background and nested stacking
  * come from the library, so pages only describe their content.
  */
-export function Dialog({ label, onClose, children, busy = false, dismissOnOutsidePress = true, className = '', backdropClassName = DIALOG_BACKDROP, viewportClassName = DIALOG_VIEWPORT, initialFocus, open = true, ariaBusy, onKeyDown }: DialogProps) {
+export function Dialog({ label, onClose, children, busy = false, dismissOnOutsidePress = true, dismissOnEscape = true, className = '', backdropClassName = DIALOG_BACKDROP, viewportClassName = DIALOG_VIEWPORT, initialFocus, open = true, ariaBusy, onKeyDown }: DialogProps) {
   const popup = useRef<HTMLDivElement>(null);
   // A busy action can disable the focused control; park focus on the dialog so it never falls back to the page.
   useEffect(() => {
@@ -47,7 +49,7 @@ export function Dialog({ label, onClose, children, busy = false, dismissOnOutsid
     disablePointerDismissal={busy || !dismissOnOutsidePress}
     onOpenChange={(next, details) => {
       if (next) return;
-      if (busy) { details.cancel(); return; }
+      if (busy || (!dismissOnEscape && details.reason === 'escape-key')) { details.cancel(); return; }
       onClose();
     }}
   >

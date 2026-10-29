@@ -251,6 +251,13 @@ try {
   await split.getByRole('button', { name: '切分为 3×3', exact: true }).click();
   await split.getByRole('button', { name: '打包下载 (9 张)', exact: true }).waitFor();
   const originalSlices = await split.locator('figure img').evaluateAll((images) => images.map((image) => ({ name: image.alt, url: image.src })));
+  // Clearing a count while typing leaves it empty instead of snapping to 1 and turning "5" into "15".
+  const rowsField = split.getByLabel('行', { exact: true });
+  await rowsField.selectText(); await rowsField.press('Backspace');
+  assert.equal(await rowsField.inputValue(), '');
+  await rowsField.press('5');
+  await split.getByRole('button', { name: '切分为 5×3', exact: true }).waitFor();
+  await rowsField.fill('3');
   await split.getByLabel('列', { exact: true }).fill('2');
   await split.getByRole('button', { name: 'JPEG', exact: true }).click();
   const downloading = page.waitForEvent('download');

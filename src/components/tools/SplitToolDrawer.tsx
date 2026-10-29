@@ -4,6 +4,7 @@ import { fileToDataUrl, imageFromDataUrl } from '../../lib/image/data-url';
 import { useDropzone } from 'react-dropzone';
 import { Dialog } from '../ui/Dialog';
 import { SegmentedControl } from '../ui/SegmentedControl';
+import { NumberInput } from '../ui/NumberInput';
 import type { ResultRecord } from '../../types/generation';
 import type { RefImage } from '../../types/generation';
 import { prepareImageDataUrl } from '../../lib/image/compress';
@@ -19,10 +20,7 @@ interface SplitSource { name: string; dataUrl: string; image: HTMLImageElement }
 interface SplitBatch { slices: SlicePreview[]; columns: number; rows: number; filename: string }
 type SplitFormat = 'png' | 'jpeg' | 'webp';
 
-function clampInt(value: number, min: number, max: number, fallback: number) {
-  if (!Number.isFinite(value)) return fallback;
-  return Math.max(min, Math.min(max, Math.round(value)));
-}
+const SPLIT_FIELD = 'w-full bg-surface-container-low rounded-lg px-2 py-1.5 font-body-sm text-body-sm text-on-surface border border-outline-variant/30 focus:border-primary outline-none';
 
 function canvasToDataUrl(canvas: HTMLCanvasElement, mime: string, quality?: number): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -253,16 +251,12 @@ export function SplitToolDrawer({ open, onClose, galleryRecords, initialRecord, 
                 <div className="flex flex-col gap-1.5">
                   <span className="font-meta-sm text-meta-sm text-on-surface font-medium">行 × 列</span>
                   <div className="grid grid-cols-2 gap-1.5">
-                    <label className="flex flex-col gap-1">
-                      <span className="font-meta-sm text-[10px] text-on-surface-variant">行</span>
-                      <input className="w-full bg-surface-container-low rounded-lg px-2 py-1.5 font-body-sm text-body-sm text-on-surface border border-outline-variant/30 focus:border-primary outline-none" type="number" min={1} max={20} value={rows}
-                        onChange={(event) => setRows(clampInt(Number(event.target.value), 1, 20, 3))} />
-                    </label>
-                    <label className="flex flex-col gap-1">
-                      <span className="font-meta-sm text-[10px] text-on-surface-variant">列</span>
-                      <input className="w-full bg-surface-container-low rounded-lg px-2 py-1.5 font-body-sm text-body-sm text-on-surface border border-outline-variant/30 focus:border-primary outline-none" type="number" min={1} max={20} value={cols}
-                        onChange={(event) => setCols(clampInt(Number(event.target.value), 1, 20, 3))} />
-                    </label>
+                    {([['行', rows, setRows], ['列', cols, setCols]] as const).map(([label, value, setValue]) => (
+                      <label key={label} className="flex flex-col gap-1">
+                        <span className="font-meta-sm text-[10px] text-on-surface-variant">{label}</span>
+                        <NumberInput className={SPLIT_FIELD} min={1} max={20} value={value} onChange={setValue} />
+                      </label>
+                    ))}
                   </div>
                 </div>
 

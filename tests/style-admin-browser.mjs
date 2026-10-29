@@ -154,7 +154,7 @@ try {
   const categoryChoices = await dialog.getByLabel('分类', { exact: true }).locator('option').allTextContents();
   assert.equal(categoryChoices.length, 8); assert.equal(categoryChoices[0], '未分类'); assert.equal(categoryChoices[5], '写实摄影 · 像照片: 人像, 胶片, 棚拍');
   await options(dialog, { 名称: '胶片街景', 分类: '写实摄影', 来源链接: 'https://example.org/style-source', '排序 (越小越靠前)': 1 });
-  await dialog.getByLabel('在风格库上架').uncheck();
+  await dialog.getByRole('switch', { name: '在风格库上架', exact: true }).uncheck();
   await save(dialog);
   let uploaded = (await list(page)).styles.find((style) => style.name === '胶片街景');
   assert.equal(uploaded.author, '');
@@ -249,16 +249,32 @@ try {
   await dialog.getByRole('alert').filter({ hasText: '模拟保存失败' }).waitFor();
   assert.equal(await dialog.getByLabel('风格提示词').inputValue(), '保存错误时保留的内容');
   await page.unroute('**/api/admin/styles/' + pasted.id);
-  const changed = await api(page, '/api/admin/styles/' + pasted.id, 'PUT', { name: pasted.name, prompt: '另一页面已保存的版本', author: pasted.author, category: pasted.category, published: true, sortOrder: 2, version: pasted.version });
+  const changed = await api(page, '/api/admin/styles/' + pasted.id, 'PUT', { name: pasted.name, prompt: '另一页面已保存的版本', author: pasted.author, category: pasted.category, published: true, sortOrder: 7, version: pasted.version });
   assert.equal(changed.status, 200);
   await dialog.getByRole('button', { name: '保存风格', exact: true }).click();
   await dialog.getByRole('alert').filter({ hasText: '已在其他页面修改' }).waitFor();
   assert.equal(await dialog.getByLabel('风格提示词').inputValue(), '保存错误时保留的内容');
   assert.equal((await list(page)).styles.find((style) => style.id === pasted.id).prompt, '另一页面已保存的版本');
-  await dialog.getByRole('button', { name: '取消', exact: true }).click();
+  assert.equal(await dialog.getByRole('button', { name: '保存风格', exact: true }).isDisabled(), true, 'a stale form saves only after refreshing');
+  // Refreshing keeps the edited prompt and takes the field the other page changed.
+  await dialog.getByRole('button', { name: '刷新数据', exact: true }).click();
+  await dialog.getByText('数据已刷新, 已保留尚未保存的修改', { exact: false }).waitFor();
+  assert.equal(await dialog.getByLabel('风格提示词').inputValue(), '保存错误时保留的内容');
+  assert.equal(await dialog.getByLabel('排序 (越小越靠前)', { exact: true }).inputValue(), '7');
+  await save(dialog);
+  const merged = (await list(page)).styles.find((style) => style.id === pasted.id);
+  assert.equal(merged.prompt, '保存错误时保留的内容'); assert.equal(merged.sortOrder, 7);
   await page.reload();
   await card(page, pasted.name).waitFor();
-  checks.push('保存失败保留表单, 版本冲突不覆盖另一页面的修改');
+  // A card toggle that loses a version race refreshes the list, so the next press uses the latest version.
+  assert.equal((await api(page, '/api/admin/styles/' + pasted.id, 'PUT', { name: merged.name, prompt: merged.prompt, author: merged.author, category: merged.category, published: true, sortOrder: 8, version: merged.version })).status, 200);
+  await card(page, pasted.name).getByRole('button', { name: '下架', exact: true }).click();
+  await page.getByRole('alert').filter({ hasText: '列表已刷新' }).waitFor();
+  await card(page, pasted.name).getByRole('button', { name: '下架', exact: true }).click();
+  await card(page, pasted.name).getByRole('button', { name: '上架', exact: true }).waitFor();
+  await card(page, pasted.name).getByRole('button', { name: '上架', exact: true }).click();
+  await card(page, pasted.name).getByRole('button', { name: '下架', exact: true }).waitFor();
+  checks.push('保存失败保留表单, 版本冲突后刷新保留未保存修改并合并另一页面的字段, 卡片上下架冲突后刷新列表');
 
   dialog = await openEditor(page, pasted.name);
   await dialog.getByLabel('风格提示词').fill('会话恢复后继续保存的内容');

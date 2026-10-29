@@ -101,12 +101,25 @@ try {
   await dialog.getByRole('button', { name: '复制全部', exact: true }).click();
   assert.ok((await admin.evaluate(() => navigator.clipboard.readText())).includes(secret));
   await screenshot(admin, 'created-codes');
+  // The full codes appear only once, so Escape must not discard them; the close button still does.
+  await admin.keyboard.press('Escape');
+  await admin.waitForTimeout(300);
+  assert.equal(await dialog.isVisible(), true, 'Escape keeps the one-time code dialog open');
   await dialog.getByLabel('关闭访问码弹窗').click();
   await card(admin, '朋友共享 1').waitFor();
   assert.equal((await admin.locator('main:visible').innerText()).includes(secret), false);
   await admin.getByLabel('搜索访问码').fill('朋友共享');
   await until(async () => await admin.locator('main:visible article').count() === 2, 'access code search');
-  checks.push('统一后台, 点值读取失败可重试, 批量创建, 一次性复制与列表搜索');
+  // A failed list read clears once a later read succeeds.
+  let failList = true;
+  await admin.route('**/api/admin/access-codes?*', (route) => { if (failList) { failList = false; return route.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ error: '模拟列表读取失败' }) }); } return route.continue(); });
+  await admin.getByRole('button', { name: '刷新列表', exact: true }).click();
+  await admin.getByRole('alert').filter({ hasText: '模拟列表读取失败' }).waitFor();
+  assert.equal(await admin.locator('main:visible article').count(), 2, 'a failed read keeps the last list');
+  await admin.getByRole('button', { name: '刷新列表', exact: true }).click();
+  await admin.getByRole('alert').filter({ hasText: '模拟列表读取失败' }).waitFor({ state: 'detached' });
+  await admin.unroute('**/api/admin/access-codes?*');
+  checks.push('统一后台, 点值读取失败可重试, 批量创建, 一次性复制且 Esc 不关闭, 列表读取失败后成功即清除提示, 列表搜索');
 
   const a = await newPage(), b = await newPage();
   let logins = 0; a.on('request', (request) => { if (request.url().endsWith('/api/auth/login')) logins++; });
@@ -159,7 +172,13 @@ try {
   assert.equal(await dialog.getByRole('button', { name: '用量明细', exact: true }).count(), 0);
   assert.equal(await dialog.getByRole('button', { name: '刷新数据', exact: true }).count(), 0);
   assert.equal(await dialog.getByRole('button', { name: '载入最新版本', exact: true }).count(), 0);
-  await dialog.getByLabel('调整点数 (正数追加, 负数扣减)', { exact: true }).fill('5');
+  // Typed key by key, a deduction stays negative instead of turning "-50" into "050".
+  const deltaField = dialog.getByLabel('调整点数 (正数追加, 负数扣减)', { exact: true });
+  const available = (await api(admin, `/api/admin/access-codes/${sharedId}`)).data.accessCode.available;
+  await deltaField.selectText(); await deltaField.press('-'); await deltaField.press('5'); await deltaField.press('0');
+  assert.equal(await deltaField.inputValue(), '-50');
+  await dialog.getByText(`保存后可用约 ${(available - 50).toLocaleString()} 点`, { exact: false }).waitFor();
+  await deltaField.fill('5');
   const adjustmentBodies = []; let loseAdjustmentResponse = true;
   await admin.route(`**/api/admin/access-codes/${sharedId}`, async (route) => {
     if (route.request().method() !== 'PATCH') return route.continue();
@@ -230,12 +249,12 @@ try {
   await admin.getByRole('button', { name: '刷新列表' }).click();
   await card(admin, '朋友长期共享').getByRole('button', { name: /^管理访问码 / }).click();
   dialog = admin.getByRole('dialog', { name: '管理访问码', exact: true });
-  await dialog.getByLabel('允许使用此访问码').uncheck();
+  await dialog.getByRole('switch', { name: '允许使用此访问码', exact: true }).uncheck();
   await dialog.getByRole('button', { name: '保存修改' }).click(); await dialog.waitFor({ state: 'hidden' });
   assert.equal((await auth(a)).canGenerate, false);
   await card(admin, '朋友长期共享').getByRole('button', { name: /^管理访问码 / }).click();
   dialog = admin.getByRole('dialog', { name: '管理访问码', exact: true });
-  await dialog.getByLabel('允许使用此访问码').check();
+  await dialog.getByRole('switch', { name: '允许使用此访问码', exact: true }).check();
   await dialog.getByRole('button', { name: '保存修改' }).click(); await dialog.waitFor({ state: 'hidden' });
   await card(admin, '朋友长期共享').getByRole('button', { name: /^管理访问码 / }).click();
   dialog = admin.getByRole('dialog', { name: '管理访问码', exact: true });
