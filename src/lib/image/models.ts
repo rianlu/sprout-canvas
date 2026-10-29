@@ -3,7 +3,7 @@ import type { ImageCapabilities, ImageFormat, ServerConfig } from '../../types/p
 
 /** Distinct models in channel order; the selector only appears when there is more than one. */
 export function imageModels(config?: ServerConfig | null): string[] {
-  return [...new Set((config?.providers || []).map((provider) => provider.modelName || provider.imageModel).filter(Boolean))];
+  return [...new Set((config?.providers || []).map((provider) => provider.modelName || provider.imageModel).filter((name): name is string => Boolean(name)))];
 }
 
 /**

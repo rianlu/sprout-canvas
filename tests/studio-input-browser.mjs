@@ -6,7 +6,7 @@ import path from 'node:path';
 import { tmpdir } from 'node:os';
 import { chromium } from 'playwright';
 import { startHarness, until } from './server-harness.mjs';
-import { png } from './fixtures.mjs';
+import { png, signInWithCode } from './fixtures.mjs';
 import { PROMPT_POLISH_INSTRUCTIONS } from '../shared/prompt-polish.mjs';
 
 const output = path.join(process.env.SPROUT_TEST_OUTPUT || path.join(tmpdir(), 'sprout-browser-check'), 'studio-input');
@@ -40,8 +40,7 @@ async function session(code = app.accessCode) {
   page.on('pageerror', (error) => errors.push(error.message));
   page.on('dialog', async (dialog) => { dialogs.push(dialog.message()); await dialog.dismiss(); });
   page.on('request', (request) => { if (request.method() === 'POST' && new URL(request.url()).pathname === '/api/text') requests.push(request.postDataJSON()); });
-  await page.goto(app.base); await page.getByLabel('访问码', { exact: true }).fill(code);
-  await page.getByRole('button', { name: '进入工作台', exact: true }).click(); await ready(page);
+  await page.goto(app.base); await signInWithCode(page, code); await ready(page);
   return page;
 }
 const input = (page) => page.locator('.studio-rail textarea');

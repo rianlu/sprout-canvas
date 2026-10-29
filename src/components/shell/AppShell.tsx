@@ -9,6 +9,9 @@ export interface AppShellProps {
   page: PageKey;
   onPageChange: (page: PageKey) => void;
   onOpenHelp: () => void;
+  /** `loading` keeps the account controls empty until the session is known, so a signed-in page never flashes a sign-in button. */
+  account: 'loading' | 'guest' | 'member';
+  onOpenSignIn: () => void;
   onSignOut: () => void;
   queueCount: number;
   onOpenQueue: () => void;
@@ -22,7 +25,7 @@ const NAV_ITEMS: { key: PageKey; label: string }[] = [
   { key: 'gallery', label: '展馆' },
 ];
 
-export function AppShell({ page, onPageChange, onOpenHelp, onSignOut, queueCount, onOpenQueue, children }: AppShellProps) {
+export function AppShell({ page, onPageChange, onOpenHelp, account, onOpenSignIn, onSignOut, queueCount, onOpenQueue, children }: AppShellProps) {
   const { theme, toggle } = useTheme();
   const { credits, canGenerate, accessName } = useCredits();
   const navigation = (mobile = false) => (
@@ -75,13 +78,16 @@ export function AppShell({ page, onPageChange, onOpenHelp, onSignOut, queueCount
           </div>
           {navigation()}
           <div className="flex items-center gap-2 sm:gap-space-sm shrink-0">
-            {credits && (
+            {account === 'guest' && (
+              <button type="button" onClick={onOpenSignIn} className="px-4 py-1.5 rounded-lg bg-primary text-on-primary font-body-sm text-body-sm font-medium hover:bg-primary/90 transition-colors">登录</button>
+            )}
+            {account === 'member' && credits && (
               <div aria-label={credits.unlimited ? `无限灵感点, 原额度占用 ${credits.reserved} 点` : `可用 ${credits.available} 灵感点, 占用 ${credits.reserved} 点`} title={`${credits.unlimited ? '无限额度, 新任务不扣减余额' : `可用 ${credits.available.toLocaleString()} 点`}, 占用 ${credits.reserved.toLocaleString()} 点. ${canGenerate ? '已受理任务按提交时的额度模式结算.' : '访问码已失效, 可继续领取已有结果. 请退出后用可用访问码登录再创作.'}`} className="px-2.5 py-1.5 rounded-xl bg-secondary-container text-on-secondary-container flex flex-col items-center font-meta-sm text-meta-sm whitespace-nowrap">
                 <span className="flex items-center gap-1 font-semibold tabular-nums"><StitchIcon name="spa" size={15} />{credits.unlimited ? '无限' : compactPoints(credits.available)}<span className="hidden lg:inline">灵感点</span></span>
                 {!canGenerate ? <span className="text-[10px] text-error">访问码已失效</span> : credits.reserved > 0 && <span className="text-[10px] opacity-80">{credits.unlimited && <span className="hidden sm:inline">原额度</span>}占用 {compactPoints(credits.reserved)}</span>}
               </div>
             )}
-            <button
+            {account === 'member' && <button
               type="button"
               className="flex items-center gap-1.5 px-space-sm py-1.5 rounded-lg bg-surface-container hover:bg-surface-container-high transition-colors text-on-surface"
               onClick={onOpenQueue}
@@ -92,8 +98,8 @@ export function AppShell({ page, onPageChange, onOpenHelp, onSignOut, queueCount
               <span className="px-1.5 py-0.5 rounded-full bg-secondary-container text-on-secondary-container font-meta-sm text-meta-sm">
                 {queueCount}
               </span>
-            </button>
-            <UserPopover key={page} accessName={accessName} tail={credits?.tail} theme={theme} onToggleTheme={toggle} onOpenHelp={onOpenHelp} onSignOut={onSignOut} />
+            </button>}
+            {account !== 'loading' && <UserPopover key={page} accessName={accessName} tail={credits?.tail} theme={theme} onToggleTheme={toggle} onOpenHelp={onOpenHelp} onSignOut={account === 'member' ? onSignOut : undefined} />}
           </div>
         </div>
         {navigation(true)}

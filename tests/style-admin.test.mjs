@@ -26,7 +26,13 @@ test('style management authorization, persistence, assets and archive transactio
     const api = (url, options = {}) => app.api(`/api/admin/styles${url}`, { cookie: admin, ...options });
     const list = async (adminMode = true) => (await app.api(adminMode ? '/api/admin/styles' : '/api/styles', { cookie: adminMode ? admin : user })).data;
     await t.test('normal and admin sessions are independent and secrets stay server side', async () => {
-      assert.equal((await app.api('/api/styles')).status, 401);
+      // The published library is public for visitors; managing it still needs the admin session.
+      const visitor = await app.api('/api/styles');
+      assert.equal(visitor.status, 200);
+      assert.ok(visitor.data.styles.length > 0 && visitor.data.styles.every((style) => style.published));
+      assert.equal((await app.api(visitor.data.styles[0].image)).status, 200);
+      assert.equal((await app.api('/api/styles', { method: 'POST', body: {} })).status, 404);
+      assert.equal((await app.api('/api/admin/styles')).status, 401);
       assert.equal((await app.api('/api/admin/styles', { cookie: user })).status, 401);
       assert.equal((await app.api('/api/jobs/me', { cookie: admin })).status, 401);
       assert.equal((await app.api('/api/admin/auth/login', { method: 'POST', body: { password: TEST_PASSWORD } })).status, 401);

@@ -27,6 +27,8 @@ export function AdminPage({ onBack }: { onBack: () => void }) {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [working, setWorking] = useState(false);
+  // Set when the admin session ends on its own; the login form then says unsaved edits survive signing in again.
+  const [expired, setExpired] = useState(false);
   const lock = useRef(false);
   const refresh = useCallback(async () => {
     try { setSession(await adminStatus()); setError(''); }
@@ -34,12 +36,12 @@ export function AdminPage({ onBack }: { onBack: () => void }) {
   }, []);
   useEffect(() => {
     void refresh();
-    const expired = () => setSession((value) => value && { ...value, authenticated: false });
+    const ended = () => { setExpired(true); setSession((value) => value && { ...value, authenticated: false }); };
     const changed = () => setTab(currentTab());
-    window.addEventListener('sprout:admin-expired', expired);
+    window.addEventListener('sprout:admin-expired', ended);
     window.addEventListener('popstate', changed);
     window.addEventListener('hashchange', changed);
-    return () => { window.removeEventListener('sprout:admin-expired', expired); window.removeEventListener('popstate', changed); window.removeEventListener('hashchange', changed); };
+    return () => { window.removeEventListener('sprout:admin-expired', ended); window.removeEventListener('popstate', changed); window.removeEventListener('hashchange', changed); };
   }, [refresh]);
   const navigate = useCallback((next: AdminTab) => {
     setTab(next);
@@ -74,9 +76,9 @@ export function AdminPage({ onBack }: { onBack: () => void }) {
       {!session ? <AuthConnection error={error} onRetry={() => { setError(''); void refresh(); }} /> : !session.configured ? <p role="status" className="rounded-xl bg-surface-container-low p-4 font-body-sm text-body-sm text-on-surface-variant">管理员入口尚未启用. 请在服务端配置管理员密码后重新进入.</p> : <form aria-busy={working} onSubmit={(event) => {
         event.preventDefault();
         if (!password) return;
-        void run(async () => { await adminLogin(password); setPassword(''); await refresh(); });
+        void run(async () => { await adminLogin(password); setPassword(''); setExpired(false); await refresh(); });
       }}>
-        <AuthSecretField id="admin-password" label="管理员密码" visibilityLabel="密码" value={password} placeholder="输入管理员密码" hint="请输入此工作台的管理员密码." error={error} disabled={working} maxLength={256} onChange={(value) => { setPassword(value); setError(''); }} />
+        <AuthSecretField id="admin-password" account="芽绘台管理员" label="管理员密码" visibilityLabel="密码" value={password} placeholder="输入管理员密码" hint={expired ? '登录已过期, 重新输入密码后可继续, 未保存的编辑会保留.' : '请输入此工作台的管理员密码.'} error={error} disabled={working} maxLength={256} onChange={(value) => { setPassword(value); setError(''); }} />
         <AuthSubmit busy={working} disabled={working || !password}>登录管理后台</AuthSubmit>
       </form>}
     </AuthLayout>}

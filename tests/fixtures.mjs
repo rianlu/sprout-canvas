@@ -28,3 +28,12 @@ export const MASK_URL = `data:image/png;base64,${png(2, 2, [0, 0, 0, 0]).toStrin
 export function submission(requestId, changes = {}) {
   return { requestId, request: { prompt: '画一片叶子', size: '1024x1024', quality: 'medium', outputFormat: 'png', background: 'auto', outputCompression: 90, references: [], ...changes }, clientContext: { kind: 'single', placeholderId: `art-${requestId}`, prompt: '画一片叶子', mode: 'text' } };
 }
+
+/** Signs a browser page in through the header's access code dialog; visitors can browse, so the workspace is already on screen. */
+export async function signInWithCode(page, code) {
+  const dialog = page.getByRole('dialog', { name: '使用访问码登录', exact: true });
+  if (!await dialog.isVisible()) await page.getByRole('button', { name: '登录', exact: true }).click();
+  await dialog.getByLabel('访问码', { exact: true }).fill(code);
+  await dialog.getByRole('button', { name: '登录', exact: true }).click();
+  await dialog.waitFor({ state: 'hidden' });
+}

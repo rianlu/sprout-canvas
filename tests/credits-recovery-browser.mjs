@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { chromium } from 'playwright';
+import { signInWithCode } from './fixtures.mjs';
 import { startHarness, until } from './server-harness.mjs';
 
 const output = path.join(process.env.SPROUT_TEST_OUTPUT || tmpdir(), 'credits-recovery');
@@ -85,8 +86,7 @@ const retryButton = () => page.getByRole('button', { name: /^一键重试/ });
 
 try {
   await launch();
-  await page.getByLabel('访问码', { exact: true }).fill(app.accessCode);
-  await page.getByRole('button', { name: '进入工作台', exact: true }).click(); await ready();
+  await signInWithCode(page, app.accessCode); await ready();
   cookie = (await context.cookies(app.base)).map((item) => item.name + '=' + item.value).join('; ');
 
   hold();

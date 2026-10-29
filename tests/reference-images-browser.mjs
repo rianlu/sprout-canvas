@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { chromium } from 'playwright';
 import { startHarness, until } from './server-harness.mjs';
-import { png } from './fixtures.mjs';
+import { png, signInWithCode } from './fixtures.mjs';
 
 const output = path.join(process.env.SPROUT_TEST_OUTPUT || path.join(tmpdir(), 'sprout-browser-check'), 'reference-images');
 await mkdir(output, { recursive: true });
@@ -74,8 +74,7 @@ try {
     }
     try {
       await page.goto(app.base);
-      await page.getByLabel('访问码', { exact: true }).fill(app.accessCode);
-      await page.getByRole('button', { name: '进入工作台', exact: true }).click();
+      await signInWithCode(page, app.accessCode);
       await page.getByLabel('画面提示词', { exact: true }).waitFor();
       if (series) await page.getByRole('navigation', { name: '主导航', exact: true }).getByRole('link', { name: '系列策划', exact: true }).click();
       const prompt = series ? page.locator('#series-story-prompt') : page.getByLabel('画面提示词', { exact: true });

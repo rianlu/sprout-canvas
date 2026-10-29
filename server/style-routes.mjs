@@ -2,7 +2,7 @@ import { json, readJson } from './http.mjs';
 import { STYLE_ID, STYLE_LIMITS } from '../shared/style-contract.mjs';
 import { requestError } from '../shared/generation-contract.mjs';
 
-export function createStyleRoutes({ store, adminAuth, readConfig, requireUser }) {
+export function createStyleRoutes({ store, adminAuth, readConfig }) {
   return async function route(req, res, url) {
     const admin = url.pathname.startsWith('/api/admin/');
     if (!admin && !url.pathname.startsWith('/api/styles')) return false;
@@ -17,7 +17,8 @@ export function createStyleRoutes({ store, adminAuth, readConfig, requireUser })
       }
       if (url.pathname === '/api/admin/auth/logout' && req.method === 'POST') { json(res, 200, { ok: true }, { 'Set-Cookie': adminAuth.logout(req, config) }); return true; }
       adminAuth.require(req, config);
-    } else if (!await requireUser(req, res)) return true;
+    }
+    // The published library and its example images are public so visitors can browse before signing in.
     const pathname = admin ? url.pathname.replace('/api/admin/', '/api/') : url.pathname;
     if (pathname === '/api/styles' && req.method === 'GET') { json(res, 200, store.catalog(admin)); return true; }
     const image = pathname.match(/^\/api\/styles\/images\/([^/]+)$/);

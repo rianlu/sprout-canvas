@@ -98,7 +98,7 @@ npm test
 npm run start:server
 ```
 
-先打开 `http://127.0.0.1:8787/#admin` 使用管理员密码创建访问码, 再用访问码登录 `http://127.0.0.1:8787`. `/health` 检查进程, `/ready` 检查配置和就绪状态; 两者都不发起上游生图.
+先打开 `http://127.0.0.1:8787/#admin` 使用管理员密码创建访问码, 再打开 `http://127.0.0.1:8787` 点击右上角登录输入访问码. `/health` 检查进程, `/ready` 检查配置和就绪状态; 两者都不发起上游生图.
 
 开发时在两个终端分别运行:
 
@@ -357,7 +357,8 @@ docker compose up -d --wait
 | `GET /api/text/:requestId` | 按原请求编号读取文字结果, 不再次调用模型 |
 | `GET /api/credits` | 当前码可用/占用/累计消耗与点值版本 |
 | `/api/auth/status`, `login`, `logout` | 工作台会话状态, 访问码登录和退出; 登录 body 仅接受 code |
-| `GET /api/styles` / `/api/styles/images/:file` | 普通登录后读取已上架风格和示例图 |
+| `GET /api/styles` / `/api/styles/images/:file` | 公开读取已上架风格和示例图, 未上架内容只经管理员接口读取 |
+| `GET /api/config` | 未登录时只返回模型名, 生成方式与参数能力, 不含通道名称, 数量或状态; 登录后返回完整公开配置 |
 | `/api/admin/auth/status`, `login`, `logout` | 独立管理登录, 不获得生图权限 |
 | `GET /api/admin/overview` | 仅管理员读取当前风格/访问码, 累计 usage, 今日/本月 usagePeriods 和 365 天 activity, 不返回凭据或用户作品 |
 | `GET/POST /api/admin/styles` | 读取全部风格或新建, 新建请求可含 imageDataUrl |

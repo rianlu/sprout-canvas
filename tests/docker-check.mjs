@@ -7,7 +7,7 @@ import { existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { chromium } from 'playwright';
-import { png, PNG_BASE64, submission } from './fixtures.mjs';
+import { png, PNG_BASE64, submission, signInWithCode } from './fixtures.mjs';
 
 const execute = promisify(execFile);
 const docker = async (...args) => (await execute('docker', args, { maxBuffer: 1024 * 1024 })).stdout.trim();
@@ -72,7 +72,10 @@ try {
   const createdCode = await request('/api/admin/access-codes', { method: 'POST', body: { requestId: randomUUID(), initialPoints: 50, note: '容器额度验收' } });
   assert.equal(createdCode.status, 201);
   const accessCode = createdCode.data.codes[0];
-  assert.equal((await fetch(`${base}/api/config`)).status, 401);
+  // Visitors read the model choices, never channel health; tasks still need a session.
+  const visitorConfig = await (await fetch(`${base}/api/config`)).json();
+  assert.deepEqual(Object.keys(visitorConfig).sort(), ['baseUrl', 'imageCapabilities', 'imageConcurrency', 'providers']);
+  assert.equal((await fetch(`${base}/api/jobs/me`)).status, 401);
   const login = await fetch(`${base}/api/auth/login`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code: accessCode.code }) });
   assert.equal(login.status, 200);
   const cookie = login.headers.get('set-cookie').split(';')[0];
@@ -101,8 +104,7 @@ try {
   const errors = [];
   page.on('pageerror', (error) => errors.push(error.message));
   await page.goto(base);
-  await page.getByLabel('访问码', { exact: true }).fill(accessCode.code);
-  await page.getByRole('button', { name: '进入工作台', exact: true }).click();
+  await signInWithCode(page, accessCode.code);
   await page.locator('.studio-rail textarea').waitFor();
   assert.equal(await page.locator('.studio-rail').evaluate((element) => Math.round(element.getBoundingClientRect().width)), 440);
   await page.getByText('上游暂不支持修改, 将使用默认值', { exact: true }).waitFor();

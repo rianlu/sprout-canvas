@@ -10,7 +10,7 @@ import type { QueueSubmitInput } from '../lib/api/queue';
 import { requestTextGeneration } from '../lib/api/text';
 import { getStyles } from '../lib/api/styles';
 import { MAX_REFERENCE_IMAGES, defaultModelName } from '../../shared/generation-contract.mjs';
-import { getCreditQuote } from '../lib/credits';
+import { getCreditQuote, requireSignIn } from '../lib/credits';
 import { brushMaskToDataUrl, brushStrokeCount, hasEditableRegion, type BrushMaskData } from '../lib/editor/brush-mask';
 import { MaskEditor } from '../components/editor/MaskEditor';
 import { SplitToolDrawer } from '../components/tools/SplitToolDrawer';
@@ -215,6 +215,7 @@ export function CreativeStudio({ onOpenStyles, onOpenGallery, onSubmitBatch, onC
       pushToast('info', '先写下一点灵感再润色');
       return;
     }
+    if (!requireSignIn()) return;
     polishLock.current = true; setPolishing(true);
     const original = config.prompt;
     try {
@@ -314,6 +315,7 @@ export function CreativeStudio({ onOpenStyles, onOpenGallery, onSubmitBatch, onC
   // 提交 (buildGenerationPayload 走真实协议: ref_images + maskFactory)
   const handleSubmit = useCallback(async () => {
     if (!config.prompt.trim() || submitLock.current || imageLock.current || !draftLoaded || !imageCapabilities || submitting || polishing || maskEditorOpen || fullscreen || splitOpen) return;
+    if (!requireSignIn()) return;
     submitLock.current = true;
     setSubmitting(true);
     try {

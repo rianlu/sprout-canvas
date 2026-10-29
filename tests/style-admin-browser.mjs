@@ -4,6 +4,7 @@ import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { tmpdir } from 'node:os';
 import { chromium } from 'playwright';
+import { signInWithCode } from './fixtures.mjs';
 import { startHarness, TEST_PASSWORD, TEST_ADMIN_PASSWORD, until } from './server-harness.mjs';
 
 const output = process.env.SPROUT_TEST_OUTPUT ? path.join(process.env.SPROUT_TEST_OUTPUT, 'style-admin') : path.join(tmpdir(), 'sprout-style-admin-browser');
@@ -92,13 +93,14 @@ try {
   await page.getByLabel('管理员密码', { exact: true }).fill(TEST_PASSWORD);
   await page.getByRole('button', { name: '登录管理后台', exact: true }).click();
   await page.getByRole('alert').filter({ hasText: '管理员密码不正确' }).waitFor();
+  // The field was disabled while checking; it takes focus back so the password can be retyped at once.
+  await until(async () => await page.evaluate(() => document.activeElement?.id) === 'admin-password', 'focus returns after a wrong password');
   await adminLogin(page);
   await until(async () => (await list(page)).styles.length === 36, 'seed library');
   assert.equal((await api(page, '/api/jobs/me')).status, 401);
   const user = await newPage();
   await user.goto(app.base);
-  await user.getByLabel('访问码', { exact: true }).fill(app.accessCode);
-  await user.getByRole('button', { name: '进入工作台', exact: true }).click();
+  await signInWithCode(user, app.accessCode);
   await user.locator('.studio-rail textarea').waitFor();
   assert.equal((await api(user, '/api/admin/styles')).status, 401);
   checks.push('管理员与工作台登录独立, 错误密码有明确反馈');
@@ -281,13 +283,14 @@ try {
   await page.context().clearCookies({ name: 'sprout_admin' });
   await dialog.getByRole('button', { name: '保存风格', exact: true }).click();
   await page.getByLabel('管理员密码', { exact: true }).waitFor();
+  await page.getByText('登录已过期, 重新输入密码后可继续, 未保存的编辑会保留.', { exact: true }).waitFor();
   await adminLogin(page);
   dialog = page.getByRole('dialog', { name: '编辑风格', exact: true });
   await dialog.waitFor();
   assert.equal(await dialog.getByLabel('风格提示词').inputValue(), '会话恢复后继续保存的内容');
   await save(dialog);
   assert.equal((await api(user, '/api/auth/status')).data.authenticated, true);
-  checks.push('管理员会话过期后重新登录保留未保存编辑, 普通会话不受影响');
+  checks.push('管理员输错密码后焦点留在输入框, 会话过期提示并在重新登录后保留未保存编辑, 普通会话不受影响');
 
   const downloadEvent = page.waitForEvent('download');
   await page.getByRole('button', { name: '导出备份', exact: true }).click();
@@ -323,8 +326,7 @@ try {
   const other = await page.context().newPage();
   other.on('pageerror', (error) => errors.push(error.message));
   await other.goto(isolated.base);
-  await other.getByLabel('访问码', { exact: true }).fill(isolated.accessCode);
-  await other.getByRole('button', { name: '进入工作台', exact: true }).click();
+  await signInWithCode(other, isolated.accessCode);
   await other.locator('.studio-rail textarea').waitFor();
   await other.goto(isolated.base + '/#admin');
   await adminLogin(other);

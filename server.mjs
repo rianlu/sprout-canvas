@@ -2,7 +2,7 @@ import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
-import { ROOT, readLocalConfig, publicConfig } from './server/config.mjs';
+import { ROOT, readLocalConfig, publicConfig, guestConfig } from './server/config.mjs';
 import { json, setBaseHeaders, logLine, initLogging, flushLogs, timeoutSignal, upstreamHeaders, readJson } from './server/http.mjs';
 import { initAuth, sessionFromRequest, handleAuthStatus, handleAuthLogin, handleAuthLogout, requireApiAuth } from './server/auth.mjs';
 import { initText, stopText, handleTextGeneration, handleTextResult } from './server/text.mjs';
@@ -33,7 +33,7 @@ const state = createStateStore(bootConfig.stateFile);
 initLogging(bootConfig.logFile);
 const styles = createStyleStore(bootConfig.styleDataDir, { log: logLine });
 const adminAuth = createAdminAuth(styles, bootConfig.cookieNamespace);
-const styleRoutes = createStyleRoutes({ store: styles, adminAuth, readConfig: readLocalConfig, requireUser: requireApiAuth });
+const styleRoutes = createStyleRoutes({ store: styles, adminAuth, readConfig: readLocalConfig });
 const creditRoutes = createCreditRoutes({ credits: state.credits, adminAuth, readConfig: readLocalConfig, revokeAccessCode: queue.revokeAccessCode });
 const adminOverviewRoute = createAdminOverviewRoute({ styles, credits: state.credits, adminAuth, readConfig: readLocalConfig });
 initAuth(state, bootConfig.cookieNamespace);
@@ -50,13 +50,16 @@ async function health(req, res, detailed = false) {
 
 async function configResponse(req, res) {
   const config = await readLocalConfig();
+  const imageCapabilities = { customSizes: config.imageProviders.some((provider) => provider.capabilities.customSizes), formats: [...new Set(config.imageProviders.flatMap((provider) => provider.capabilities.outputFormats))], exactSize: config.imageProviders.every((provider) => provider.capabilities.exactSize), maxReferences: MAX_REFERENCE_IMAGES };
+  // Visitors browse before signing in; they get the model choices and capabilities only, never channel names or health.
+  if (!sessionFromRequest(req)) return json(res, 200, { ...guestConfig(config), imageCapabilities });
   const imageChannels = queue.providerHealth(config.imageProviders);
   const textChannels = config.textProviders.map((provider) => {
     const open = isTextProviderCircuitOpen(provider.id);
     const state = getTextProviderCircuitState(provider.id);
     return { id: provider.id, name: provider.name, status: open ? 'cooldown' : state.lastError ? 'degraded' : state.lastSuccessAt ? 'available' : 'untested', failures: state.failures, openUntil: state.openUntil, lastSuccessAt: state.lastSuccessAt || 0 };
   });
-  json(res, 200, { ...publicConfig(config), imageChannels, textChannels, imageCapabilities: { customSizes: config.imageProviders.some((provider) => provider.capabilities.customSizes), formats: [...new Set(config.imageProviders.flatMap((provider) => provider.capabilities.outputFormats))], exactSize: config.imageProviders.every((provider) => provider.capabilities.exactSize), maxReferences: MAX_REFERENCE_IMAGES } });
+  json(res, 200, { ...publicConfig(config), imageChannels, textChannels, imageCapabilities });
 }
 
 function chooseProvider(config, payload, modelName) {
@@ -168,10 +171,11 @@ async function route(req, res) {
   if (await creditRoutes(req, res, url)) return;
   if (await adminOverviewRoute(req, res, url)) return;
   if (!url.pathname.startsWith('/api/')) return await serveStatic(req, res, url.pathname);
+  // Browsing needs no access code; everything below spends points or reads a user's own tasks.
+  if (url.pathname === '/api/config' && req.method === 'GET') return await configResponse(req, res);
   if (!(await requireApiAuth(req, res))) return;
   const session = sessionFromRequest(req);
   const userId = session.userId;
-  if (url.pathname === '/api/config' && req.method === 'GET') return await configResponse(req, res);
   if (url.pathname === '/api/credits' && req.method === 'GET') return json(res, 200, { credits: state.credits.balance(session.accessCodeId), prices: state.credits.prices() });
   if (url.pathname === '/api/text' && req.method === 'POST') return await handleTextGeneration(req, res, session);
   const textResult = url.pathname.match(/^\/api\/text\/([A-Za-z0-9_-]+)$/);

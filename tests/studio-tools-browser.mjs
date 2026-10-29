@@ -6,7 +6,7 @@ import path from 'node:path';
 import { crc32 } from 'node:zlib';
 import { chromium } from 'playwright';
 import { startHarness, until } from './server-harness.mjs';
-import { png } from './fixtures.mjs';
+import { png, signInWithCode } from './fixtures.mjs';
 import { imageInfo } from '../server/image-result.mjs';
 
 const output = path.join(process.env.SPROUT_TEST_OUTPUT || path.join(tmpdir(), 'sprout-browser-check'), 'studio-tools');
@@ -84,8 +84,7 @@ function unzip(bytes) {
 try {
   await page.goto(app.base);
   await context.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: app.base });
-  await page.getByLabel('访问码', { exact: true }).fill(app.accessCode);
-  await page.getByRole('button', { name: '进入工作台', exact: true }).click(); await input().waitFor();
+  await signInWithCode(page, app.accessCode); await input().waitFor();
   await page.getByRole('button', { name: '从风格库挑选提示词模板', exact: true }).click();
   const catalog = await page.evaluate(async () => (await (await fetch('/api/styles')).json()));
   const style = catalog.styles[0];

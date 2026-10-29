@@ -173,7 +173,14 @@ test('browser write boundaries reject foreign origins and plain text before any 
     assert.equal(app.calls.length, 0);
     assert.equal((await app.api('/api/config', { cookie })).status, 200);
     assert.equal((await app.api('/api/auth/logout', { method: 'POST', cookie, headers: { Origin: app.base } })).status, 200);
-    assert.equal((await app.api('/api/config', { cookie })).status, 401);
+    // A visitor still reads the model choices to fill in the forms, but never channel names, counts or health.
+    const visitor = await app.api('/api/config', { cookie });
+    assert.equal(visitor.status, 200);
+    assert.deepEqual(Object.keys(visitor.data).sort(), ['baseUrl', 'imageCapabilities', 'imageConcurrency', 'providers']);
+    for (const provider of visitor.data.providers) assert.deepEqual(Object.keys(provider).sort(), ['capabilities', 'generationMode', 'id', 'modelName']);
+    assert.doesNotMatch(JSON.stringify(visitor.data), /芽绘|服务商|imageChannels|textChannels|fixture-.*-key/);
+    assert.equal((await app.api('/api/jobs/me', { cookie })).status, 401);
+    assert.equal((await app.api('/api/credits', { cookie })).status, 401);
   } finally { await app.close(); }
 });
 

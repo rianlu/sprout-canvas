@@ -7,7 +7,8 @@ import { CreativeStudio } from '../pages/StitchCreativeStudio';
 import { SeriesStudio } from '../pages/StitchSeriesStudio';
 import { StylesLibrary } from '../pages/StitchStylesLibrary';
 import { AdminPage } from '../pages/AdminPage';
-import { WorkspaceLogin } from '../pages/WorkspaceLogin';
+import { LoginDialog } from '../components/auth/LoginDialog';
+import { useToasts } from '../components/ui/Toasts';
 import { useAuth } from '../hooks/useAuth';
 import { useGallery } from '../hooks/useGallery';
 import { useQueue } from '../hooks/useQueue';
@@ -26,6 +27,7 @@ import { nearestAspect, sizePreset, resolveSize } from '../lib/api/generation';
 import { randomId } from '../lib/random/id';
 import type { SeriesCard } from '../lib/image/gallery';
 import { isQueueActive } from '../lib/queue-presentation';
+import { getCreditSnapshot, SIGN_IN_EVENT } from '../lib/credits';
 
 export type PageKey = 'studio' | 'series' | 'styles' | 'gallery' | 'admin';
 const pageFromHash = (): PageKey => {
@@ -44,16 +46,21 @@ export function App() {
   const [configRetry, setConfigRetry] = useState(0);
   const [helpOpen, setHelpOpen] = useState(false);
   const [message, setMessage] = useState('');
+  const [signInOpen, setSignInOpen] = useState(false);
   const auth = useAuth();
   const gallery = useGallery();
+  const { pushToast } = useToasts();
+  // Pages browse without a session; an action that spends points asks for the access code here and is then clicked again.
+  useEffect(() => { const ask = () => setSignInOpen(true); window.addEventListener(SIGN_IN_EVENT, ask); return () => window.removeEventListener(SIGN_IN_EVENT, ask); }, []);
+  useEffect(() => { if (auth.expired) pushToast('info', '登录已过期, 已填写的内容已保留. 生成前请重新登录'); }, [auth.expired, pushToast]);
 
   const handleResult = useCallback(gallery.add, [gallery.add]);
   const queue = useQueue(handleResult, auth.authenticated, auth.userId);
   useEffect(() => { const failed = (event: Event) => setMessage((event as CustomEvent<string>).detail); window.addEventListener('sprout:storage-error', failed); return () => window.removeEventListener('sprout:storage-error', failed); }, []);
 
-  // 同步创作能力, 读取失败时保留可重试的操作反馈.
+  // 同步创作能力, 读取失败时保留可重试的操作反馈. Visitors get the model choices only; signing in or out reloads the full set.
   useEffect(() => {
-    if (!auth.authenticated) return;
+    if (auth.loading) return;
     let cancelled = false;
     async function check() {
       try {
@@ -69,7 +76,7 @@ export function App() {
       cancelled = true;
       window.clearInterval(timer);
     };
-  }, [auth.authenticated, configRetry]);
+  }, [auth.loading, auth.authenticated, configRetry]);
 
   // Every submission starts from a click or shortcut, the moment the browser can best judge a persistence request.
   const submit = useCallback(
@@ -155,19 +162,21 @@ export function App() {
   }, [setPage]);
 
   if (page === 'admin') return <AdminPage onBack={() => setPage('styles')} />;
-  if (auth.loading || auth.error || !auth.authenticated) return <WorkspaceLogin loading={auth.loading} connectionError={auth.error} onLogin={auth.signIn} onRetry={() => void auth.refresh(true)} />;
+  const notice = message || auth.error || configError || gallery.error || queue.error;
 
   return (
     <AppShell
       page={page}
       onPageChange={setPage}
       onOpenHelp={() => setHelpOpen(true)}
+      account={auth.loading ? 'loading' : auth.authenticated ? 'member' : 'guest'}
+      onOpenSignIn={() => setSignInOpen(true)}
       onSignOut={() => void auth.signOut().catch(() => setMessage('退出失败, 请重试'))}
       queueCount={queue.jobs.filter((job) => isQueueActive(job) || job.status === 'unsubmitted').length}
       onOpenQueue={() => setQueueOpen(true)}
     >
-      {!auth.canGenerate && <div role="status" className="fixed bottom-5 left-1/2 -translate-x-1/2 z-[65] max-w-[90vw] rounded-xl bg-secondary-container text-on-secondary-container p-3 shadow-lg text-body-sm">访问码已停用或重置, 可领取已完成结果. <button type="button" className="underline" onClick={() => void auth.signOut()}>更换访问码</button></div>}
-      {(message || configError || gallery.error || queue.error) && <div role="alert" className="fixed top-20 left-1/2 -translate-x-1/2 z-[70] max-w-[90vw] rounded-xl bg-error-container text-on-error-container p-3 shadow-lg text-body-sm flex gap-3"><span>{message || configError || gallery.error || queue.error}</span><button type="button" onClick={() => { setMessage(''); setConfigRetry((value) => value + 1); void gallery.refresh(); void queue.refresh(); }}>重试</button></div>}
+      {auth.authenticated && !auth.canGenerate && <div role="status" className="fixed bottom-5 left-1/2 -translate-x-1/2 z-[65] max-w-[90vw] rounded-xl bg-secondary-container text-on-secondary-container p-3 shadow-lg text-body-sm">访问码已停用, 重置或删除, 可领取已完成结果. <button type="button" className="underline" onClick={() => void auth.signOut().then(() => setSignInOpen(true)).catch(() => setMessage('退出失败, 请重试'))}>更换访问码</button></div>}
+      {notice && <div role="alert" className="fixed top-20 left-1/2 -translate-x-1/2 z-[70] max-w-[90vw] rounded-xl bg-error-container text-on-error-container p-3 shadow-lg text-body-sm flex gap-3"><span>{notice}</span><button type="button" onClick={() => { setMessage(''); if (auth.error) void auth.refresh(true); setConfigRetry((value) => value + 1); void gallery.refresh(); void queue.refresh(); }}>重试</button></div>}
       {page === 'studio' && (
         <CreativeStudio
           key={studioRevision}
@@ -216,7 +225,7 @@ export function App() {
       )}
 
       <QueueDrawer
-        open={queueOpen}
+        open={queueOpen && auth.authenticated}
         onClose={() => setQueueOpen(false)}
         jobs={queue.jobs}
         activity={queue.activity}
@@ -230,6 +239,15 @@ export function App() {
         loadingHistory={queue.loadingHistory}
       />
       <HelpDialog open={helpOpen} onClose={() => setHelpOpen(false)} />
+      {signInOpen && <LoginDialog
+        expired={auth.expired}
+        onClose={() => { setSignInOpen(false); auth.dismissExpired(); }}
+        onSignIn={async (code) => {
+          await auth.signIn(code);
+          setSignInOpen(false);
+          pushToast('success', `已登录, 欢迎 ${getCreditSnapshot().accessName.trim() || '创作者'}`);
+        }}
+      />}
     </AppShell>
   );
 }

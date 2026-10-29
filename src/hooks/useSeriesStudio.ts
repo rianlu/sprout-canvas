@@ -9,7 +9,7 @@ import { buildGenerationPayload, clampToCapabilities, describeClamp, resolveSize
 import { imageModels, modelCapabilities } from '../lib/image/models';
 import { LOCK_UNSUPPORTED_IMAGE_OPTIONS, LOCKED_IMAGE_DEFAULTS } from '../lib/image/channel-limits';
 import { requestTextGeneration } from '../lib/api/text';
-import { getCreditQuote } from '../lib/credits';
+import { getCreditQuote, requireSignIn } from '../lib/credits';
 import { recoverSubmissionBatch } from '../lib/queue-recovery';
 import { getOutboxInput, recordReference, readWorkspaceDraft, writeWorkspaceDraft, registerWorkspaceSubmission } from '../lib/storage/gallery-db';
 import { randomId } from '../lib/random/id';
@@ -208,6 +208,7 @@ export function useSeriesStudio({ onSubmit, onSubmitBatch, onUpdate, results, jo
   async function splitStory() {
     if (lock.current || !ready || referenceLock.current || editing || preview || activeJobs || canContinue) return false;
     if (!brief.trim() || brief.length > MAX_SERIES_BRIEF_LENGTH) { pushToast('error', `请填写创作需求或分镜剧本, 最多 ${MAX_SERIES_BRIEF_LENGTH} 字`); return false; }
+    if (!requireSignIn()) return false;
     if (tasks.some((task) => task.prompt.trim()) && !await confirm({ title: '重新拆解分镜', description: '重新拆解会替换当前分镜提示词, 包括手动修改的内容.', confirmLabel: '重新拆解' })) return false;
     lock.current = true; setBusy(true);
     const original = currentDraftRef.current;
@@ -250,6 +251,7 @@ export function useSeriesStudio({ onSubmit, onSubmitBatch, onUpdate, results, jo
     if (lock.current || !ready || referenceLock.current || editing || preview || (activeJobs && !canContinue) || (redraw && (activeJobs || canContinue))) return;
     if (!canContinue && tasks.some((task) => !task.prompt.trim())) { pushToast('error', '请先完成并检查所有分镜提示词, 再确认生成'); return; }
     if (!redraw && !canContinue && !shots[0]?.record && shots[0]?.kind !== 'planned') { pushToast('error', '请先重试并完成首镜, 再生成后续分镜'); return; }
+    if (!requireSignIn()) return;
     lock.current = true; setSubmitting(true);
     try {
       const quote = getCreditQuote();
@@ -331,6 +333,7 @@ export function useSeriesStudio({ onSubmit, onSubmitBatch, onUpdate, results, jo
     const shot = shots[index];
     if (lock.current || referenceLock.current || !shot || ['generating', 'waiting', 'submitting', 'unsubmitted', 'receiving'].includes(shot.kind)) return;
     if (!(promptOverride ?? shot.task.prompt).trim()) { pushToast('error', '请先填写并检查本镜提示词'); return; }
+    if (!requireSignIn()) return;
     lock.current = true; setSubmitting(true);
     try {
       await submitShot(index, override, promptOverride);
@@ -352,6 +355,7 @@ export function useSeriesStudio({ onSubmit, onSubmitBatch, onUpdate, results, jo
       if (['generating', 'submitting', 'unsubmitted', 'receiving'].includes(shot.kind)) throw new Error('本镜正在提交或处理, 请等待完成后再调整');
       if (shot.job?.status !== 'pending' && (shot.record || shot.kind === 'failed')) {
         if (shot.kind === 'failed' && !shot.job?.canRetry) throw new Error('本镜暂时无法重新生成, 请先在我的任务中查看处理状态');
+        if (!requireSignIn()) return;
         setSubmitting(true);
         await submitShot(index, settings, prompt);
         if (alive.current) setEditing(null);

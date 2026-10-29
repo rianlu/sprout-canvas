@@ -10,7 +10,8 @@ interface UserPopoverProps {
   theme: Theme;
   onToggleTheme: () => void;
   onOpenHelp: () => void;
-  onSignOut: () => void;
+  /** Absent for visitors, who see appearance and help only; the header carries their sign-in button. */
+  onSignOut?: () => void;
 }
 
 export function UserPopover({ accessName, tail, theme, onToggleTheme, onOpenHelp, onSignOut }: UserPopoverProps) {
@@ -37,8 +38,8 @@ export function UserPopover({ accessName, tail, theme, onToggleTheme, onOpenHelp
           <div className="flex items-start gap-3 px-2 py-3">
             <span className="w-10 h-10 shrink-0 rounded-xl bg-secondary-container/60 text-secondary flex items-center justify-center"><StitchIcon name="person" size={24} /></span>
             <div className="min-w-0">
-              <p className="font-body-md text-body-md font-semibold break-words">{accessName.trim() || '创作者'}</p>
-              {tail && <p className="mt-1 font-meta-sm text-meta-sm text-on-surface-variant">访问码尾号 <span className="font-mono">{tail}</span></p>}
+              <p className="font-body-md text-body-md font-semibold break-words">{onSignOut ? accessName.trim() || '创作者' : '未登录'}</p>
+              {onSignOut ? tail && <p className="mt-1 font-meta-sm text-meta-sm text-on-surface-variant">访问码尾号 <span className="font-mono">{tail}</span></p> : <p className="mt-1 font-meta-sm text-meta-sm text-on-surface-variant">浏览无需登录, 生成和润色时使用访问码</p>}
             </div>
           </div>
           <div className="my-2 rounded-xl bg-surface-container-low p-3">
@@ -55,11 +56,11 @@ export function UserPopover({ accessName, tail, theme, onToggleTheme, onOpenHelp
           <button type="button" className="w-full flex items-center gap-3 rounded-xl px-3 py-3 font-body-sm text-body-sm text-on-surface-variant hover:bg-surface-container-low hover:text-on-surface transition-colors" onClick={() => { setOpen(false); onOpenHelp(); }}>
             <StitchIcon name="menu_book" size={19} />使用帮助<StitchIcon name="chevron_right" size={18} className="ml-auto text-outline" />
           </button>
-          <div className="mt-2 pt-2 border-t border-outline-variant/25">
+          {onSignOut && <div className="mt-2 pt-2 border-t border-outline-variant/25">
             <button type="button" className="w-full flex items-center gap-3 rounded-xl px-3 py-3 font-body-sm text-body-sm text-on-surface-variant hover:bg-error-container/50 hover:text-on-error-container transition-colors" onClick={() => { setOpen(false); onSignOut(); }}>
               <StitchIcon name="logout" size={19} />退出登录
             </button>
-          </div>
+          </div>}
           </Popover.Popup>
         </Popover.Positioner>
       </Popover.Portal>

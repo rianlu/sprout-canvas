@@ -5,6 +5,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { chromium } from 'playwright';
+import { signInWithCode } from './fixtures.mjs';
 import { startHarness, until } from './server-harness.mjs';
 
 const output = path.join(process.env.SPROUT_TEST_OUTPUT || path.join(tmpdir(), 'sprout-browser-check'), 'workspace');
@@ -35,8 +36,7 @@ async function signedIn() {
   page.setDefaultTimeout(10000);
   page.on('pageerror', (error) => errors.push(error.message));
   await page.goto(app.base);
-  await page.getByLabel('访问码', { exact: true }).fill(app.accessCode);
-  await page.getByRole('button', { name: '进入工作台', exact: true }).click();
+  await signInWithCode(page, app.accessCode);
   await page.locator('.studio-rail textarea').waitFor();
   return page;
 }
@@ -143,7 +143,7 @@ try {
   await setName('');
   await until(async () => await menu(page).getByText('创作者', { exact: true }).count() === 1, 'empty name uses creator', 12000);
   await menu(page).getByRole('button', { name: '退出登录', exact: true }).click();
-  await page.getByLabel('访问码', { exact: true }).waitFor();
+  await page.getByRole('button', { name: '登录', exact: true }).waitFor();
   const shared = await second.evaluate(async () => (await (await fetch('/api/auth/status')).json()));
   assert.equal(shared.authenticated, true);
   assert.equal(shared.accessName, '');
@@ -151,8 +151,7 @@ try {
   assert.equal(app.calls.length, 0);
   await second.context().close();
   await page.setViewportSize({ width: 1600, height: 1000 });
-  await page.getByLabel('访问码', { exact: true }).fill(app.accessCode);
-  await page.getByRole('button', { name: '进入工作台', exact: true }).click();
+  await signInWithCode(page, app.accessCode);
   await page.locator('.studio-rail textarea').waitFor();
   checks.push('后台改名自动同步, 长名称与窄屏不溢出, 空名称使用创作者, 退出不影响共用码的其他浏览器');
 
@@ -229,6 +228,68 @@ try {
   assert.match(await queue.innerText(), /模拟当前批次失败/);
   await closeQueue(page);
   checks.push('左右滚轮都带动整页且顶栏固定, 手机保持单列, 展馆保留全部十一张作品, 队列保留旧任务和失败详情');
+
+  // Visitors browse every page; anything that spends points asks for the access code and is then clicked again.
+  const visitorContext = await browser.newContext({ viewport: { width: 1440, height: 900 }, locale: 'zh-CN', reducedMotion: 'reduce' });
+  const visitor = await visitorContext.newPage(); visitor.setDefaultTimeout(10000);
+  visitor.on('pageerror', (error) => errors.push(error.message));
+  const paidRequests = [];
+  // Reading one's own task list after signing in is expected; only a submission spends points.
+  visitor.on('request', (request) => { if (request.method() === 'POST' && /\/api\/(jobs|text)/.test(new URL(request.url()).pathname)) paidRequests.push(new URL(request.url()).pathname); });
+  await visitor.goto(app.base);
+  await visitor.locator('.studio-rail textarea').waitFor();
+  await visitor.getByRole('button', { name: '登录', exact: true }).waitFor();
+  assert.equal(await visitor.getByRole('button', { name: /任务队列/ }).count(), 0);
+  assert.equal(await visitor.locator('[data-credit-cost]').count(), 0, 'visitors see prices after signing in');
+  await trigger(visitor).click();
+  await menu(visitor).getByText('未登录', { exact: true }).waitFor();
+  assert.equal(await menu(visitor).getByRole('button', { name: '退出登录', exact: true }).count(), 0);
+  await visitor.keyboard.press('Escape');
+  const signInDialog = visitor.getByRole('dialog', { name: '使用访问码登录', exact: true });
+  await visitor.locator('.studio-rail textarea').fill('访客写下的草稿');
+  await visitor.getByRole('button', { name: /润色扩写/ }).click();
+  await signInDialog.waitFor();
+  await signInDialog.getByLabel('关闭登录').click();
+  await signInDialog.waitFor({ state: 'hidden' });
+  await visitor.getByRole('button', { name: /^开始绘制/ }).click();
+  await signInDialog.waitFor();
+  assert.equal(await visitor.evaluate(() => document.activeElement?.id), 'access-code');
+  await signInDialog.getByLabel('访问码', { exact: true }).fill('sc_' + 'A'.repeat(32));
+  await signInDialog.getByRole('button', { name: '登录', exact: true }).click();
+  await signInDialog.getByText('访问码无效或已停用', { exact: true }).waitFor();
+  await until(async () => await visitor.evaluate(() => document.activeElement?.id) === 'access-code', 'focus returns after a wrong code');
+  // Admins copy codes as "名称: 码" lines; one code in the pasted text is enough.
+  await signInDialog.getByLabel('访问码', { exact: true }).fill(`隔离验收: ${app.accessCode}`);
+  await signInDialog.getByRole('button', { name: '登录', exact: true }).click();
+  await signInDialog.waitFor({ state: 'hidden' });
+  await visitor.locator('#toast-container').getByText('已登录, 欢迎 创作者', { exact: true }).waitFor();
+  assert.equal(await visitor.locator('.studio-rail textarea').inputValue(), '访客写下的草稿');
+  assert.equal(await visitor.getByRole('button', { name: /^开始绘制/ }).locator('[data-credit-cost]').innerText(), '-10点');
+  assert.deepEqual(paidRequests, [], 'signing in never submits the action that asked for it');
+  await visitor.getByRole('button', { name: '用户菜单', exact: true }).click();
+  await menu(visitor).getByRole('button', { name: '退出登录', exact: true }).click();
+  await visitor.getByRole('button', { name: '登录', exact: true }).waitFor();
+  await visitor.getByRole('navigation', { name: '主导航', exact: true }).getByRole('link', { name: '系列策划', exact: true }).click();
+  await visitor.getByPlaceholder(/描述想做的一组图片/).fill('三张森林里的小狐狸');
+  await visitor.getByRole('button', { name: /智能拆解分镜/ }).click();
+  await signInDialog.waitFor();
+  await visitor.keyboard.press('Escape');
+  await visitor.getByRole('navigation', { name: '主导航', exact: true }).getByRole('link', { name: '风格库', exact: true }).click();
+  await visitor.locator('article').first().waitFor();
+  assert.ok(await visitor.locator('article').count() > 0, 'visitors browse the published styles');
+  assert.deepEqual(paidRequests, []);
+  // A gateway page or a dropped connection reads as a connection problem, not "HTTP 502" or "Failed to fetch".
+  for (const handler of [(route) => route.fulfill({ status: 502, contentType: 'text/html', body: '<html>Bad Gateway</html>' }), (route) => route.abort('failed')]) {
+    await visitor.route('**/api/auth/status', handler);
+    await visitor.reload();
+    await visitor.getByRole('alert').filter({ hasText: '暂时连接不上工作台, 请稍后重试' }).waitFor();
+    await visitor.unroute('**/api/auth/status');
+  }
+  await visitor.getByRole('alert').getByRole('button', { name: '重试', exact: true }).click();
+  await visitor.getByRole('button', { name: '登录', exact: true }).waitFor();
+  await until(async () => await visitor.getByRole('alert').filter({ hasText: '暂时连接不上工作台' }).count() === 0, 'connection notice clears after retry');
+  await visitorContext.close();
+  checks.push('访客可浏览四页且无队列与扣点标记, 润色/绘制/拆解先弹出访问码登录, 错码后焦点保留, 整行粘贴自动识别, 登录不自动提交且保留草稿, 断连和网关错误显示中文提示');
 
   assert.deepEqual(errors, []);
   await writeFile(path.join(output, 'report.json'), JSON.stringify({ passed: checks, pageErrors: errors, modelRequests: app.calls.length }, null, 2));

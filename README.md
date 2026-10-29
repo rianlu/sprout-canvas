@@ -32,7 +32,7 @@
 
 体验地址: **[draw.sleepypie.top](https://draw.sleepypie.top)**.
 
-无需注册账号, 复制下面的公共测试访问码, 在登录页粘贴后进入工作台:
+打开即可浏览四个页面, 无需注册账号. 生成, 润色或拆解分镜时会弹出登录, 粘贴下面的公共测试访问码即可:
 
 ```text
 sc_J3L9sv4YYnhv5lRbzgzA7PK4gwUbzZoc
@@ -50,11 +50,11 @@ sc_J3L9sv4YYnhv5lRbzgzA7PK4gwUbzZoc
 
 [![单图创作: 提示词模板预览, 多图参考与近期创作画卷](docs/images/studio.webp)](docs/images/studio.webp)
 
-### 工作台登录
+### 访问码登录
 
-使用访问码进入工作台, 无需用户名或注册. 登录页与工作台共用字体, 纸面配色和深浅色主题.
+未登录也能浏览风格库, 展馆和创作页面. 需要使用灵感点时弹出访问码登录, 无需用户名或注册; 已填写的内容保留, 登录后确认点数再开始.
 
-[![工作台登录: 访问码登录与统一的纸面风格](docs/images/workspace-login.webp)](docs/images/workspace-login.webp)
+[![访问码登录: 浏览时按需弹出的登录窗口](docs/images/workspace-login.webp)](docs/images/workspace-login.webp)
 
 ### 系列策划
 

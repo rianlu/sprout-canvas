@@ -5,6 +5,7 @@ import path from 'node:path';
 import { tmpdir } from 'node:os';
 import { randomUUID } from 'node:crypto';
 import { chromium } from 'playwright';
+import { signInWithCode } from './fixtures.mjs';
 import { startHarness, TEST_ADMIN_PASSWORD, until } from './server-harness.mjs';
 
 const output = path.join(process.env.SPROUT_TEST_OUTPUT || tmpdir(), 'credits-browser');
@@ -47,8 +48,7 @@ async function answerRecreate(page, accept, message) {
   await prompt.waitFor({ state: 'detached' });
 }
 async function signIn(page, code) {
-  await page.goto(app.base); await page.getByLabel('访问码', { exact: true }).fill(` ${code} `);
-  await page.getByRole('button', { name: '进入工作台', exact: true }).click();
+  await page.goto(app.base); await signInWithCode(page, ` ${code} `);
   await page.locator('.studio-rail textarea').waitFor();
 }
 async function signInAdmin(page) {
@@ -123,9 +123,11 @@ try {
 
   const a = await newPage(), b = await newPage();
   let logins = 0; a.on('request', (request) => { if (request.url().endsWith('/api/auth/login')) logins++; });
-  await a.goto(app.base); await a.getByLabel('访问码', { exact: true }).fill(` ${secret} `);
-  await a.locator('form').evaluate((form) => { form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })); form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })); });
-  await a.locator('.studio-rail textarea').waitFor(); assert.equal(logins, 1);
+  await a.goto(app.base); await a.getByRole('button', { name: '登录', exact: true }).click();
+  const loginDialog = a.getByRole('dialog', { name: '使用访问码登录', exact: true });
+  await loginDialog.getByLabel('访问码', { exact: true }).fill(` ${secret} `);
+  await loginDialog.locator('form').evaluate((form) => { form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })); form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })); });
+  await loginDialog.waitFor({ state: 'hidden' }); assert.equal(logins, 1);
   await signIn(b, secret); assert.notEqual((await auth(a)).userId, (await auth(b)).userId);
   assert.equal(await a.getByRole('button', { name: /开始绘制/ }).locator('[data-credit-cost]').innerText(), '-10点');
   assert.equal(await a.getByRole('button', { name: /润色扩写/ }).locator('[data-credit-cost]').innerText(), '-1点');
@@ -276,8 +278,7 @@ try {
   const reset = await dialog.getByRole('textbox', { name: /^完整访问码/ }).inputValue();
   assert.notEqual(reset, secret); await dialog.getByLabel('关闭访问码弹窗').click();
   assert.equal((await api(admin, `/api/admin/access-codes/${sharedId}/ledger`)).data.entries.find((entry) => entry.event === 'reset').reason, '管理员重置访问码');
-  await a.getByRole('button', { name: '用户菜单', exact: true }).click(); await a.getByRole('button', { name: '退出登录', exact: true }).click(); await a.getByLabel('访问码', { exact: true }).fill(reset);
-  await a.getByRole('button', { name: '进入工作台', exact: true }).click();
+  await a.getByRole('button', { name: '用户菜单', exact: true }).click(); await a.getByRole('button', { name: '退出登录', exact: true }).click(); await signInWithCode(a, reset);
   await a.getByRole('button', { name: '用户菜单', exact: true }).waitFor(); assert.equal((await auth(a)).userId, owner.userId);
   assert.equal((await auth(a)).credits.spent, 20);
   await a.getByRole('navigation', { name: '主导航', exact: true }).getByRole('link', { name: '单图创作', exact: true }).click();

@@ -1,24 +1,8 @@
-import { useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
 import type { Theme } from '../../hooks/useTheme';
 import { StitchIcon } from '../ui/StitchIcon';
 
 const content = {
-  studio: {
-    label: '创作空间',
-    icon: 'spa',
-    headline: '从一点灵感,',
-    accent: '到一幅作品.',
-    description: '写下想象, 探索画风, 让脑海中的画面自然生长.',
-    features: [
-      { icon: 'edit_note', title: '单图创作', text: '从文字或参考图片开始' },
-      { icon: 'auto_awesome_motion', title: '系列策划', text: '把故事铺成连贯的分镜' },
-      { icon: 'palette', title: '风格库', text: '寻找适合这次灵感的表达' },
-      { icon: 'photo_library', title: '本地展馆', text: '回看作品, 延续新的创作' },
-    ],
-    title: '进入工作台',
-    subtitle: '准备好了, 就从这里开始创作.',
-    note: '还没有访问码? 请联系分享工作台给你的人.',
-  },
   admin: {
     label: '管理空间',
     icon: 'grid_view',
@@ -30,6 +14,8 @@ const content = {
       { icon: 'palette', title: '风格管理', text: '整理图片, 提示词与素材来源' },
       { icon: 'lock', title: '访问码管理', text: '分配创作额度, 核对使用记录' },
     ],
+    badge: '管理员入口',
+    badgeIcon: 'lock',
     title: '进入管理后台',
     subtitle: '使用管理员密码, 继续照看工作台.',
     note: '管理入口使用独立密码, 请妥善保管.',
@@ -77,7 +63,7 @@ export function AuthLayout({ kind, theme, onToggleTheme, onBack, children }: Aut
         </aside>
         <section className="auth-form-panel" aria-labelledby="auth-title">
           <div className="auth-heading">
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-secondary-container/60 px-3 py-1 font-body-sm text-body-sm font-medium text-on-secondary-container"><StitchIcon name={kind === 'admin' ? 'lock' : 'spa'} size={14} />{kind === 'admin' ? '管理员入口' : '创作者入口'}</span>
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-secondary-container/60 px-3 py-1 font-body-sm text-body-sm font-medium text-on-secondary-container"><StitchIcon name={copy.badgeIcon} size={14} />{copy.badge}</span>
             <h1 id="auth-title" className="mt-4 font-headline-md text-headline-md font-semibold">{copy.title}</h1>
             <p className="mt-2 font-body-md text-body-md text-on-surface-variant">{copy.subtitle}</p>
           </div>
@@ -91,6 +77,9 @@ export function AuthLayout({ kind, theme, onToggleTheme, onBack, children }: Aut
 
 interface AuthSecretFieldProps {
   id: string;
+  /** Fixed account name for password managers, so the access code and the admin password are saved as separate entries. */
+  account?: string;
+  inputRef?: RefObject<HTMLInputElement | null>;
   label: string;
   visibilityLabel: string;
   value: string;
@@ -102,13 +91,18 @@ interface AuthSecretFieldProps {
   onChange: (value: string) => void;
 }
 
-export function AuthSecretField({ id, label, visibilityLabel, value, placeholder, hint, error, disabled, maxLength, onChange }: AuthSecretFieldProps) {
+export function AuthSecretField({ id, account, inputRef, label, visibilityLabel, value, placeholder, hint, error, disabled, maxLength, onChange }: AuthSecretFieldProps) {
   const [visible, setVisible] = useState(false);
+  const ownRef = useRef<HTMLInputElement>(null);
+  const input = inputRef || ownRef;
+  // The field is disabled while signing in, which drops focus; put it back so a mistyped code can be fixed right away.
+  useEffect(() => { if (error && !disabled) input.current?.focus(); }, [error, disabled, input]);
   return <div>
+    {account && <input type="text" name="username" autoComplete="username" value={account} readOnly hidden />}
     <label htmlFor={id} className="block mb-2 font-body-md text-body-md font-medium">{label}</label>
     <div className="auth-secret-control flex items-center gap-2 rounded-xl border border-outline-variant/60 bg-surface-container-low pl-4 pr-1" data-invalid={Boolean(error)} data-disabled={disabled}>
       <StitchIcon name="lock" size={18} className="text-outline" />
-      <input id={id} name={id} type={visible ? 'text' : 'password'} autoComplete="current-password" autoCapitalize="none" autoCorrect="off" spellCheck={false} autoFocus required maxLength={maxLength} disabled={disabled} value={value} placeholder={placeholder} aria-invalid={Boolean(error)} aria-describedby={`${id}-feedback`} onChange={(event) => onChange(event.target.value)} className="auth-secret-input min-w-0 flex-1 bg-transparent border-0 font-body-md text-body-md text-on-surface placeholder:text-outline" />
+      <input ref={input} id={id} name={id} type={visible ? 'text' : 'password'} autoComplete="current-password" autoCapitalize="none" autoCorrect="off" spellCheck={false} autoFocus required maxLength={maxLength} disabled={disabled} value={value} placeholder={placeholder} aria-invalid={Boolean(error)} aria-describedby={`${id}-feedback`} onChange={(event) => onChange(event.target.value)} className="auth-secret-input min-w-0 flex-1 bg-transparent border-0 font-body-md text-body-md text-on-surface placeholder:text-outline" />
       <button type="button" aria-label={`${visible ? '隐藏' : '显示'}${visibilityLabel}`} aria-pressed={visible} disabled={disabled} onClick={() => setVisible((current) => !current)} className="auth-visibility-button shrink-0 rounded-lg px-3 font-body-sm text-body-sm font-medium text-primary hover:bg-surface-container transition-colors">{visible ? '隐藏' : '显示'}</button>
     </div>
     <p id={`${id}-feedback`} role={error ? 'alert' : undefined} className={`auth-field-feedback mt-2 font-body-sm text-body-sm ${error ? 'text-error' : 'text-on-surface-variant'}`}>{error || hint}</p>

@@ -4,6 +4,7 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { tmpdir } from 'node:os';
 import { chromium } from 'playwright';
+import { signInWithCode } from './fixtures.mjs';
 import { startHarness, until } from './server-harness.mjs';
 
 // One GPT Image 2 channel takes transparency only at standard sizes, the other takes wide frames only,
@@ -56,8 +57,7 @@ async function screenshot(name) {
 
 try {
   await page.goto(app.base);
-  await page.getByLabel('访问码', { exact: true }).fill(app.accessCode);
-  await page.getByRole('button', { name: '进入工作台', exact: true }).click();
+  await signInWithCode(page, app.accessCode);
   await rail().locator('textarea').waitFor();
 
   assert.deepEqual(await models().getByRole('button').allInnerTexts(), ['自动', 'GPT Image 2', 'GPT Image 2.5']);

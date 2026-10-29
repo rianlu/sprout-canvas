@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { chromium } from 'playwright';
 import { startHarness, until } from './server-harness.mjs';
-import { png } from './fixtures.mjs';
+import { png, signInWithCode } from './fixtures.mjs';
 
 const output = path.join(process.env.SPROUT_TEST_OUTPUT || path.join(tmpdir(), 'sprout-browser-check'), 'series-workflow');
 await mkdir(output, { recursive: true });
@@ -115,8 +115,7 @@ async function scenario(name, body, init, contextOptions = {}) {
   page.on('pageerror', (error) => pageErrors.push(error.message));
   try {
     await page.goto(app.base);
-    await page.getByLabel('访问码', { exact: true }).fill(app.accessCode);
-    await page.getByRole('button', { name: '进入工作台', exact: true }).click();
+    await signInWithCode(page, app.accessCode);
     await page.getByLabel('画面提示词', { exact: true }).waitFor();
     await nav(page, '系列策划');
     await page.locator('#series-story-prompt').waitFor();
@@ -287,8 +286,7 @@ try {
     assert.equal(created.status, 201);
     await page.getByRole('button', { name: '用户菜单', exact: true }).click();
     await page.getByRole('button', { name: '退出登录', exact: true }).click();
-    await page.getByLabel('访问码', { exact: true }).fill(created.data.codes[0].code);
-    await page.getByRole('button', { name: '进入工作台', exact: true }).click();
+    await signInWithCode(page, created.data.codes[0].code);
     await page.getByRole('button', { name: /^任务队列/ }).click();
     const queue = page.getByRole('dialog', { name: '任务队列', exact: true });
     await queue.getByRole('button', { name: /^重新生成/ }).first().waitFor();

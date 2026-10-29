@@ -13,25 +13,27 @@ export interface ImageCapabilities {
 
 export interface ImageProvider {
   id: string;
-  name: string;
-  imageModel: string;
+  /** Channel name and upstream model; absent for visitors, who only see `modelName`. */
+  name?: string;
+  imageModel?: string;
   /** Selector group; channels sharing it serve the same model. */
   modelName?: string;
   generationMode: GenerationMode;
   capabilities?: { outputFormats: ImageFormat[]; exactSize: boolean; transparent: boolean; customSizes?: boolean };
 }
 
+/** Signed-in sessions get every field; visitors get `baseUrl`, `providers` and `imageCapabilities` only. */
 export interface ServerConfig {
   baseUrl: string;
-  activeProvider: string;
-  defaultProvider: string;
-  defaultImageProvider: string;
-  keyConfigured: boolean;
-  textModel: string;
-  textProviderName: string;
-  textProviderCount: number;
-  imageModel: string;
-  generationMode: GenerationMode;
+  activeProvider?: string;
+  defaultProvider?: string;
+  defaultImageProvider?: string;
+  keyConfigured?: boolean;
+  textModel?: string;
+  textProviderName?: string;
+  textProviderCount?: number;
+  imageModel?: string;
+  generationMode?: GenerationMode;
   providers: ImageProvider[];
   imageChannels?: ChannelHealth[];
   textChannels?: ChannelHealth[];

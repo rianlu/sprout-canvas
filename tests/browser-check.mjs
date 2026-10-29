@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { crc32 } from 'node:zlib';
 import { chromium } from 'playwright';
 import { startHarness, until } from './server-harness.mjs';
-import { png } from './fixtures.mjs';
+import { png, signInWithCode } from './fixtures.mjs';
 
 const target = process.env.SPROUT_TEST_OUTPUT || path.join(tmpdir(), 'sprout-browser-check');
 await mkdir(target, { recursive: true });
@@ -57,8 +57,7 @@ async function contextPage(init, initValue, options = {}) {
   page.on('pageerror', (error) => errors.push(error.message));
   page.setDefaultTimeout(8000);
   await page.goto(app.base);
-  await page.getByLabel('访问码', { exact: true }).fill(app.accessCode);
-  await page.getByRole('button', { name: '进入工作台', exact: true }).click();
+  await signInWithCode(page, app.accessCode);
   await page.locator('.studio-rail textarea').waitFor();
   await page.waitForFunction(() => !document.querySelector('main')?.textContent?.includes('正在加载...'));
   return { context, page };
@@ -782,13 +781,18 @@ try {
   }
   checks.push('桌面, 平板, 手机深浅主题下展馆与风格库的标题字体, 字号, 字重, 行高及背景颜色一致');
   await page.getByRole('button', { name: '用户菜单', exact: true }).click(); await page.getByRole('button', { name: '退出登录', exact: true }).click();
-  await page.getByLabel('访问码', { exact: true }).waitFor();
-  await page.getByLabel('访问码', { exact: true }).fill(app.accessCode);
-  await page.getByRole('button', { name: '进入工作台', exact: true }).click();
-  await page.getByRole('button', { name: '用户菜单', exact: true }).waitFor();
+  // Signing out leaves the page open as a visitor; only the account controls change.
+  await page.getByRole('button', { name: '登录', exact: true }).waitFor();
+  assert.equal(await page.getByRole('button', { name: /任务队列/ }).count(), 0, 'visitors have no task queue');
+  await signInWithCode(page, app.accessCode);
+  await page.getByRole('button', { name: /任务队列/ }).waitFor();
   await page.evaluate(() => fetch('/api/auth/logout', { method: 'POST' }));
-  await page.getByLabel('访问码', { exact: true }).waitFor({ timeout: 10000 });
-  checks.push('桌面, 平板, 手机, 深浅主题四页布局, 手机退出和会话过期');
+  // An expired session says so once, and the sign-in dialog then explains why it asks again.
+  await page.locator('#toast-container').getByText('登录已过期, 已填写的内容已保留. 生成前请重新登录', { exact: true }).waitFor({ timeout: 10000 });
+  await page.getByRole('button', { name: '登录', exact: true }).click();
+  await page.getByRole('dialog', { name: '使用访问码登录', exact: true }).getByRole('heading', { name: '登录已过期', exact: true }).waitFor();
+  await signInWithCode(page, app.accessCode);
+  checks.push('桌面, 平板, 手机, 深浅主题四页布局, 手机退出后保持访客浏览, 会话过期提示并可重新登录');
 
   // Simulate a quota failure inside the image-saving transaction, then retry successfully.
   const quota = await contextPage(() => {
@@ -1434,8 +1438,7 @@ try {
   const blockedPage = await blockedStorage.newPage();
   blockedPage.on('pageerror', (error) => errors.push(error.message));
   await blockedPage.goto(app.base);
-  await blockedPage.getByLabel('访问码', { exact: true }).fill(app.accessCode);
-  await blockedPage.getByRole('button', { name: '进入工作台', exact: true }).click();
+  await signInWithCode(blockedPage, app.accessCode);
   await blockedPage.locator('.studio-rail textarea').waitFor();
   assert.equal(await blockedPage.evaluate(async () => (await (await fetch('/api/auth/status')).json()).authenticated), true);
   await blockedStorage.close();

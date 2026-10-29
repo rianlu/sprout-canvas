@@ -20,8 +20,16 @@ export function syncCreditResponse(data: unknown) {
 const subscribe = (listener: () => void) => { listeners.add(listener); return () => { listeners.delete(listener); }; };
 export function useCredits() { return useSyncExternalStore(subscribe, () => current); }
 export function getCreditSnapshot() { return current; }
+/** Event asking the app to open the access code dialog; visitors browse freely until an action spends points. */
+export const SIGN_IN_EVENT = 'sprout:sign-in-required';
+/** Gate for actions that spend points: true when signed in, otherwise opens the access code dialog and the caller stops. */
+export function requireSignIn() {
+  if (current.userId) return true;
+  window.dispatchEvent(new Event(SIGN_IN_EVENT));
+  return false;
+}
 export function getCreditQuote(): CreditQuote {
-  if (!current.userId || !current.prices) throw new Error('请先使用访问码登录');
+  if (!current.userId || !current.prices) { requireSignIn(); throw new Error('请先使用访问码登录'); }
   if (!current.canGenerate) throw new Error('访问码已停用或重置, 请更换访问码后继续');
   return { accessCodeId: current.accessCodeId, userId: current.userId, version: current.prices.version, unlimited: current.credits?.unlimited ?? false };
 }

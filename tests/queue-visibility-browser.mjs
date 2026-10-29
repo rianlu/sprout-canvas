@@ -4,6 +4,7 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { chromium } from 'playwright';
+import { signInWithCode } from './fixtures.mjs';
 import { startHarness, until } from './server-harness.mjs';
 
 const output = path.join(process.env.SPROUT_TEST_OUTPUT || path.join(tmpdir(), 'sprout-browser-check'), 'queue-visibility');
@@ -25,8 +26,7 @@ async function creator(skew = false) {
   page.on('pageerror', (error) => errors.push(error.message));
   if (skew) await page.clock.setFixedTime(new Date(Date.now() + 6 * 3600000));
   await page.goto(app.base);
-  await page.getByLabel('访问码', { exact: true }).fill(app.accessCode);
-  await page.getByRole('button', { name: '进入工作台', exact: true }).click();
+  await signInWithCode(page, app.accessCode);
   await page.getByLabel('画面提示词', { exact: true }).waitFor();
   return page;
 }

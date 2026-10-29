@@ -216,3 +216,17 @@ export function publicConfig(config) {
     })),
   };
 }
+
+/** What a visitor needs to fill in the forms: the model choices and what each channel accepts, without channel names or counts. */
+export function guestConfig(config) {
+  return {
+    baseUrl: '/api',
+    imageConcurrency: config.imageConcurrency,
+    providers: config.imageProviders.map((provider) => ({
+      id: provider.id,
+      modelName: provider.modelName,
+      generationMode: provider.generationMode,
+      capabilities: provider.capabilities,
+    })),
+  };
+}
