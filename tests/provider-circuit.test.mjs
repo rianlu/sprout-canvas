@@ -14,7 +14,7 @@ const jsonError = (status, message, code = '') => new Response(JSON.stringify({ 
 const image = () => new Response(JSON.stringify({ data: [{ b64_json: PNG_BASE64 }] }), { headers: { 'Content-Type': 'application/json' } });
 
 // Fresh module state per test, with a clock the test can move forward past cooldowns.
-async function fixture(t) {
+async function fixture(t, list = providers) {
   const queue = await import('../server/queue.mjs?circuit=' + randomUUID());
   const store = createStateStore(':memory:');
   const access = store.credits.create({ requestId: randomUUID(), initialPoints: 1000, note: '熔断测试' }).codes[0];
@@ -22,21 +22,23 @@ async function fixture(t) {
   let offset = 0;
   t.mock.method(Date, 'now', () => realNow() + offset);
   const logs = [];
-  const f = { queue, logs, respond: () => image(), advance(ms) { offset += ms; } };
+  const f = { queue, store, access, logs, respond: () => image(), advance(ms) { offset += ms; } };
   t.mock.method(globalThis, 'fetch', async (url) => f.respond(new URL(url).hostname.split('.')[0]));
-  const config = (id = 'one') => ({ ...providers.find((provider) => provider.id === id), providers, imageProviders: providers });
+  const config = (id = 'one') => ({ ...list.find((provider) => provider.id === id), providers: list, imageProviders: list });
   queue.init({ readLocalConfig: async (id) => config(id || 'one'), upstreamHeaders: () => ({}), timeoutSignal: () => undefined, stripHtml: String, logLine: (level, line) => logs.push(line) });
   queue.initializePersistence(store);
   t.after(async () => { await queue.stopWorker(); store.close(); });
-  f.choose = (excludeId = '') => queue.chooseImageProvider(config(), '/v1/images/generations', 'application/json', excludeId, Buffer.from(JSON.stringify({ prompt: 'p', n: 1, size: '1024x1024', output_format: 'png' }))).id;
-  f.health = (id) => queue.providerHealth(providers).find((item) => item.id === id);
+  f.choose = (excludeId = '', modelName = '') => queue.chooseImageProvider(queue.modelScope(config(), modelName), '/v1/images/generations', 'application/json', excludeId, Buffer.from(JSON.stringify({ prompt: 'p', n: 1, size: '1024x1024', output_format: 'png' }))).id;
+  f.health = (id) => queue.providerHealth(list).find((item) => item.id === id);
   f.cooldownMinutes = (id) => Math.round((f.health(id).openUntil - Date.now()) / MINUTE);
-  // Pinning a channel mirrors a local edit, which always returns to its original channel.
-  f.run = async (pinned = '') => {
+  // Pinning a channel mirrors a local edit, which always returns to its original channel; a model name scopes automatic routing.
+  f.submit = (pinned = '', modelName = '') => {
     const session = { userId: 'u', accessCodeId: access.id, codeEpoch: 1 };
-    const input = { ...submission(randomUUID()), creditQuote: { accessCodeId: access.id, userId: 'u', version: 1 }, ...(pinned ? { providerId: pinned } : {}) };
-    const selected = providers.find((provider) => provider.id === (pinned || f.choose()));
-    const { id } = queue.submitGeneration(input, 'u', selected, session);
+    const input = { ...submission(randomUUID()), creditQuote: { accessCodeId: access.id, userId: 'u', version: 1 }, ...(pinned ? { providerId: pinned } : {}), ...(modelName ? { modelName } : {}) };
+    const selected = list.find((provider) => provider.id === (pinned || f.choose('', modelName)));
+    return queue.submitGeneration(input, 'u', selected, session).id;
+  };
+  f.wait = async (id) => {
     for (let i = 0; i < 500; i++) {
       const job = queue.getJobStatus(id, 'u');
       if (['succeeded', 'failed'].includes(job.status)) return job;
@@ -44,6 +46,7 @@ async function fixture(t) {
     }
     throw new Error('job did not finish');
   };
+  f.run = (pinned = '', modelName = '') => f.wait(f.submit(pinned, modelName));
   return f;
 }
 
@@ -152,4 +155,38 @@ test('文字通道的上游失败使用文字服务说法, 日志细节保留原
   const embedded = upstreamFailure(200, Buffer.from(JSON.stringify({ type: 'error', error: { message: 'failed at text.relay.example with sk-text-secret' } })));
   assert.equal(formatUpstreamFailure(embedded, config, '文字服务'), '文字服务返回生成错误: failed at 上游服务 with [redacted]');
   assert.equal(upstreamFailureDetail(embedded, config), 'HTTP 200: failed at text.relay.example with [redacted]');
+});
+
+test('很快返回的 ETIMEDOUT 按普通失败连续 3 次才冷却, 不因错误名含 timeout 而 1 次停用', async (t) => {
+  const f = await fixture(t);
+  f.respond = () => { throw Object.assign(new TypeError('fetch failed'), { cause: Object.assign(new Error('connect ETIMEDOUT 10.9.8.7:443'), { code: 'ETIMEDOUT' }) }); };
+  for (let i = 1; i <= 2; i++) {
+    const failed = await f.run('one');
+    assert.equal(failed.outcomeUnknown, true, 'a timed-out socket may have sent the request');
+    assert.equal(f.health('one').status, 'degraded', 'quick ETIMEDOUT number ' + i);
+  }
+  await f.run('one');
+  assert.equal(f.health('one').status, 'cooldown');
+  assert.ok(f.logs.some((line) => /circuit-open provider=one failures=3 trips=1 slow=false/.test(line)));
+});
+
+test('所选模型的通道在排队期间冷却后, 后续任务说明模型暂不可用并返还点数, 不调用上游', async (t) => {
+  const three = { ...providers[0], id: 'three', name: 'three', modelName: 'B', baseUrl: 'https://three.invalid' };
+  const f = await fixture(t, [...providers, three]);
+  let release;
+  const gate = new Promise((resolve) => { release = resolve; });
+  const calls = [];
+  f.respond = async (host) => { calls.push(host); await gate; return html(524, GATEWAY_TIMEOUT); };
+  const ids = [f.submit('', 'B'), f.submit('', 'B'), f.submit('', 'B')];
+  release();
+  const [first, ...queued] = await Promise.all(ids.map((id) => f.wait(id)));
+  assert.equal(first.outcomeUnknown, true);
+  assert.equal(f.health('three').status, 'cooldown');
+  for (const job of queued) {
+    assert.equal(job.status, 'failed'); assert.equal(job.outcomeUnknown, false);
+    assert.equal(job.error, '所选模型暂时不可用, 已返还点数, 请稍后重试或切换为自动');
+  }
+  assert.deepEqual(calls, ['three'], 'queued jobs never reach the cooled channel');
+  const balance = f.store.credits.balance(f.access.id);
+  assert.deepEqual([balance.available, balance.reserved, balance.spent], [1000, 0, 0]);
 });

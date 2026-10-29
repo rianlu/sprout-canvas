@@ -21,14 +21,14 @@ const recentImageDurations = [];
 let activeJob = null;
 let lastServedUserId = '';
 const DEFAULT_IMAGE_DURATION_MS = 90_000;
-// A slow failure (gateway timeout, or any failure after a long wait) trips at once because each costs the user minutes;
-// quick 5xx and disconnects often recover on the next request, so they trip after a streak.
+// A slow failure (gateway timeout status, or any failure after a long wait) trips at once because each costs the user minutes;
+// quick 5xx and disconnects often recover on the next request, so they trip after a streak. Judge by status and elapsed time,
+// not by wording: a socket error named ETIMEDOUT can arrive within a second.
 const PROVIDER_FAILURE_THRESHOLD = 3;
 const PROVIDER_SLOW_FAILURE_MS = 90_000;
 const PROVIDER_CIRCUIT_OPEN_MS = 30 * 60 * 1000;
 const PROVIDER_CIRCUIT_MAX_OPEN_MS = 2 * 60 * 60 * 1000;
 const SLOW_FAILURE_STATUS = new Set([408, 504, 522, 524]);
-const SLOW_FAILURE_ERROR = /time[ _-]?out|timed[ _-]?out|超时|deadline[ _-]?exceeded/i;
 const providerCircuitState = new Map();
 let stateStore = null;
 let workerPromise = null;
@@ -587,7 +587,8 @@ async function processImageJob(job) {
     let attemptStartedAt = 0;
     let lastConfig = initialConfig;
     if (!providers.length) {
-      jobResult = failedImageJobResult(503, `没有健康的生图服务商: ${requestKindLabel(job.upstreamPath, job.contentType)}`);
+      // Jobs queued before their model's channels cooled down end here; nothing reached the upstream, so the points return.
+      jobResult = failedImageJobResult(503, job.submission?.modelName ? '所选模型暂时不可用, 已返还点数, 请稍后重试或切换为自动' : '没有可用的生图通道, 已返还点数, 请稍后重试');
     }
     for (let index = 0; index < providers.length; index += 1) {
       const provider = providers[index];
@@ -686,13 +687,6 @@ export function rewriteImageJobBody(provider, body, contentType) {
   return body;
 }
 
-function requestKindLabel(upstreamPath, contentType) {
-  if (upstreamPath === '/v1/images/generations') return 'Images 文生图';
-  if (upstreamPath === '/v1/images/edits' && isMultipartEdit(contentType)) return 'Images 图生图';
-  if (upstreamPath.startsWith('/v1/responses')) return 'Responses 生图';
-  return upstreamPath;
-}
-
 function providerLoad(providerId) {
   let count = 0;
   if (activeJob && activeJob.providerId === providerId) count += 1;
@@ -788,7 +782,7 @@ function recordProviderFailure(providerId, jobResult, elapsedMs, providers) {
   // A pinned job (local edit) may still reach an open channel; that must not stretch the cooldown.
   if (isProviderCircuitOpen(providerId, now)) { providerCircuitState.set(providerId, { ...previous, lastError, lastFailureAt: now }); return; }
   const failures = previous.failures + 1;
-  const slow = elapsedMs >= PROVIDER_SLOW_FAILURE_MS || SLOW_FAILURE_STATUS.has(jobResult.status) || SLOW_FAILURE_ERROR.test(jobResult.detail || lastError);
+  const slow = elapsedMs >= PROVIDER_SLOW_FAILURE_MS || SLOW_FAILURE_STATUS.has(jobResult.status);
   const trial = previous.trips > 0;
   const state = { ...previous, failures, lastError, lastFailureAt: now };
   if (!slow && !trial && failures < PROVIDER_FAILURE_THRESHOLD) { providerCircuitState.set(providerId, state); return; }
