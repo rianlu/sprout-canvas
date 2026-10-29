@@ -353,7 +353,7 @@ docker compose up -d --wait
 | `POST /api/jobs/:id/ack` | 确认本地事务已保存图片 |
 | `POST /api/jobs/:id/resume` | 使用原请求恢复重启前尚未执行的任务 |
 | `POST /api/jobs/archive` | 持久化收起已保存/已取消任务 |
-| `POST /api/text` | 文字处理, 含 requestId, kind(prompt/series), input 和 creditQuote; series 额外携带 sceneCount(3-8) |
+| `POST /api/text` | 文字处理, 含 requestId, kind(prompt/series), content (用户原文) 和 creditQuote; series 额外携带 sceneCount(3-8). 润色/拆解指令由服务端组装, 携带 input 等旧字段时返回 400 |
 | `GET /api/text/:requestId` | 按原请求编号读取文字结果, 不再次调用模型 |
 | `GET /api/credits` | 当前码可用/占用/累计消耗与点值版本 |
 | `/api/auth/status`, `login`, `logout` | 工作台会话状态, 访问码登录和退出; 登录 body 仅接受 code |

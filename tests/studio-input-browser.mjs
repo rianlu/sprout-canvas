@@ -194,17 +194,14 @@ try {
         };
       });
       if (accepted) {
-        const result = await fetch('/api/text', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ requestId, kind: 'prompt', creditQuote, input: [
-          { role: 'system', content: [{ type: 'input_text', text: system }] },
-          { role: 'user', content: [{ type: 'input_text', text: content }] },
-        ] }) });
+        const result = await fetch('/api/text', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ requestId, kind: 'prompt', creditQuote, content }) });
         if (!result.ok) throw new Error('旧版请求未受理: ' + result.status);
       }
     }, { system: legacySystem, content, requestId: legacyId, creditQuote: legacyQuote, accepted });
     await page.reload(); await ready(page);
     await polish(page).click(); await savedPrompt(page, textOutput);
     assert.equal(app.calls.length, beforeLegacy + 1);
-    assert.equal(app.calls.at(-1).json.messages[0].content, legacySystem);
+    assert.equal(app.calls.at(-1).json.messages[0].content, PROMPT_POLISH_INSTRUCTIONS, 'the server applies its own instructions');
     assert.equal(requests.filter((request) => request.requestId === legacyId).length, 1);
     assert.equal((await api(page, '/api/credits')).credits.spent, spentBefore + 1);
     await undo(page).click(); await savedPrompt(page, content);

@@ -78,6 +78,8 @@ export async function recipeDraft(record: ResultRecord) {
     maskDataUrl = await blobDataUrl(blob);
   }
   const { aspectRatio, sizeTier } = sizePreset(recipe.size);
-  const config: Partial<GenerationConfig> = { modelName: recipe.modelName || '', prompt: record.mode === 'edit' ? record.prompt : recipe.prompt, quality: recipe.quality, outputFormat: recipe.outputFormat, background: recipe.background, outputCompression: recipe.outputCompression, requestSize: recipe.size, aspectRatio, sizeTier, sizeHint: resolveSize(aspectRatio, sizeTier).hint, refImages, imageCount: 1, mode: record.mode };
+  // Edits, series scenes and multi-reference prompts wrap the typed text before sending, so reuse the typed text. Older single works kept their style only in the recipe prompt.
+  const wrapped = record.mode === 'edit' || record.kind === 'series' || recipe.references.length > 1;
+  const config: Partial<GenerationConfig> = { modelName: recipe.modelName || '', prompt: wrapped ? record.prompt : recipe.prompt, quality: recipe.quality, outputFormat: recipe.outputFormat, background: recipe.background, outputCompression: recipe.outputCompression, requestSize: recipe.size, aspectRatio, sizeTier, sizeHint: resolveSize(aspectRatio, sizeTier).hint, refImages, imageCount: 1, mode: record.mode };
   return { config, styleId: 'default', styleName: '', styleTemplate: null, refImage: refImages[0] || null, sourceRecord: null, mask: null, maskDataUrl, tone: 'none' as const };
 }

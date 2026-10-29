@@ -271,7 +271,7 @@ export function StitchStudioRail(props: StitchStudioRailProps) {
               ]}
               itemClassName={(active) => `rounded-md px-2 py-1.5 font-meta-sm text-meta-sm disabled:opacity-50 disabled:cursor-not-allowed ${active ? 'bg-surface-container-lowest text-primary shadow-sm' : 'text-on-surface-variant hover:text-on-surface'}`}
             />
-            <p className="font-meta-sm text-meta-sm text-on-surface-variant">{isEdit ? '涂抹指定区域, 沿用原图参数和画风.' : referenceCount > 1 ? '按图 1, 图 2 的顺序参考, 可在提示词中说明各张图片的用途.' : '参考原图重新创作, 可自由调整画幅与风格.'}</p>
+            <p className="font-meta-sm text-meta-sm text-on-surface-variant">{isEdit ? '涂抹需要修改的区域, 沿用原图参数和画风. 蒙版只提示修改范围, 未涂抹处也可能有细微变化.' : referenceCount > 1 ? '按图 1, 图 2 的顺序参考, 可在提示词中说明各张图片的用途.' : '参考原图重新创作, 可自由调整画幅与风格.'}</p>
             {tooManyReferences && <p role="status" className="rounded-lg bg-secondary-container/50 px-3 py-2 font-meta-sm text-meta-sm text-on-secondary-container">配方已载入 {referenceCount} 张参考图, 单图创作最多使用 {props.maxReferences} 张. 请移除多余图片并检查文案后再绘制.</p>}
             {!isEdit ? referenceSlots : <div className="flex items-start gap-3 rounded-lg bg-surface-container-lowest p-2 shadow-sm">
               <button type="button" aria-label="查看局部重绘原图" title="点击查看大图" onClick={() => setOriginalPreview(true)} className="h-16 w-16 shrink-0 overflow-hidden rounded-lg bg-surface-container">

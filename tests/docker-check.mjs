@@ -164,7 +164,7 @@ try {
   const accepted = await request('/api/jobs/batch', { cookie, method: 'POST', body: { jobs: inputs } });
   assert.equal(accepted.status, 202);
   await waitFor(async () => (await request('/api/jobs/me', { cookie })).data.jobs.every((job) => job.status === 'succeeded'), 'container batch generation');
-  assert.equal((await request('/api/text', { cookie, method: 'POST', body: { requestId: randomUUID(), kind: 'prompt', creditQuote, input: [{ role: 'user', content: [{ type: 'input_text', text: '容器文字测试' }] }] } })).data.credit.state, 'charged');
+  assert.equal((await request('/api/text', { cookie, method: 'POST', body: { requestId: randomUUID(), kind: 'prompt', creditQuote, content: '容器文字测试' } })).data.credit.state, 'charged');
   assert.equal((await request('/api/admin/credit-prices', { method: 'PUT', body: { requestId: randomUUID(), image: 12, text: 2, version: 1 } })).status, 200);
   const disabled = (await request('/api/admin/access-codes', { method: 'POST', body: { requestId: randomUUID(), initialPoints: 0, note: '持久停用验证' } })).data.codes[0];
   assert.equal((await request(`/api/admin/access-codes/${disabled.id}`, { method: 'PATCH', body: { requestId: randomUUID(), version: 1, enabled: false } })).status, 200);
@@ -176,7 +176,7 @@ try {
   const freeJob = await request('/api/jobs', { cookie: freeCookie, method: 'POST', body: { ...submission(randomUUID()), creditQuote: freeQuote } });
   assert.equal(freeJob.status, 202);
   await waitFor(async () => (await request(`/api/jobs/${freeJob.data.id}`, { cookie: freeCookie })).data.status === 'succeeded', 'unlimited container generation');
-  assert.equal((await request('/api/text', { cookie: freeCookie, method: 'POST', body: { requestId: randomUUID(), kind: 'prompt', creditQuote: freeQuote, input: [{ role: 'user', content: [{ type: 'input_text', text: '无限额度文字验证' }] }] } })).data.credit.unlimited, true);
+  assert.equal((await request('/api/text', { cookie: freeCookie, method: 'POST', body: { requestId: randomUUID(), kind: 'prompt', creditQuote: freeQuote, content: '无限额度文字验证' } })).data.credit.unlimited, true);
   const expectedUnlimited = (await request('/api/credits', { cookie: freeCookie })).data;
   assert.deepEqual([expectedUnlimited.credits.available, expectedUnlimited.credits.reserved, expectedUnlimited.credits.spent], [0, 0, 14]);
   const deleted = (await request('/api/admin/access-codes', { method: 'POST', body: { requestId: randomUUID(), initialPoints: 3, note: '删除状态持久化' } })).data.codes[0];

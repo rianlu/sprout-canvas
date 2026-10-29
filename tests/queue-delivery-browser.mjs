@@ -277,6 +277,13 @@ try {
     assert.equal(await page.getByRole('heading', { name: '提交待确认', exact: true }).count(), 0);
     assert.equal(await page.getByLabel('画面提示词', { exact: true }).inputValue(), '余额不足时提交的画稿');
     await page.unroute(submitRoute);
+    // An open channel circuit is a 503 refusal before queuing, not an unknown submission.
+    await page.route(submitRoute, (route) => route.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ error: '所选模型暂时不可用, 请稍后重试或切换为自动', code: 'CHANNEL_UNAVAILABLE' }) }));
+    await submit(page, '余额不足时提交的画稿');
+    await page.getByText(/所选模型暂时不可用/).first().waitFor();
+    await until(async () => !(await rows(page, 'outbox')).length, 'channel refusal leaves no local submission');
+    assert.equal(await page.getByRole('heading', { name: '提交待确认', exact: true }).count(), 0);
+    await page.unroute(submitRoute);
     await submit(page, '余额不足时提交的画稿');
     await settled(page, 1);
     assert.equal(calls(), before + 1);

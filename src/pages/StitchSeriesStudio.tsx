@@ -168,6 +168,29 @@ export function SeriesStudio(props: SeriesStudioProps) {
 
                 <SeriesReferences references={references} maxReferences={maxReferences} disabled={planLocked} busy={referenceBusy} onUpload={uploadReferences} onRemove={removeReference} />
 
+                {/* 模型: 两个以上模型时显示, 默认自动, 全系列统一 */}
+                {models.length > 1 && <div className="flex flex-col gap-1.5">
+                  <div className="flex items-center justify-between">
+                    <span className="font-body-sm text-body-sm font-medium text-on-surface flex items-center gap-1">
+                      <StitchIcon name="tune" size={16} className="text-primary" />
+                      生成模型
+                    </span>
+                    <span className="font-meta-sm text-meta-sm text-outline">全系列统一</span>
+                  </div>
+                  <SegmentedControl
+                    label="系列生成模型"
+                    className={`grid gap-1.5 ${models.length > 2 ? 'grid-cols-2 sm:grid-cols-4' : 'grid-cols-3'}`}
+                    disabled={planLocked}
+                    value={config.modelName || ''}
+                    onChange={(modelName) => setConfig((current) => ({ ...current, modelName }))}
+                    options={[{ id: '', label: '自动' }, ...models.map((model) => ({ id: model, label: model }))]}
+                    itemClassName={(active) => active
+                      ? 'min-w-0 break-words leading-tight py-1.5 px-1 rounded-lg bg-secondary-container text-on-secondary-container border border-primary/30 font-meta-sm text-meta-sm font-semibold text-center disabled:opacity-60 disabled:cursor-not-allowed'
+                      : 'min-w-0 break-words leading-tight py-1.5 px-1 rounded-lg bg-surface-container-lowest hover:bg-surface-container text-on-surface-variant border border-outline-variant/30 font-meta-sm text-meta-sm text-center transition-colors disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-surface-container-lowest'}
+                  />
+                  <p className="font-meta-sm text-[10px] text-outline">{config.modelName ? '只使用所选模型, 画幅按该模型可用项显示' : '按通道负载自动选择, 失败时可换用其他模型'}</p>
+                </div>}
+
                 {/* 统一画幅 */}
                 <div className="flex flex-col gap-1.5">
                   <div className="flex items-center justify-between">
@@ -211,15 +234,6 @@ export function SeriesStudio(props: SeriesStudioProps) {
             {/* 底部动作栏 */}
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-space-sm pt-space-xs border-t border-outline-variant/20">
               <div className="flex flex-wrap items-center gap-space-xs text-on-surface-variant font-meta-sm text-meta-sm">
-                {models.length > 1 && <>
-                  <span title={config.modelName ? '只使用所选模型' : '按通道负载自动选择, 失败时可换用其他模型'}>
-                    生成模型:{' '}
-                    <strong className="text-on-surface font-medium">
-                      <select aria-label="系列生成模型" disabled={planLocked} className="bg-transparent disabled:opacity-60" value={config.modelName || ''} onChange={(event) => setConfig((current) => ({ ...current, modelName: event.target.value }))}><option value="">自动</option>{models.map((model) => <option key={model} value={model}>{model}</option>)}</select>
-                    </strong>
-                  </span>
-                  <span className="text-outline">·</span>
-                </>}
                 <span className="flex items-center gap-1">
                   <StitchIcon name="verified" size={16} className="text-primary" />
                   默认质量:{' '}

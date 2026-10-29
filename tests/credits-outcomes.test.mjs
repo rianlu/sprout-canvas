@@ -33,13 +33,17 @@ async function unusedUrl() {
 }
 const sendJson = (response, status, body) => { response.writeHead(status, { 'Content-Type': 'application/json' }); response.end(JSON.stringify(body)); return true; };
 
-// Relays answer 5xx with JSON when they lost the upstream mid-request, so those bodies stay unknown like gateway pages.
+// Gateway pages and timeout/disconnect messages leave both image and text results unknown.
 const UNKNOWN_RESPONSES = [
   ...[408, 504, 524, 502, 500].map((status) => ({ status, type: 'text/html', body: '<html>Gateway did not return a result</html>' })),
   { status: 500, type: 'application/json', body: JSON.stringify({ error: { message: 'Post "https://upstream.invalid/v1/images/generations": context deadline exceeded', type: 'new_api_error' } }) },
-  { status: 502, type: 'application/json', body: JSON.stringify({ error: { message: 'upstream_error', type: 'upstream_error' } }) },
   { status: 503, type: 'application/json', body: JSON.stringify({ error: { message: 'upstream connect error or disconnect/reset before headers' } }) },
-  { status: 500, type: 'application/json', body: JSON.stringify({ error: { message: 'The server had an error processing your request.', type: 'server_error' } }) },
+];
+// Relays answer 5xx with JSON when they lost the upstream mid-request; a paid image stays unknown, while text may switch channels.
+const IMAGE_UNKNOWN_RESPONSES = [
+  { status: 500, body: { error: { message: 'do request failed', type: 'upstream_error' } } },
+  { status: 502, body: { error: { message: 'upstream_error', type: 'upstream_error' } } },
+  { status: 500, body: { error: { message: 'The server had an error processing your request.', type: 'server_error' } } },
 ];
 
 test('网关超时或未知网关错误不换通道, 图片和文字各调用一次并自动返还', async (t) => {
@@ -151,6 +155,26 @@ test('5xx 只有说明未开始执行时才换通道, 换通道成功只扣一�
     assert.equal(unknown.outcomeUnknown, true); assert.equal(unknown.credit.state, 'refunded');
     assert.equal(app.calls.length, 3);
   } finally { await app.close(); }
+});
+
+test('结构化 5xx 时图片保留结果未知, 文字换用备用通道且只扣一次', async (t) => {
+  for (const { status, body } of IMAGE_UNKNOWN_RESPONSES) await t.test(`HTTP ${status} ${body.error.message}`, async () => {
+    const app = await startHarness();
+    try {
+      const cookie = await app.login();
+      app.config.textProviders.push({ ...app.config.textProviders[0], id: 'backup', name: 'backup', baseUrl: app.config.textProviders[0].baseUrl + '/text-backup' });
+      await saveConfig(app);
+      app.controls.respond = (call, response) => call.path.startsWith('/primary/') || call.path === '/v1/chat/completions' ? sendJson(response, status, body) : false;
+      const image = await completed(app, cookie, (await postImage(app, cookie, imageInput(app, cookie))).data.id);
+      assert.equal(image.outcomeUnknown, true); assert.equal(image.credit.state, 'refunded');
+      assert.equal(app.calls.length, 1);
+      const text = await app.api('/api/text', { cookie, method: 'POST', body: app.textInput(cookie) });
+      assert.equal(text.status, 200); assert.equal(text.data.providerName, 'backup');
+      assert.equal(text.data.credit.state, 'charged'); assert.equal(app.calls.length, 3);
+      await checkLedger(app, cookie, text.data.credit, ['reserve', 'charge']);
+      await checkBalance(app, cookie, [999999, 0, 1]);
+    } finally { await app.close(); }
+  });
 });
 
 test('多图部分失败和排队取消按单张结算, 生成中的取消请求不返还', async () => {

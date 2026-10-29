@@ -132,3 +132,24 @@ test('模型范围内按单一通道判断参数组合, 自定义尺寸来自配
   assert.deepEqual(queue.modelScope(config, 'missing').providers, []);
   assert.equal(queue.modelScope(config, ''), config);
 });
+
+test('所选模型通道熔断时提交即说明原因并标为明确拒绝, 自动仍可使用其他模型', async () => {
+  const app = await startHarness();
+  try {
+    await heterogeneous(app);
+    const cookie = await app.login();
+    app.controls.respond = (call, response) => {
+      if (upstreamOf(call) !== 'newer') return false;
+      response.writeHead(524, { 'Content-Type': 'text/html' }); response.end('<html>A timeout occurred</html>'); return true;
+    };
+    for (let i = 0; i < 3; i++) assert.equal((await completed(app, cookie, (await postImage(app, cookie, imageInput(app, cookie, {}, { modelName: 'GPT Image 2.5' }))).data.id)).outcomeUnknown, true);
+    const balance = (await app.api('/api/credits', { cookie })).data.credits;
+    const refused = await postImage(app, cookie, imageInput(app, cookie, {}, { modelName: 'GPT Image 2.5' }));
+    assert.equal(refused.status, 503);
+    assert.equal(refused.data.code, 'CHANNEL_UNAVAILABLE');
+    assert.match(refused.data.error, /所选模型暂时不可用/);
+    assert.deepEqual((await app.api('/api/credits', { cookie })).data.credits, balance);
+    const automatic = await completed(app, cookie, (await postImage(app, cookie, imageInput(app, cookie))).data.id);
+    assert.equal(automatic.status, 'succeeded'); assert.notEqual(automatic.providerId, 'newer');
+  } finally { await app.close(); }
+});

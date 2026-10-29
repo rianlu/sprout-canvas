@@ -26,7 +26,7 @@ import { imageEditConfig, sourceImageDraft, studioReferenceImages, styleTemplate
 import { StitchStudioRail, StitchCanvasStream, type CanvasEntry } from '../components/stitch-studio/StitchStudioRail';
 import { selectStudioFeed } from '../lib/studio-feed';
 import { readPromptHistory, togglePromptHistory, type PromptHistory } from '../lib/prompt-history';
-import { PROMPT_POLISH_INSTRUCTIONS, validatePolishedPrompt } from '../../shared/prompt-polish.mjs';
+import { validatePolishedPrompt } from '../../shared/prompt-polish.mjs';
 import { StitchGalleryViewer } from '../components/gallery/StitchGalleryViewer';
 
 interface CreativeStudioProps {
@@ -220,7 +220,7 @@ export function CreativeStudio({ onOpenStyles, onOpenGallery, onSubmitBatch, onC
     try {
       await writeWorkspaceDraft('studio', currentDraftRef.current);
       await requestTextGeneration(
-        PROMPT_POLISH_INSTRUCTIONS, original, 'prompt', undefined,
+        original, 'prompt', undefined,
         async (result) => {
           const polished = validatePolishedPrompt(result.text);
           const latest = currentDraftRef.current;
@@ -331,9 +331,10 @@ export function CreativeStudio({ onOpenStyles, onOpenGallery, onSubmitBatch, onC
       const requestIds = Array.from({ length: count }, () => randomId());
       if (isEdit && (!refImage || !(mask || restoredMask))) throw new Error('请先涂抹并保存需要修改的区域');
       if (isEdit && refImage && !await hasEditableRegion(mask || { strokes: [], width: 0, height: 0 }, refImage.dataUrl, restoredMask)) throw new Error('蒙版没有需要修改的区域, 请重新涂抹');
+      // Several references are numbered in upload order so the prompt can refer to 图 1, 图 2; the saved prompt stays as typed.
       const styledPrompt = isEdit
-        ? `在输入原图上进行局部编辑, 仅修改蒙版指定区域, 保持原图画幅, 构图和画风, 尽量保留未涂抹区域的内容与细节.\n修改要求: ${config.prompt}`
-        : config.prompt;
+        ? `在输入原图上进行局部编辑, 仅修改蒙版指定区域, 保持原图画幅, 构图和画风, 尽量保留未涂抹区域的内容与细节. 修改部分与原图的透视, 光线和阴影保持一致, 自然融合.\n修改要求: ${config.prompt}`
+        : referenceImages.length > 1 ? `${config.prompt}\n输入的 ${referenceImages.length} 张图片按上传顺序对应图 1 到图 ${referenceImages.length}, 按提示词说明的用途参考, 不交换编号或混淆不同主体.` : config.prompt;
       const refImages = isEdit ? [refImage!] : referenceImages;
       if (refImages.length > maxReferences) throw new Error(`最多使用 ${maxReferences} 张参考图, 请先移除多余图片`);
       const payload = await buildGenerationPayload(

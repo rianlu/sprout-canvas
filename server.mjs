@@ -63,7 +63,7 @@ function chooseProvider(config, payload, modelName) {
   try {
     return queue.chooseImageProvider(config, '/v1/images/generations', 'application/json', '', payload);
   } catch (error) {
-    if (modelName && error.statusCode === 503) throw requestError('所选模型暂时不可用, 请稍后重试或切换为自动', 503);
+    if (modelName && error.code === 'CHANNEL_UNAVAILABLE') throw Object.assign(error, { message: '所选模型暂时不可用, 请稍后重试或切换为自动' });
     throw error;
   }
 }
@@ -151,7 +151,7 @@ const server = createServer((req, res) => {
   void route(req, res).catch((error) => {
     const statusCode = Number(error?.statusCode) || 500;
     if (statusCode >= 500) logLine('ERROR', `HTTP ${req.method} ${(req.url || '').split('?')[0]}: ${error.message}`);
-    json(res, statusCode, { error: statusCode >= 500 ? '服务暂时无法完成请求, 请稍后重试' : error.message, ...(error.code ? { code: error.code } : {}), ...(error.details || {}) }, error.retryAfterSeconds ? { 'Retry-After': String(error.retryAfterSeconds) } : {});
+    json(res, statusCode, { error: statusCode >= 500 && !error.expose ? '服务暂时无法完成请求, 请稍后重试' : error.message, ...(error.code ? { code: error.code } : {}), ...(error.details || {}) }, error.retryAfterSeconds ? { 'Retry-After': String(error.retryAfterSeconds) } : {});
   });
 });
 

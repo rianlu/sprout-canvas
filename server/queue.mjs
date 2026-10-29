@@ -649,7 +649,7 @@ async function processImageJob(job) {
 
 export function chooseImageProvider(config, upstreamPath, contentType, excludeId, body) {
   const provider = rankedImageProviders(config, upstreamPath, contentType, excludeId, body)[0];
-  if (!provider) throw requestError(`没有可用的生图通道, 请检查通道状态`, 503);
+  if (!provider) throw Object.assign(requestError('没有可用的生图通道, 请稍后重试或更换模型', 503), { code: 'CHANNEL_UNAVAILABLE', expose: true });
   return provider;
 }
 

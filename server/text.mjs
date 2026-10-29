@@ -3,12 +3,12 @@ import { json, logLine, readJson, upstreamHeaders, timeoutSignal, isTimeoutError
 import { readLimitedBody } from './image-result.mjs';
 import { fetchGeneration, upstreamFailure, formatUpstreamFailure } from './upstream-outcome.mjs';
 import { rankedTextProviders, recordTextProviderFailure, recordTextProviderSuccess } from './text-routing.mjs';
-import { requestError } from '../shared/generation-contract.mjs';
+import { requestError, MAX_PROMPT_LENGTH } from '../shared/generation-contract.mjs';
 import { createTextLimiter } from './request-guards.mjs';
 import { creditError, creditRequestId, validateCreditQuote } from '../shared/credits-contract.mjs';
 import { secretHash, UNKNOWN_OUTCOME_REFUND } from './credits-store.mjs';
-import { parseSeriesPlan } from '../shared/series-planning.mjs';
-import { validatePolishedPrompt } from '../shared/prompt-polish.mjs';
+import { buildSeriesSplitPrompt, parseSeriesPlan, MAX_SERIES_BRIEF_LENGTH } from '../shared/series-planning.mjs';
+import { PROMPT_POLISH_INSTRUCTIONS, validatePolishedPrompt } from '../shared/prompt-polish.mjs';
 const TEXT_UPSTREAM_TIMEOUT_MS = 60_000;
 const textLimits = createTextLimiter();
 let stateStore;
@@ -55,24 +55,14 @@ function extractChatText(data) {
   return '';
 }
 
-function inputItemToText(item) {
-  if (typeof item?.content === 'string') return item.content;
-  if (!Array.isArray(item?.content)) return '';
-  return item.content
-    .map((part) => part?.text || part?.input_text || '')
-    .filter(Boolean)
-    .join('\n');
-}
-
-function responsesPayloadToChatPayload(payload, config) {
-  const messages = Array.isArray(payload?.input)
-    ? payload.input.map((item) => ({ role: item.role || 'user', content: inputItemToText(item) })).filter((item) => item.content)
-    : [{ role: 'user', content: String(payload?.input || '') }];
-  return {
-    model: payload?.model || config.textModel,
-    messages,
-    stream: false,
-  };
+// The server owns the instructions, so the text endpoint only runs polishing and series planning, never a caller-supplied system prompt.
+function textMessages(payload) {
+  if (payload.kind === 'series') return [
+    { role: 'system', content: buildSeriesSplitPrompt(payload.sceneCount) },
+    // Same wording the page used to send; a real comparison dropped scenes more often with a shorter variant.
+    { role: 'user', content: `系列梗概: ${payload.content}\n从梗概中提取主体与画面风格要求, 保持全系列一致.` },
+  ];
+  return [{ role: 'system', content: PROMPT_POLISH_INSTRUCTIONS }, { role: 'user', content: payload.content }];
 }
 
 async function callJsonUpstream(config, upstreamPath, payload) {
@@ -84,7 +74,7 @@ async function callJsonUpstream(config, upstreamPath, payload) {
       signal: timeoutSignal(TEXT_UPSTREAM_TIMEOUT_MS),
     });
     const body = await readLimitedBody(upstream, 1024 * 1024, '文字结果过长, 无法读取完整结果');
-    const failure = upstreamFailure(upstream.status, body);
+    const failure = upstreamFailure(upstream.status, body, { strictServerErrors: false });
     if (failure) throw Object.assign(new Error(formatUpstreamFailure(failure, config)), { definiteFailure: !failure.outcomeUnknown, outcomeUnknown: failure.outcomeUnknown, upstreamStatus: upstream.status });
     return JSON.parse(body.toString('utf8'));
   } catch (error) {
@@ -100,20 +90,16 @@ async function callJsonUpstream(config, upstreamPath, payload) {
 }
 
 function validateTextInput(payload) {
-  if (!payload || typeof payload !== 'object' || Array.isArray(payload) || Object.keys(payload).some((key) => !['requestId', 'kind', 'creditQuote', 'input', 'sceneCount'].includes(key))) throw requestError('文字请求格式无效');
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) throw requestError('文字请求格式无效');
+  // Pages built before the server composed the instructions still send their own messages.
+  if ('input' in payload) throw requestError('页面版本已更新, 请刷新页面后重试');
+  if (Object.keys(payload).some((key) => !['requestId', 'kind', 'creditQuote', 'content', 'sceneCount'].includes(key))) throw requestError('文字请求格式无效');
   if (!['prompt', 'series'].includes(payload.kind)) throw requestError('文字任务类型无效');
   if (payload.kind === 'series' && (!Number.isInteger(payload.sceneCount) || payload.sceneCount < 3 || payload.sceneCount > 8)) throw requestError('分镜数量缺失或无效, 请刷新页面后重试');
   if (payload.kind === 'prompt' && payload.sceneCount !== undefined) throw requestError('提示词处理不能携带分镜数量');
-  if (!Array.isArray(payload.input) || !payload.input.length || payload.input.length > 8) throw requestError('文字输入无效');
-  const input = payload.input.map((item) => {
-    if (!item || !['system', 'user'].includes(item.role) || !Array.isArray(item.content) || !item.content.length || item.content.length > 8) throw requestError('文字消息格式无效');
-    const text = item.content.map((part) => {
-      if (!part || part.type !== 'input_text' || typeof part.text !== 'string' || !part.text.trim() || part.text.length > 64000) throw requestError('文字内容为空或过长');
-      return part.text;
-    }).join('\n');
-    return { role: item.role, content: text };
-  });
-  return { requestId: creditRequestId(payload.requestId), kind: payload.kind, creditQuote: validateCreditQuote(payload.creditQuote), input, sceneCount: payload.sceneCount };
+  const limit = payload.kind === 'series' ? MAX_SERIES_BRIEF_LENGTH : MAX_PROMPT_LENGTH;
+  if (typeof payload.content !== 'string' || !payload.content.trim() || payload.content.length > limit) throw requestError(`文字内容为空或超过 ${limit} 字`);
+  return { requestId: creditRequestId(payload.requestId), kind: payload.kind, creditQuote: validateCreditQuote(payload.creditQuote), content: payload.content, sceneCount: payload.sceneCount };
 }
 
 function commitResult(op, response) {
@@ -156,7 +142,7 @@ export async function handleTextResult(req, res, userId, requestId) {
 
 export async function handleTextGeneration(req, res, session) {
   const payload = validateTextInput(await readJson(req, 256 * 1024));
-  const hash = secretHash(JSON.stringify({ kind: payload.kind, input: payload.input, sceneCount: payload.sceneCount }));
+  const hash = secretHash(JSON.stringify({ kind: payload.kind, content: payload.content, sceneCount: payload.sceneCount }));
   const existing = stateStore.credits.byRequest(session.userId, payload.requestId);
   stateStore.credits.checkQuote(session, payload.creditQuote, !existing);
   if (existing) {
@@ -194,9 +180,8 @@ async function generateText(payload, op, session, execution) {
     stateStore.credits.authorized(session);
     stateStore.credits.settle(op.id, 'running');
     try {
-      const chatPayload = responsesPayloadToChatPayload({ ...payload, model }, textProvider);
       execution.outcomeUnknown = true;
-      const data = await callJsonUpstream(textProvider, '/v1/chat/completions', chatPayload);
+      const data = await callJsonUpstream(textProvider, '/v1/chat/completions', { model, messages: textMessages(payload), stream: false });
       let text = extractChatText(data);
       // Model output that misses the contract depends on the user's input, so only a malformed reply counts against the channel circuit.
       const replied = data?.choices?.[0]?.message?.content != null;

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { buildSeriesSplitPrompt, parseSeriesPlan, scenePrompt, MIN_SERIES_COUNT, MAX_SERIES_COUNT, MAX_SERIES_BRIEF_LENGTH } from '../../shared/series-planning.mjs';
+import { parseSeriesPlan, scenePrompt, MIN_SERIES_COUNT, MAX_SERIES_COUNT, MAX_SERIES_BRIEF_LENGTH } from '../../shared/series-planning.mjs';
 import { MAX_REFERENCE_IMAGES } from '../../shared/generation-contract.mjs';
 import type { AspectRatio, GenerationConfig, RefImage, ResultRecord } from '../types/generation';
 import type { QueueJob } from '../types/queue';
@@ -213,7 +213,7 @@ export function useSeriesStudio({ onSubmit, onSubmitBatch, onUpdate, results, jo
     const original = currentDraftRef.current;
     try {
       await writeWorkspaceDraft('series', original);
-      await requestTextGeneration(buildSeriesSplitPrompt(count), `系列梗概: ${brief}\n从梗概中提取主体与画面风格要求, 保持全系列一致.`, 'series', count, async (response) => {
+      await requestTextGeneration(brief, 'series', count, async (response) => {
         const parsed = parseSeriesPlan(response.text, count);
         if (!alive.current || currentDraftRef.current !== original) throw new Error('原系列草稿已切换, 拆解结果已保留. 回到原梗概后可再次点击拆解领取');
         const next: SeriesDraft = { ...original, taskText: JSON.stringify(parsed), seriesId: randomId(), sceneIds: parsed.map(() => randomId()), shotIds: [], overrides: {}, stagedIds: [] };

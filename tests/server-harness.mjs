@@ -105,7 +105,7 @@ export async function startHarness({ serveDist = false, imageMode = 'images', co
     return { accessCodeId: session.accessCodeId, userId: session.userId, version: version || session.prices.version, unlimited: session.credits.unlimited };
   }
   function textInput(cookie, requestId = randomUUID()) {
-    return { requestId, kind: 'prompt', creditQuote: quote(cookie), input: [{ role: 'user', content: [{ type: 'input_text', text: 'isolated' }] }] };
+    return { requestId, kind: 'prompt', creditQuote: quote(cookie), content: 'isolated' };
   }
   await start();
   const adminLogin = await api('/api/admin/auth/login', { method: 'POST', body: { password: TEST_ADMIN_PASSWORD } });

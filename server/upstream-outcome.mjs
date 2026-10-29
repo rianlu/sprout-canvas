@@ -2,9 +2,9 @@ import { redactProviderSecrets, stripHtml } from './http.mjs';
 
 const CONNECT_FAILURES = new Set(['ECONNREFUSED', 'ENOTFOUND', 'EAI_AGAIN', 'ENETUNREACH', 'EHOSTUNREACH', 'UND_ERR_CONNECT_TIMEOUT']);
 const UNCERTAIN_HTTP = new Set([408, 499, 504, 520, 522, 524]);
-const UNCERTAIN_ERROR = /time[ _-]?out|timed[ _-]?out|超时|bad[ _-]?gateway|gateway[ _-]?(?:error|failure)|econnreset|epipe|connection[ _-]?(?:reset|closed)|socket[ _-]?(?:hang[ _-]?up|closed)|unexpected[ _-]?eof|broken[ _-]?pipe|deadline[ _-]?exceeded|context[ _-]?canceled|\beof\b|stream[ _-]?error|goaway|upstream[ _-]?connect|reset[ _-]?before[ _-]?headers|连接(?:重置|中断)|结果未知|仍在(?:生成|处理)|already (?:running|being processed)/i;
+const UNCERTAIN_ERROR = /time[ _-]?out|timed[ _-]?out|超时|bad[ _-]?gateway|gateway[ _-]?(?:error|failure)|econnreset|epipe|connection[ _-]?(?:reset|closed)|socket[ _-]?(?:hang[ _-]?up|closed)|unexpected[ _-]?eof|broken[ _-]?pipe|deadline[ _-]?exceeded|context[ _-]?canceled|\beof\b|\bstream[ _-]?error|goaway|upstream[ _-]?connect|reset[ _-]?before[ _-]?headers|连接(?:重置|中断)|结果未知|仍在(?:生成|处理)|already (?:running|being processed)/i;
 
-// A 5xx may come from a relay that already forwarded the request, so only refusals that prove nothing ran may switch channels.
+// A 5xx may come from a relay that already forwarded the request, so for images only refusals that prove nothing ran may switch channels.
 const NOT_STARTED_ERROR = /overload|capacity|rate[ _-]?limit|too many requests|quota|no available (?:channel|provider)|负载已?(?:饱和|已满|过高)|无可用(?:渠道|通道)|限流|配额|余额不足/i;
 
 export function isDefiniteConnectionFailure(error) {
@@ -23,7 +23,8 @@ export async function fetchGeneration(url, options) {
   }
 }
 
-export function upstreamFailure(status, body) {
+// Text replies are cheap and settled once, so text also treats a structured 5xx error body as a refusal and may switch channels.
+export function upstreamFailure(status, body, { strictServerErrors = true } = {}) {
   let value = body, raw = '';
   if (Buffer.isBuffer(body) || typeof body === 'string') {
     raw = body.toString();
@@ -42,7 +43,7 @@ export function upstreamFailure(status, body) {
   const outcomeUnknown = UNCERTAIN_HTTP.has(status)
     || UNCERTAIN_ERROR.test(code + ' ' + message)
     || (incomplete && !['max_output_tokens', 'content_filter'].includes(reason))
-    || (status >= 500 && !NOT_STARTED_ERROR.test(code + ' ' + message));
+    || (status >= 500 && !NOT_STARTED_ERROR.test(code + ' ' + message) && (strictServerErrors || (!inner && !terminal)));
   let effectiveStatus = status;
   if (status < 400) {
     effectiveStatus = /rate_limit|quota|overload|capacity/i.test(code) ? 429

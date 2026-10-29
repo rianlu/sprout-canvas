@@ -133,11 +133,21 @@ try {
   assert.equal(await page.getByLabel('系列生成质量', { exact: true }).innerText(), '自动');
   assert.equal(await page.locator('select[aria-label="系列生成质量"]').count(), 0);
   assert.equal(await ratio('16:9 宽景分镜').getAttribute('aria-pressed'), 'true');
-  await page.getByLabel('系列生成模型', { exact: true }).selectOption('GPT Image 2.5');
+  const seriesModels = page.getByRole('group', { name: '系列生成模型', exact: true });
+  assert.equal(await seriesModels.getByRole('button', { name: '自动', exact: true }).getAttribute('aria-pressed'), 'true');
+  await seriesModels.getByRole('button', { name: 'GPT Image 2.5', exact: true }).click();
   await toast(/已按 GPT Image 2\.5 调整系列参数: 画幅改为 1:1/);
   assert.equal(await ratio('16:9 宽景分镜').count(), 0);
   assert.equal(await ratio('1:1 方形插画').getAttribute('aria-pressed'), 'true');
-  await page.getByLabel('系列生成模型', { exact: true }).selectOption('');
+  await seriesModels.scrollIntoViewIfNeeded(); await screenshot('series-model-desktop');
+  await page.setViewportSize({ width: 390, height: 844 });
+  await seriesModels.scrollIntoViewIfNeeded(); await screenshot('series-model-mobile');
+  for (const button of await seriesModels.getByRole('button').all()) {
+    const box = await button.boundingBox();
+    assert.ok(box && box.x >= 0 && box.x + box.width <= 390, 'series model options stay on screen');
+  }
+  await page.setViewportSize({ width: 1600, height: 1000 });
+  await seriesModels.getByRole('button', { name: '自动', exact: true }).click();
   assert.equal(await ratio('16:9 宽景分镜').count(), 1);
   checks.push('系列按模型收窄画幅, 质量固定为自动');
 

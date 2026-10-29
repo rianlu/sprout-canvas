@@ -393,13 +393,13 @@ export function StitchGalleryViewer({ cards, initialIndex, initialSceneIndex = 0
                     type="button"
                     className="hover:text-primary"
                     title="复制当前提示词"
-                    onClick={() => void copy(record.recipe?.prompt || record.prompt)}
+                    onClick={() => void copy(showSeries ? record.prompt : record.recipe?.prompt || record.prompt)}
                   >
                     <StitchIcon name="content_copy" size={15} />
                   </button>
                 </div>
                 <p className="max-h-40 overflow-y-auto font-body-sm text-body-sm text-on-surface font-medium leading-relaxed whitespace-pre-wrap break-words">
-                  {record.recipe?.prompt || record.prompt || '未提供'}
+                  {(showSeries ? record.prompt : record.recipe?.prompt || record.prompt) || '未提供'}
                 </p>
               </div>
               {versions.length > 1 && <label className="block text-body-sm">本镜版本<select aria-label="本镜版本" value={record.id} onChange={(event) => setVersionId(event.target.value)} className="w-full mt-1 p-2 rounded-lg bg-surface-container">{versions.map((item) => <option key={item.id} value={item.id}>版本 {item.version || 1} · {new Date(item.createdAt).toLocaleString()}</option>)}</select></label>}

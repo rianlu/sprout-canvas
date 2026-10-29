@@ -256,7 +256,11 @@ try {
     }));
     assert.ok(artifacts.includes(`ref-${latest.recipe.referenceImage.id}`), 'continuity snapshot survives cleanup');
     await cards(page).nth(1).getByTitle('查看作品详情', { exact: true }).click();
-    await page.getByRole('dialog', { name: '作品检视', exact: true }).getByRole('button', { name: '复用配方', exact: true }).click();
+    const viewer = page.getByRole('dialog', { name: '作品检视', exact: true });
+    assert.ok(requests[4].request.prompt.includes('系列创作需求'), 'the generation prompt carries the series context');
+    await viewer.getByRole('complementary', { name: '作品详情' }).getByText(latest.prompt, { exact: true }).waitFor();
+    await viewer.getByRole('button', { name: '复用配方', exact: true }).click();
+    await until(async () => await page.getByLabel('画面提示词', { exact: true }).inputValue() === latest.prompt, 'recipe reuse loads the scene text, not the wrapped generation prompt');
     const studioReferences = page.getByLabel('已载入参考图', { exact: true });
     await until(async () => await studioReferences.getByRole('img').count() === 5, 'full recipe keeps all four references and continuity image');
     assert.ok(await page.getByRole('button', { name: /^开始绘制/ }).isDisabled(), 'five imported images cannot be submitted from single-image studio');

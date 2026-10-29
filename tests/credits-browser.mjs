@@ -197,7 +197,7 @@ try {
 
   app.controls.respond = (_call, response) => { response.destroy(); return true; };
   const textId = randomUUID(); const current = await auth(a);
-  const unknown = await api(a, '/api/text', 'POST', { requestId: textId, kind: 'prompt', creditQuote: { accessCodeId: current.accessCodeId, userId: current.userId, version: current.prices.version }, input: [{ role: 'user', content: [{ type: 'input_text', text: '测试结果未知' }] }] });
+  const unknown = await api(a, '/api/text', 'POST', { requestId: textId, kind: 'prompt', creditQuote: { accessCodeId: current.accessCodeId, userId: current.userId, version: current.prices.version }, content: '测试结果未知' });
   assert.equal(unknown.data.code, 'OUTCOME_UNKNOWN'); assert.equal(unknown.data.credit.state, 'refunded');
   await card(admin, '朋友长期共享').getByRole('button', { name: /^用量明细 / }).click();
   dialog = admin.getByRole('dialog', { name: '用量明细', exact: true });

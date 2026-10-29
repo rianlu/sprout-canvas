@@ -196,7 +196,7 @@ export function useQueue(onResult: (records: ResultRecord[], jobId: string) => P
     } catch (cause) {
       if (!accepted.length) {
         // A refusal (no credits, changed price, invalid input) created nothing, so it must not linger as an unconfirmed submission.
-        if (saved && cause instanceof ApiError && DEFINITE_REJECTIONS.has(cause.status)) discarded = await discardRejected(inputs, userId).catch(() => new Set<string>());
+        if (saved && cause instanceof ApiError && (DEFINITE_REJECTIONS.has(cause.status) || cause.code === 'CHANNEL_UNAVAILABLE')) discarded = await discardRejected(inputs, userId).catch(() => new Set<string>());
         throw cause;
       }
       if (isCurrent()) setError('任务已受理, 本地提交记录同步未完成, 正在重新核对');
