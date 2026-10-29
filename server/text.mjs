@@ -1,7 +1,7 @@
 import { readLocalConfig } from './config.mjs';
 import { json, logLine, readJson, upstreamHeaders, timeoutSignal, isTimeoutError } from './http.mjs';
 import { readLimitedBody } from './image-result.mjs';
-import { fetchGeneration, upstreamFailure, formatUpstreamFailure } from './upstream-outcome.mjs';
+import { fetchGeneration, upstreamFailure, formatUpstreamFailure, upstreamFailureDetail, publicUpstreamText } from './upstream-outcome.mjs';
 import { rankedTextProviders, recordTextProviderFailure, recordTextProviderSuccess } from './text-routing.mjs';
 import { requestError, MAX_PROMPT_LENGTH } from '../shared/generation-contract.mjs';
 import { createTextLimiter } from './request-guards.mjs';
@@ -75,7 +75,7 @@ async function callJsonUpstream(config, upstreamPath, payload) {
     });
     const body = await readLimitedBody(upstream, 1024 * 1024, '文字结果过长, 无法读取完整结果');
     const failure = upstreamFailure(upstream.status, body, { strictServerErrors: false });
-    if (failure) throw Object.assign(new Error(formatUpstreamFailure(failure, config)), { definiteFailure: !failure.outcomeUnknown, outcomeUnknown: failure.outcomeUnknown, upstreamStatus: upstream.status });
+    if (failure) throw Object.assign(new Error(formatUpstreamFailure(failure, config, '文字服务')), { definiteFailure: !failure.outcomeUnknown, outcomeUnknown: failure.outcomeUnknown, upstreamStatus: upstream.status, detail: upstreamFailureDetail(failure, config) });
     return JSON.parse(body.toString('utf8'));
   } catch (error) {
     if (!error.definiteFailure && !error.upstreamStatus && isTimeoutError(error)) {
@@ -199,9 +199,10 @@ async function generateText(payload, op, session, execution) {
     } catch (error) {
       execution.outcomeUnknown = !error.definiteFailure;
       const message = error.message || String(error);
-      errors.push(`${textProvider.name} Chat Completions: ${message}`);
-      attempts.push({ providerName: textProvider.name, mode: 'chat_completions', timeout: Boolean(error.isTextTimeout), error: message.slice(0, 180) });
-      logLine('WARN', `[text-provider] failed provider=${textProvider.name} mode=chat_completions error=${message.slice(0, 240)}`);
+      const publicMessage = publicUpstreamText(message, textProvider);
+      errors.push(`${textProvider.name} Chat Completions: ${publicMessage}`);
+      attempts.push({ providerName: textProvider.name, mode: 'chat_completions', timeout: Boolean(error.isTextTimeout), error: publicMessage.slice(0, 180) });
+      logLine('WARN', `[text-provider] failed provider=${textProvider.name} mode=chat_completions error=${(error.detail || message).slice(0, 240)}`);
       if (!error.contentFailure) recordTextProviderFailure(textProvider.id, message, logLine);
       if (execution.outcomeUnknown) return unknownTextResult(attempts);
     }

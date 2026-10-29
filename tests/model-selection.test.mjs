@@ -142,7 +142,10 @@ test('所选模型通道熔断时提交即说明原因并标为明确拒绝, 自
       if (upstreamOf(call) !== 'newer') return false;
       response.writeHead(524, { 'Content-Type': 'text/html' }); response.end('<html>A timeout occurred</html>'); return true;
     };
-    for (let i = 0; i < 3; i++) assert.equal((await completed(app, cookie, (await postImage(app, cookie, imageInput(app, cookie, {}, { modelName: 'GPT Image 2.5' }))).data.id)).outcomeUnknown, true);
+    // A gateway timeout costs the user minutes, so one is enough to cool the channel down.
+    const timedOut = await completed(app, cookie, (await postImage(app, cookie, imageInput(app, cookie, {}, { modelName: 'GPT Image 2.5' }))).data.id);
+    assert.equal(timedOut.outcomeUnknown, true);
+    assert.match(timedOut.error, /^生图服务响应超时 \(HTTP 524\)\. 结果未知/);
     const balance = (await app.api('/api/credits', { cookie })).data.credits;
     const refused = await postImage(app, cookie, imageInput(app, cookie, {}, { modelName: 'GPT Image 2.5' }));
     assert.equal(refused.status, 503);

@@ -52,8 +52,29 @@ export function upstreamFailure(status, body, { strictServerErrors = true } = {}
   return { status: effectiveStatus, upstreamStatus: status, message: String(message), outcomeUnknown };
 }
 
-export function formatUpstreamFailure(failure, config) {
-  const message = redactProviderSecrets(stripHtml(failure.message), config).slice(0, 360);
-  const prefix = failure.upstreamStatus >= 400 ? '上游 API 返回 HTTP ' + failure.upstreamStatus : '上游 API 返回生成错误';
-  return prefix + ': ' + message + (failure.outcomeUnknown ? '. 结果未知, 本次不扣点, 未自动重复调用.' : '');
+const STATUS_LABELS = new Map([[400, '拒绝了请求'], [401, '鉴权失败'], [403, '拒绝访问'], [404, '接口或模型不存在'], [408, '响应超时'], [413, '请求内容过大'], [429, '请求过多'], [500, '内部错误'], [502, '网关错误'], [503, '暂时不可用'], [504, '响应超时'], [520, '网关错误'], [522, '连接超时'], [524, '响应超时']]);
+const HTML_BODY = /<\s*(?:!doctype|html|head|body|title|div|p|h\d)\b/i;
+const URL_TEXT = /\b(?:https?|wss?):\/\/[^\s"'<>)\]]+/gi;
+const HOST_TEXT = /\b(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+(?:com|net|org|io|ai|app|dev|cn|top|xyz|si|me|cc|co|info|site|online|cloud|tech|pro|vip|link|club|shop|icu|ink|fun|work|live|world|one|run|so|im|tw|hk|jp|us|uk|de|sg|kr|ru)\b(?::\d+)?/gi;
+const IP_TEXT = /\b(?:\d{1,3}\.){3}\d{1,3}(?::\d+)?\b/g;
+
+// Error bodies from relays often carry their own hostnames, IPs and gateway pages; users only need the reason.
+export function publicUpstreamText(text, config) {
+  let value = redactProviderSecrets(String(text || ''), config);
+  try { const host = new URL(config?.baseUrl).host; if (host) value = value.split(host).join('上游服务'); } catch {}
+  return value.replace(URL_TEXT, '上游服务').replace(HOST_TEXT, '上游服务').replace(IP_TEXT, '上游服务');
+}
+
+export function formatUpstreamFailure(failure, config, service = '生图服务') {
+  const status = failure.upstreamStatus;
+  const html = HTML_BODY.test(failure.message);
+  const message = html ? '' : publicUpstreamText(stripHtml(failure.message), config).slice(0, 360);
+  const label = STATUS_LABELS.get(status) || (status >= 500 ? '服务异常' : '拒绝了请求');
+  const reason = status >= 400 ? `${service}${label} (HTTP ${status})${message ? ': ' + message : ''}` : `${service}返回生成错误: ${message || '上游未完成生成'}`;
+  return reason + (failure.outcomeUnknown ? '. 结果未知, 本次不扣点, 未自动重复调用.' : '');
+}
+
+// The server log keeps the stripped original so operators can still see which gateway answered.
+export function upstreamFailureDetail(failure, config) {
+  return `HTTP ${failure.upstreamStatus}: ${redactProviderSecrets(stripHtml(failure.message), config).slice(0, 360)}`;
 }

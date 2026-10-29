@@ -1,6 +1,6 @@
 import { toImagesPayload } from '../shared/generation-contract.mjs';
 import { readLimitedBody } from './image-result.mjs';
-import { fetchGeneration, upstreamFailure, formatUpstreamFailure } from './upstream-outcome.mjs';
+import { fetchGeneration, upstreamFailure, formatUpstreamFailure, upstreamFailureDetail } from './upstream-outcome.mjs';
 let upstreamHeaders, timeoutSignal;
 let IMAGE_UPSTREAM_TIMEOUT_MS = 180000;
 let RESPONSES_IMAGE_UPSTREAM_TIMEOUT_MS = 420000;
@@ -155,7 +155,7 @@ async function processImagesEditBackedGenerationJob(job, config) {
 }
 
 function failedUpstreamResult(failure, config) {
-  return { ...failedImageJobResult(failure.status, formatUpstreamFailure(failure, config)), outcomeUnknown: failure.outcomeUnknown };
+  return { ...failedImageJobResult(failure.status, formatUpstreamFailure(failure, config)), outcomeUnknown: failure.outcomeUnknown, detail: upstreamFailureDetail(failure, config) };
 }
 
 function imageResponse(upstream, body, config) {

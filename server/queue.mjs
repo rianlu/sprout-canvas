@@ -2,6 +2,7 @@ import { initProviderAdapter, isJsonContent, isMultipartEdit, modeForUpstreamPat
 import { generationRecipe, requestError, toImagesPayload } from '../shared/generation-contract.mjs';
 import { submissionHash } from './state-store.mjs';
 import { normalizeImageResult } from './image-result.mjs';
+import { publicUpstreamText } from './upstream-outcome.mjs';
 import { imageHash, validateSubmissionImages } from './generation-input.mjs';
 import { creditError } from '../shared/credits-contract.mjs';
 import { randomUUID } from 'node:crypto';
@@ -20,8 +21,14 @@ const recentImageDurations = [];
 let activeJob = null;
 let lastServedUserId = '';
 const DEFAULT_IMAGE_DURATION_MS = 90_000;
+// A slow failure (gateway timeout, or any failure after a long wait) trips at once because each costs the user minutes;
+// quick 5xx and disconnects often recover on the next request, so they trip after a streak.
 const PROVIDER_FAILURE_THRESHOLD = 3;
+const PROVIDER_SLOW_FAILURE_MS = 90_000;
 const PROVIDER_CIRCUIT_OPEN_MS = 30 * 60 * 1000;
+const PROVIDER_CIRCUIT_MAX_OPEN_MS = 2 * 60 * 60 * 1000;
+const SLOW_FAILURE_STATUS = new Set([408, 504, 522, 524]);
+const SLOW_FAILURE_ERROR = /time[ _-]?out|timed[ _-]?out|超时|deadline[ _-]?exceeded/i;
 const providerCircuitState = new Map();
 let stateStore = null;
 let workerPromise = null;
@@ -577,6 +584,7 @@ async function processImageJob(job) {
     const initialConfig = await readLocalConfig(job.providerId);
     const providers = providersForJob(job, initialConfig);
     let jobResult = null;
+    let attemptStartedAt = 0;
     let lastConfig = initialConfig;
     if (!providers.length) {
       jobResult = failedImageJobResult(503, `没有健康的生图服务商: ${requestKindLabel(job.upstreamPath, job.contentType)}`);
@@ -591,11 +599,11 @@ async function processImageJob(job) {
       logLine('INFO', `[image-job] start ${job.id} user=${job.userId} provider=${config.name} mode=${config.generationMode} path=${job.upstreamPath}${index ? ' fallback' : ''}`);
       try {
         outcomeUnknown = true;
+        attemptStartedAt = Date.now();
         jobResult = await normalizeImageResult(await executeImageJobWithProvider(job, config));
       } catch (error) {
-        const message = `上游请求异常: ${formatThrownError(error)}`;
-        jobResult = failedImageJobResult(502, message);
-        jobResult.outcomeUnknown = !error.definiteFailure;
+        const detail = `上游请求异常: ${formatThrownError(error)}`;
+        jobResult = { ...failedImageJobResult(502, publicUpstreamText(detail, config)), outcomeUnknown: !error.definiteFailure, detail };
       }
       outcomeUnknown = Boolean(jobResult.ok || jobResult.outcomeUnknown);
       if (jobResult.ok) {
@@ -605,11 +613,11 @@ async function processImageJob(job) {
         break;
       }
       const retryable = isRetryableJobResult(jobResult);
-      if (retryable || jobResult.outcomeUnknown) recordProviderFailure(config.id, jobResult.error);
+      if (retryable || jobResult.outcomeUnknown) recordProviderFailure(config.id, jobResult, Date.now() - attemptStartedAt, initialConfig.imageProviders || initialConfig.providers || []);
       if (!retryable || index === providers.length - 1) break;
       // A fallback could outlive the shutdown grace period and turn a definite rejection into an unknown outcome.
       if (stopping) { logLine('WARN', `[image-job] skip fallback during shutdown ${job.id} provider=${config.name}`); break; }
-      logLine('WARN', `[image-job] retryable ${job.id} provider=${config.name} status=${jobResult.status} error=${jobResult.error}`);
+      logLine('WARN', `[image-job] retryable ${job.id} provider=${config.name} status=${jobResult.status} error=${jobResult.detail || jobResult.error}`);
     }
     job.finishedAt = Date.now();
     job.result = jobResult;
@@ -617,7 +625,7 @@ async function processImageJob(job) {
     job.status = jobResult.ok ? 'succeeded' : 'failed';
     if (!jobResult.ok) {
       job.error = jobResult.error;
-      logLine('WARN', `[image-job] failed ${job.id} user=${job.userId} provider=${lastConfig.name} status=${jobResult.status} error=${job.error}`);
+      logLine('WARN', `[image-job] failed ${job.id} user=${job.userId} provider=${lastConfig.name} status=${jobResult.status} error=${jobResult.detail || job.error}`);
     } else {
       logLine('INFO', `[image-job] done ${job.id} user=${job.userId} provider=${lastConfig.name} duration=${job.finishedAt - job.startedAt}ms`);
       recentImageDurations.push(job.finishedAt - job.startedAt);
@@ -750,39 +758,50 @@ function retryExcludeProviderIds(job) {
 }
 
 function rankedImageProviders(config, upstreamPath, contentType, excludeId, body) {
-  let candidates = compatibleProviders(config, upstreamPath, contentType, body);
+  const healthy = compatibleProviders(config, upstreamPath, contentType, body).filter((provider) => !isProviderCircuitOpen(provider.id));
   const excludedIds = parseExcludedProviderIds(excludeId);
-  if (excludedIds.size) candidates = candidates.filter((p) => !excludedIds.has(p.id));
-  if (!candidates.length) candidates = compatibleProviders(config, upstreamPath, contentType, body);
-  if (!candidates.length) return [];
-  const pool = candidates.filter((provider) => !isProviderCircuitOpen(provider.id));
-  if (!pool.length) return [];
+  // A manual retry prefers channels it has not tried, and returns to a tried one only when no other channel is usable.
+  const untried = healthy.filter((provider) => !excludedIds.has(provider.id));
+  const pool = untried.length ? untried : healthy;
   return pool
     .map((provider, index) => ({ provider, load: providerLoad(provider.id), order: index }))
     .sort((left, right) => left.load - right.load || left.order - right.order)
     .map((item) => item.provider);
 }
 
-function isProviderCircuitOpen(providerId) {
+// After the cooldown a channel is half-open: the next job is the trial, success closes it and failure reopens it for twice as long.
+function isProviderCircuitOpen(providerId, now = Date.now()) {
   const state = providerCircuitState.get(providerId);
-  if (!state?.openUntil) return false;
-  if (state.openUntil > Date.now()) return true;
-  providerCircuitState.set(providerId, { ...state, openUntil: 0, failures: 0 });
-  return false;
+  return Boolean(state?.openUntil && state.openUntil > now);
 }
 
 function recordProviderSuccess(providerId) {
   if (!providerId) return;
-  providerCircuitState.set(providerId, { failures: 0, openUntil: 0, lastError: '', lastSuccessAt: Date.now() });
+  providerCircuitState.set(providerId, { failures: 0, openUntil: 0, trips: 0, lastError: '', lastSuccessAt: Date.now() });
 }
 
-function recordProviderFailure(providerId, error) {
+function recordProviderFailure(providerId, jobResult, elapsedMs, providers) {
   if (!providerId) return;
-  const previous = providerCircuitState.get(providerId) || { failures: 0, openUntil: 0, lastError: '' };
+  const now = Date.now();
+  const previous = providerCircuitState.get(providerId) || { failures: 0, openUntil: 0, trips: 0, lastError: '' };
+  const lastError = String(jobResult.error || '');
+  // A pinned job (local edit) may still reach an open channel; that must not stretch the cooldown.
+  if (isProviderCircuitOpen(providerId, now)) { providerCircuitState.set(providerId, { ...previous, lastError, lastFailureAt: now }); return; }
   const failures = previous.failures + 1;
-  const openUntil = failures >= PROVIDER_FAILURE_THRESHOLD ? Date.now() + PROVIDER_CIRCUIT_OPEN_MS : previous.openUntil || 0;
-  providerCircuitState.set(providerId, { ...previous, failures, openUntil, lastError: String(error || ''), lastFailureAt: Date.now() });
-  if (openUntil) logLine('WARN', `[image-provider] circuit-open provider=${providerId} failures=${failures} cooldownMs=${PROVIDER_CIRCUIT_OPEN_MS}`);
+  const slow = elapsedMs >= PROVIDER_SLOW_FAILURE_MS || SLOW_FAILURE_STATUS.has(jobResult.status) || SLOW_FAILURE_ERROR.test(jobResult.detail || lastError);
+  const trial = previous.trips > 0;
+  const state = { ...previous, failures, lastError, lastFailureAt: now };
+  if (!slow && !trial && failures < PROVIDER_FAILURE_THRESHOLD) { providerCircuitState.set(providerId, state); return; }
+  // Keep the last usable channel in service; refusing every submission is worse than a failing channel.
+  if (providers.length && providers.every((provider) => provider.id === providerId || isProviderCircuitOpen(provider.id, now))) {
+    providerCircuitState.set(providerId, state);
+    logLine('WARN', `[image-provider] circuit-kept provider=${providerId} failures=${failures} reason=last-available`);
+    return;
+  }
+  const trips = previous.trips + 1;
+  const cooldownMs = Math.min(PROVIDER_CIRCUIT_OPEN_MS * 2 ** (trips - 1), PROVIDER_CIRCUIT_MAX_OPEN_MS);
+  providerCircuitState.set(providerId, { ...state, failures: 0, trips, openUntil: now + cooldownMs });
+  logLine('WARN', `[image-provider] circuit-open provider=${providerId} failures=${failures} trips=${trips} slow=${slow} cooldownMs=${cooldownMs}`);
 }
 
 function providersForJob(job, config) {
