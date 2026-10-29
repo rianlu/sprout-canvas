@@ -6,6 +6,7 @@ import { useStyleCatalog } from '../hooks/useStyleCatalog';
 import { StitchIcon } from '../components/ui/StitchIcon';
 import { SegmentedControl } from '../components/ui/SegmentedControl';
 import { StyleExampleImage } from '../components/image/StyleExampleImage';
+import { useToasts } from '../components/ui/Toasts';
 import type { StyleRecord } from '../../shared/style-contract.mjs';
 
 interface StylesLibraryProps {
@@ -21,7 +22,8 @@ export function StylesLibrary({ onUseInStudio }: StylesLibraryProps) {
   const [fullWindow, setFullWindow] = useState(false);
   const [copied, setCopied] = useState('');
   const [applying, setApplying] = useState('');
-  const [actionError, setActionError] = useState('');
+  // Action failures use the app toast, which stays visible above the detail dialog.
+  const { pushToast } = useToasts();
   const applyLock = useRef(false);
   const inputRef = useRef<HTMLInputElement>(null);
   useEffect(() => {
@@ -40,13 +42,13 @@ export function StylesLibrary({ onUseInStudio }: StylesLibraryProps) {
   }, [styles, search, selectedCategory]);
   async function copy(style: StyleRecord) {
     try { await navigator.clipboard.writeText(style.prompt); setCopied(style.id); window.setTimeout(() => setCopied(''), 2200); }
-    catch { setActionError('复制失败, 请在详情中选择并复制提示词'); }
+    catch { pushToast('error', '复制失败, 请在详情中选择并复制提示词'); }
   }
   async function apply(style: StyleRecord) {
     if (applyLock.current) return;
-    applyLock.current = true; setApplying(style.id); setActionError('');
+    applyLock.current = true; setApplying(style.id);
     try { await onUseInStudio(style); }
-    catch (error) { setActionError(error instanceof Error ? error.message : '模板载入失败, 请重试'); }
+    catch (error) { pushToast('error', error instanceof Error ? error.message : '模板载入失败, 请重试'); }
     finally { applyLock.current = false; setApplying(''); }
   }
   const closeDetail = () => { setFullWindow(false); setDetail(null); };
@@ -82,7 +84,7 @@ export function StylesLibrary({ onUseInStudio }: StylesLibraryProps) {
       </div>
     </section>
     <main className="px-gutter-canvas py-space-lg">
-      {(error || actionError) && <div role="alert" className="mb-4 p-3 rounded-xl bg-error-container text-on-error-container flex items-center gap-3"><span>{error || actionError}</span><button type="button" className="underline" onClick={() => { setActionError(''); void refresh(); }}>重试</button></div>}
+      {error && <div role="alert" className="mb-4 p-3 rounded-xl bg-error-container text-on-error-container flex items-center gap-3"><span>{error}</span><button type="button" className="underline" onClick={() => void refresh()}>重试</button></div>}
       {loading && <p role="status" className="py-10 text-center text-on-surface-variant">正在读取风格库...</p>}
       <div className={`grid ${compact ? 'grid-cols-2 gap-3 lg:grid-cols-3 lg:gap-space-lg xl:grid-cols-4' : 'grid-cols-1 gap-space-lg sm:grid-cols-2 lg:grid-cols-3'}`}>
         {filtered.map((style) => <article key={style.id} className={`style-card group flex flex-col bg-surface-container-lowest border border-outline-variant/30 rounded-2xl shadow-[0_4px_20px_rgba(85,95,75,0.05)] ${compact ? 'p-3 lg:p-space-md' : 'p-space-md'}`}>

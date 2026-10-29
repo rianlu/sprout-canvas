@@ -587,7 +587,7 @@ export function SeriesStudio(props: SeriesStudioProps) {
                   {busy ? '正在拆解分镜提示词...' : canContinue ? '已确认的分镜尚有未提交项' : receiptErrorCount ? `${receiptErrorCount} 幕作品领取待重试` : activeJobs ? activityLabel : failedCount ? `${failedCount} 幕生成异常, 请在对应卡片中处理` : remainingCount === 0 ? `已完成 ${plannedTotal} 张分镜图片` : hasCompletePlan ? `${remainingCount} 幕分镜已准备好, 请检查后确认` : `请补全分镜提示词 (${filledPrompts}/${plannedTotal})`}
                 </p>
                 <p className="font-body-sm text-body-sm text-on-surface-variant mt-1">
-                  {canContinue ? '继续提交剩余分镜, 已提交的任务不会重复生成.' : receiptErrorCount ? '图片已经生成. 重试只领取原结果, 不重复生图或扣点.' : activeJobs ? '可在我的任务中查看排队和生成状态.' : failedCount ? '可重试原任务, 或调整提示词后重新生成. 已保存的旧版本仍保留在展馆.' : remainingCount === 0 ? '可下载整套图片, 或继续调整并重绘单镜.' : '可直接修改每幕提示词和本镜参数, 确认后才开始生成图片.'}
+                  {canContinue ? '继续提交剩余分镜, 已提交的任务不会重复生成.' : receiptErrorCount ? '图片已经生成. 重试只领取原结果, 不重复生图或扣点.' : activeJobs ? '可在我的任务中查看排队和生成状态.' : failedCount ? '可重试原任务, 或调整提示词后重新生成. 已保存的旧版本仍保留在展馆.' : remainingCount === 0 ? '作品只保存在此浏览器, 请及时下载整套图片; 也可继续调整并重绘单镜.' :'可直接修改每幕提示词和本镜参数, 确认后才开始生成图片.'}
                 </p>
               </div>
               <button

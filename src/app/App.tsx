@@ -13,6 +13,7 @@ import { useGallery } from '../hooks/useGallery';
 import { useQueue } from '../hooks/useQueue';
 import { getServerConfig } from '../lib/api/config';
 import { writeDraft } from '../lib/storage/drafts';
+import { requestPersistentStorage } from '../lib/storage/persist';
 import type { QueueSubmitInput } from '../lib/api/queue';
 import type { GenerationConfig, RefImage, ResultRecord } from '../types/generation';
 import type { ServerConfig } from '../types/provider';
@@ -70,12 +71,13 @@ export function App() {
     };
   }, [auth.authenticated, configRetry]);
 
+  // Every submission starts from a click or shortcut, the moment the browser can best judge a persistence request.
   const submit = useCallback(
-    (input: QueueSubmitInput) => queue.submit(input, () => setQueueOpen(true)),
+    (input: QueueSubmitInput) => { requestPersistentStorage(); return queue.submit(input, () => setQueueOpen(true)); },
     [queue.submit],
   );
 
-  const submitBatch = useCallback((inputs: QueueSubmitInput[]) => queue.submitBatch(inputs, () => setQueueOpen(true)), [queue.submitBatch]);
+  const submitBatch = useCallback((inputs: QueueSubmitInput[]) => { requestPersistentStorage(); return queue.submitBatch(inputs, () => setQueueOpen(true)); }, [queue.submitBatch]);
   const useSliceAsRef = useCallback(async (ref: RefImage) => {
     await writeWorkspaceDraft('studio-transfer', {
       config: { mode: 'reference', prompt: '', imageCount: 1, refImages: [ref] },
@@ -200,7 +202,9 @@ export function App() {
       {page === 'gallery' && (
         <GalleryGrid
           records={gallery.records}
-          onClear={gallery.clear}
+          loading={gallery.loading}
+          error={gallery.error}
+          onRetry={() => void gallery.refresh()}
           onDelete={gallery.remove}
           onDeleteMany={gallery.removeMany}
           onUseRecipe={(record) => void useRecipe(record)}

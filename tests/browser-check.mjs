@@ -590,6 +590,12 @@ try {
   await styleFull.waitFor({ state: 'detached' });
   assert.ok(await styleDialog.isVisible(), 'Escape leaves the style detail open');
   assert.equal(await styleFullButton.evaluate((button) => button === document.activeElement), true, 'focus returns to the full-window button');
+  // A failed action inside the detail must surface above the dialog, not on the page behind it.
+  await page.evaluate(() => { navigator.clipboard.writeText = () => Promise.reject(new DOMException('denied', 'NotAllowedError')); });
+  await styleDialog.getByRole('button', { name: '复制模板', exact: true }).click();
+  await page.locator('#toast-container').getByText('复制失败, 请在详情中选择并复制提示词', { exact: true }).waitFor();
+  assert.ok(await styleDialog.isVisible(), 'the detail stays open while its failure is shown');
+  await page.evaluate(() => { delete navigator.clipboard.writeText; });
   await page.getByLabel('关闭详情').click();
   await page.getByLabel('搜索风格').fill('');
   checks.push('风格 36 款和七类真实计数, 卡片完整显示示例图且不放大, 搜索, 署名, 移除不支持的参数; 详情与查看器同宽, 全屏查看只看图, Esc 回到详情');
@@ -690,6 +696,68 @@ try {
   assert.equal(styleCall.json.size, '768x1024', 'the request follows the 3:4 example frame');
   await styleFlow.context.close();
   checks.push('详情复制与发送使用完整长模板, 超过 1000 字仍可粘贴和编辑, 桌面手机布局正常, 确认后请求使用修改内容');
+
+  // The first gallery read fails once per tab, as when another tab blocks the database.
+  const galleryFlow = await contextPage(() => {
+    window.__persistCalls = 0;
+    if (navigator.storage) navigator.storage.persist = async () => { window.__persistCalls++; return false; };
+    const openCursor = IDBIndex.prototype.openCursor;
+    IDBIndex.prototype.openCursor = function (...args) {
+      if (this.name === 'createdAt' && !sessionStorage.getItem('gallery-read-failed')) { sessionStorage.setItem('gallery-read-failed', '1'); throw new DOMException('测试读取失败', 'UnknownError'); }
+      return openCursor.apply(this, args);
+    };
+  });
+  const gp = galleryFlow.page;
+  await nav(gp, '展馆');
+  const readFailure = gp.getByRole('alert').filter({ hasText: '本地作品读取失败' });
+  await readFailure.waitFor();
+  assert.match(await readFailure.innerText(), /测试读取失败\. 读取失败不会删除已保存的作品/);
+  assert.equal(await gp.getByText('展馆等待第一幅画作', { exact: true }).count(), 0, 'a failed read is not shown as an empty gallery');
+  await readFailure.getByRole('button', { name: '重新读取', exact: true }).click();
+  await gp.getByText('展馆等待第一幅画作', { exact: true }).waitFor();
+  await gp.getByText(/作品只保存在当前浏览器, 服务器不留存/).waitFor();
+  await nav(gp, '单图创作');
+  const galleryPrompt = gp.getByLabel('画面提示词', { exact: true });
+  for (const [index, prompt] of ['展馆隐藏选择测试的晨雾湖面', '展馆可见选择测试的落日山谷'].entries()) {
+    await closeQueue(gp);
+    await galleryPrompt.fill(prompt);
+    await gp.getByRole('button', { name: '1 张', exact: true }).click();
+    await gp.getByRole('button', { name: /开始绘制/ }).click();
+    await waitRecords(gp, index + 1);
+  }
+  assert.equal(await gp.evaluate(() => window.__persistCalls), 1, 'persistent storage is requested on submit, at most once a week');
+  await closeQueue(gp);
+  await gp.setViewportSize({ width: 390, height: 844 });
+  await nav(gp, '展馆');
+  const gallerySearch = gp.getByLabel('检索作品', { exact: true });
+  const searchBox = await gallerySearch.boundingBox();
+  assert.ok(searchBox && searchBox.width > 250, `the phone search gets its own row: ${searchBox?.width}`);
+  await gp.getByRole('button', { name: '管理作品', exact: true }).click();
+  await gallerySearch.fill('晨雾湖面');
+  await gp.getByRole('checkbox', { name: /选择作品/ }).check();
+  await gallerySearch.fill('落日山谷');
+  await gp.getByRole('checkbox', { name: /选择作品/ }).check();
+  await gp.getByRole('button', { name: '删除选中作品', exact: true }).click();
+  const galleryDelete = gp.getByRole('alertdialog', { name: '确认删除作品' });
+  assert.match(await galleryDelete.innerText(), /选中的1 张单图吗/);
+  await galleryDelete.getByRole('button', { name: '确认删除', exact: true }).click();
+  const kept = await waitRecords(gp, 1);
+  assert.equal(kept[0].prompt, '展馆隐藏选择测试的晨雾湖面', 'a selection hidden by the search is neither counted nor deleted');
+  await gallerySearch.fill('');
+  // Works from an earlier year show it, so dates stay unambiguous after New Year.
+  const lastYear = new Date(new Date().getFullYear() - 1, 2, 5, 10).getTime();
+  await gp.evaluate(async ({ id, createdAt }) => {
+    const db = await new Promise((resolve, reject) => { const open = indexedDB.open('img-gen-gallery'); open.onsuccess = () => resolve(open.result); open.onerror = () => reject(open.error); });
+    const store = db.transaction('records', 'readwrite').objectStore('records');
+    await new Promise((resolve, reject) => { const read = store.get(id); read.onsuccess = () => { const write = store.put({ ...read.result, createdAt }); write.onsuccess = resolve; write.onerror = () => reject(write.error); }; read.onerror = () => reject(read.error); });
+    db.close();
+  }, { id: kept[0].id, createdAt: lastYear });
+  await gp.reload();
+  await gp.locator('.gallery-card').waitFor();
+  await gp.locator('.gallery-card').getByText(`${new Date(lastYear).getFullYear()}/03/05`, { exact: true }).waitFor();
+  await screenshot(gp, 'gallery-local-mobile', true);
+  await galleryFlow.context.close();
+  checks.push('展馆区分读取中, 读取失败与空库并可页内重新读取, 页首说明作品只存浏览器; 删除只处理确认框计数的可见作品, 被搜索隐藏的已选作品保留; 手机搜索独占一行, 往年作品显示年份, 提交时请求持久存储且一周最多一次');
 
   for (const [width, height, device] of [[1600, 1000, 'desktop'], [1024, 900, 'tablet'], [390, 844, 'mobile']]) {
     await page.setViewportSize({ width, height });

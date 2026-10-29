@@ -21,7 +21,9 @@ import { RecordImage } from '../components/gallery/RecordImage';
 
 interface GalleryProps {
   records: ResultRecord[];
-  onClear: () => void | Promise<void>;
+  loading: boolean;
+  error: string;
+  onRetry: () => void;
   onDelete: (id: string) => void | Promise<void>;
   onDeleteMany: (ids: string[]) => Promise<void>;
   onUseRecipe: (record: ResultRecord) => void;
@@ -66,7 +68,16 @@ function countLabel(singles: number, series: number) {
   return parts.join(' · ') || '暂无作品';
 }
 
-export function GalleryGrid({ records, onClear, onDeleteMany, onUseRecipe, onUseAsRef, onEditRecord, onUseSeries, onUseSliceAsRef }: GalleryProps) {
+function cardDate(group: Group, date: Date) {
+  if (group === 'today') return date.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false });
+  // Older works keep their year once the calendar has moved on, so two springs never read the same.
+  return date.toLocaleDateString('zh-CN', { ...(date.getFullYear() === new Date().getFullYear() ? {} : { year: 'numeric' }), month: '2-digit', day: '2-digit' });
+}
+
+/** A series card covers every version of its scenes; a single card covers itself. */
+const sceneKey = (record: ResultRecord) => record.sceneId ? `${record.seriesId}:${record.sceneId}` : record.id;
+
+export function GalleryGrid({ records, loading, error, onRetry, onDeleteMany, onUseRecipe, onUseAsRef, onEditRecord, onUseSeries, onUseSliceAsRef }: GalleryProps) {
   const [typeFilter, setTypeFilter] = useState<TypeFilter>('all');
   const [ratio, setRatio] = useState('all');
   const [search, setSearch] = useState('');
@@ -182,11 +193,10 @@ export function GalleryGrid({ records, onClear, onDeleteMany, onUseRecipe, onUse
     if (!selectedCount || working) return;
     setWorking(true);
     try {
-      if (selectedCount === records.length) await onClear();
-      else {
-        const sceneKeys = new Set(selectedRecords.filter((record) => record.sceneId).map((record) => `${record.seriesId}:${record.sceneId}`));
-        await onDeleteMany(records.filter((record) => selected.has(record.id) || sceneKeys.has(`${record.seriesId}:${record.sceneId}`)).map((record) => record.id));
-      }
+      // Delete exactly what the confirmation counted: works selected and still shown under the current filters.
+      // A selection hidden by a later search stays untouched, as it does for download.
+      const keys = new Set(selectedRecords.map(sceneKey));
+      await onDeleteMany(records.filter((record) => keys.has(sceneKey(record))).map((record) => record.id));
       pushToast('success', `已删除 ${countLabel(selectedSingles, selectedSeries).replace(' · ', '和')}`);
       exitSelect();
     } catch {
@@ -208,15 +218,20 @@ export function GalleryGrid({ records, onClear, onDeleteMany, onUseRecipe, onUse
           <div className="flex flex-wrap items-baseline gap-space-sm">
             <h1 className="font-headline-lg text-headline-lg text-on-surface tracking-tight">展馆</h1>
             <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-surface-container-low text-on-surface-variant font-meta-sm text-meta-sm">
-              {countLabel(singlesCount, seriesCount)}
+              {records.length ? countLabel(singlesCount, seriesCount) : loading ? '读取中' : error ? '读取失败' : countLabel(0, 0)}
             </span>
           </div>
           <p className="mt-1 font-body-md text-body-md text-on-surface-variant">
             点击图片打开详情. 批量下载或删除请点管理作品.
           </p>
+          <p className="mt-2 flex items-start gap-1.5 font-body-sm text-body-sm text-on-surface-variant">
+            <StitchIcon name="info" size={16} className="mt-0.5 text-primary" />
+            <span>作品只保存在当前浏览器, 服务器不留存. 清理浏览器数据后无法找回, 换浏览器或设备也看不到, 重要作品请及时下载.</span>
+          </p>
         </div>
         <div className="flex flex-col gap-2 bg-surface-container-low border border-outline-variant/30 p-space-md rounded-2xl">
-          <div className="flex items-center gap-2">
+          {/* Phones give the search its own full row; wider screens keep it right of the type filter. */}
+          <div className="flex flex-wrap items-center gap-2 sm:flex-nowrap">
             <SegmentedControl
               label="作品类型"
               className={`${CHIP_WRAP} min-w-0 shrink`}
@@ -240,7 +255,7 @@ export function GalleryGrid({ records, onClear, onDeleteMany, onUseRecipe, onUse
               }))}
               itemClassName={(active) => `flex items-center gap-1.5 ${chipClass(active)}`}
             />
-            <div className="flex min-w-0 flex-1 items-center rounded-xl border border-outline-variant/50 bg-surface-container-lowest px-3.5 py-2 shadow-sm focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/20 sm:max-w-xl sm:ml-auto">
+            <div className="flex min-w-0 basis-full items-center rounded-xl border border-outline-variant/50 bg-surface-container-lowest px-3.5 py-2 shadow-sm focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/20 sm:basis-0 sm:flex-1 sm:max-w-xl sm:ml-auto">
               <StitchIcon name="search" size={19} className="mr-2 shrink-0 text-primary" />
               <input
                 ref={searchRef}
@@ -384,11 +399,7 @@ export function GalleryGrid({ records, onClear, onDeleteMany, onUseRecipe, onUse
                               <span className="font-meta-sm text-outline shrink-0">{cover.outputFormat?.toUpperCase()}</span>
                             </div>
                             <h3 className="font-body-md text-body-md text-on-surface font-medium truncate" title={title}>{title}</h3>
-                            <span className="pt-1 font-meta-sm text-[11px] text-on-surface-variant">
-                              {group === 'today'
-                                ? date.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false })
-                                : date.toLocaleDateString('zh-CN', { month: '2-digit', day: '2-digit' })}
-                            </span>
+                            <span className="pt-1 font-meta-sm text-[11px] text-on-surface-variant">{cardDate(group, date)}</span>
                           </div>
                         </article>
                       );
@@ -399,12 +410,16 @@ export function GalleryGrid({ records, onClear, onDeleteMany, onUseRecipe, onUse
           )}
         </div>
         {filtered.length === 0 && (
-          <div className="py-20 rounded-2xl border border-dashed border-outline-variant/50 text-center flex flex-col items-center gap-space-sm bg-surface-container-lowest/50">
+          // Tell an empty library apart from one that is still loading or could not be read.
+          <div role={!records.length && error ? 'alert' : undefined} className="py-20 rounded-2xl border border-dashed border-outline-variant/50 text-center flex flex-col items-center gap-space-sm bg-surface-container-lowest/50">
             <StitchIcon name="gallery_thumbnail" size={40} className="text-outline" />
-            <p className="font-headline-sm text-headline-sm">{records.length ? '没有匹配的作品' : '展馆等待第一幅画作'}</p>
+            <p className="font-headline-sm text-headline-sm">{records.length ? '没有匹配的作品' : loading ? '正在读取本地作品...' : error ? '本地作品读取失败' : '展馆等待第一幅画作'}</p>
             <p className="text-on-surface-variant font-body-sm text-body-sm">
-              {records.length ? '调整筛选条件或试试其他关键词.' : '在单图创作或系列策划中生成的作品会保存在这里.'}
+              {records.length ? '调整筛选条件或试试其他关键词.' : loading ? '作品较多时需要稍等片刻.' : error ? `${error.replace(/[.。]\s*$/, '')}. 读取失败不会删除已保存的作品.` : '在单图创作或系列策划中生成的作品会保存在这里.'}
             </p>
+            {!records.length && !loading && error && (
+              <button type="button" className="px-4 py-2 rounded-xl bg-primary text-on-primary text-xs" onClick={onRetry}>重新读取</button>
+            )}
             {records.length > 0 && (
               <button
                 type="button"

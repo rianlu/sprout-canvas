@@ -777,7 +777,7 @@ export function StitchCanvasStream(props: StitchCanvasStreamProps) {
           );
         })}
       </div>
-      <p className="font-meta-sm text-meta-sm text-on-surface-variant">作品仅保存在此浏览器, 完整作品可前往展馆查看.</p>
+      <p className="font-meta-sm text-meta-sm text-on-surface-variant">作品只保存在此浏览器, 服务器不留存, 重要作品请及时下载. 完整作品可前往展馆查看.</p>
     </section>
   );
 }
