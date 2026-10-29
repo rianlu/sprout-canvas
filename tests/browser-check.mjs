@@ -146,6 +146,21 @@ async function typography(locator) {
     return { family: style.fontFamily, size: style.fontSize, weight: style.fontWeight, lineHeight: style.lineHeight, spacing: style.letterSpacing };
   });
 }
+/** A work card's thumbnail, read inside the frame that holds its button. */
+async function workThumbnail(button) {
+  await until(async () => await button.locator('img:not([aria-hidden])').evaluate((image) => image.complete && image.naturalWidth > 0), 'work thumbnail loads');
+  return button.evaluate((element) => {
+    const image = element.querySelector('img:not([aria-hidden])'), fill = element.querySelector('img[aria-hidden]');
+    const frame = element.parentElement.getBoundingClientRect(), box = image.getBoundingClientRect();
+    return { fit: getComputedStyle(image).objectFit, blur: fill ? getComputedStyle(fill).filter : '', natural: image.naturalWidth / image.naturalHeight, frame: frame.width / frame.height, inside: box.top >= frame.top - 0.5 && box.bottom <= frame.bottom + 0.5 && box.left >= frame.left - 0.5 && box.right <= frame.right + 0.5 };
+  });
+}
+function assertWholeWork(card, frame, where) {
+  assert.ok(Math.abs(card.natural - frame) > 0.2, `${where}: the sample differs from the frame, so cropping would show`);
+  assert.equal(card.fit, 'contain', `${where}: the whole work shows, uncropped: ${JSON.stringify(card)}`);
+  assert.match(card.blur, /blur/, `${where}: a blurred copy fills the margins`);
+  assert.ok(card.inside && Math.abs(card.frame - frame) < 0.02, `${where}: the fixed frame stays: ${JSON.stringify(card)}`);
+}
 async function fixedViewerControls(page) {
   return page.getByRole('toolbar', { name: '图片查看工具', exact: true }).getByRole('button').evaluateAll((buttons) => buttons.map((button) => ({ label: button.getAttribute('aria-label'), rect: button.getBoundingClientRect().toJSON() })));
 }
@@ -726,6 +741,7 @@ try {
   }
   assert.equal(await gp.evaluate(() => window.__persistCalls), 1, 'persistent storage is requested on submit, at most once a week');
   await closeQueue(gp);
+  assertWholeWork(await workThumbnail(gp.getByRole('button', { name: /^查看作品详情: / }).first()), 1, 'studio card');
   await gp.setViewportSize({ width: 390, height: 844 });
   await nav(gp, '展馆');
   const gallerySearch = gp.getByLabel('检索作品', { exact: true });
@@ -754,9 +770,30 @@ try {
   await gp.reload();
   await gp.locator('.gallery-card').waitFor();
   await gp.locator('.gallery-card').getByText(`${new Date(lastYear).getFullYear()}/03/05`, { exact: true }).waitFor();
+  assertWholeWork(await workThumbnail(gp.getByRole('button', { name: /^检视作品: / }).first()), 4 / 3, 'gallery card');
+  const galleryColumns = () => gp.locator('.gallery-card').first().evaluate((card) => getComputedStyle(card.parentElement).gridTemplateColumns.split(' ').length);
+  const noSideScroll = () => gp.evaluate(() => document.documentElement.scrollWidth <= innerWidth);
+  assert.equal(await galleryColumns(), 1, 'phones show one column by default');
+  await gp.getByRole('button', { name: '切换为较多列', exact: true }).click();
+  assert.equal(await galleryColumns(), 2, 'more columns gives phones two');
+  assert.ok(await noSideScroll(), 'two phone columns fit without sideways scrolling');
   await screenshot(gp, 'gallery-local-mobile', true);
+  await gp.reload();
+  await gp.locator('.gallery-card').waitFor();
+  assert.equal(await galleryColumns(), 2, 'this browser remembers the column choice');
+  for (const [width, columns] of [[800, 3], [1600, 4]]) {
+    await gp.setViewportSize({ width, height: 1000 });
+    assert.equal(await galleryColumns(), columns, `more columns at ${width}px`);
+  }
+  await gp.getByRole('button', { name: '切换为较少列', exact: true }).click();
+  assert.equal(await galleryColumns(), 3, 'fewer columns restores the desktop default');
+  await nav(gp, '风格库');
+  await gp.getByRole('button', { name: '切换为较多列', exact: true }).click();
+  await gp.reload();
+  assert.equal(await gp.getByRole('button', { name: '切换为较少列', exact: true }).getAttribute('aria-pressed'), 'true', 'the style library remembers its own choice');
   await galleryFlow.context.close();
   checks.push('展馆区分读取中, 读取失败与空库并可页内重新读取, 页首说明作品只存浏览器; 删除只处理确认框计数的可见作品, 被搜索隐藏的已选作品保留; 手机搜索独占一行, 往年作品显示年份, 提交时请求持久存储且一周最多一次');
+  checks.push('画卷与展馆卡片完整显示作品并以模糊同图铺底; 展馆较多列在手机 2 列, 平板 3 列, 电脑 4 列且手机无横向滚动; 展馆与风格库在当前浏览器分别记住列数');
 
   for (const [width, height, device] of [[1600, 1000, 'desktop'], [1024, 900, 'tablet'], [390, 844, 'mobile']]) {
     await page.setViewportSize({ width, height });

@@ -17,7 +17,8 @@ import {
 } from '../lib/image/gallery';
 import { useImageMetadata } from '../hooks/useImageMetadata';
 import { useToasts } from '../components/ui/Toasts';
-import { RecordImage } from '../components/gallery/RecordImage';
+import { RecordFrameImage } from '../components/gallery/RecordImage';
+import { ColumnToggle, useCompactGrid } from '../components/ui/ColumnToggle';
 
 interface GalleryProps {
   records: ResultRecord[];
@@ -88,6 +89,7 @@ export function GalleryGrid({ records, loading, error, onRetry, onDeleteMany, on
   const [viewer, setViewer] = useState<{ cards: GalleryCard[]; index: number } | null>(null);
   const [splitRecord, setSplitRecord] = useState<ResultRecord | null>(null);
   const [working, setWorking] = useState(false);
+  const [compact, toggleCompact] = useCompactGrid('gallery');
   const { pushToast } = useToasts();
   const searchRef = useRef<HTMLInputElement>(null);
   const metadata = useImageMetadata(records);
@@ -277,14 +279,17 @@ export function GalleryGrid({ records, loading, error, onRetry, onDeleteMany, on
             itemClassName={chipClass}
           />
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <SegmentedControl
-              label="作品排序"
-              className={CHIP_WRAP}
-              value={sort}
-              onChange={setSort}
-              options={[{ id: 'newest', label: '最新' }, { id: 'oldest', label: '最早' }]}
-              itemClassName={chipClass}
-            />
+            <div className="flex items-center gap-2">
+              <SegmentedControl
+                label="作品排序"
+                className={CHIP_WRAP}
+                value={sort}
+                onChange={setSort}
+                options={[{ id: 'newest', label: '最新' }, { id: 'oldest', label: '最早' }]}
+                itemClassName={chipClass}
+              />
+              <ColumnToggle compact={compact} onToggle={toggleCompact} className="self-stretch px-2 bg-surface-container border border-outline-variant/30 hover:bg-surface-container-high" />
+            </div>
             {selecting ? (
               <div className="flex flex-wrap items-center gap-1" role="toolbar" aria-label="管理作品">
                 <button
@@ -337,7 +342,8 @@ export function GalleryGrid({ records, loading, error, onRetry, onDeleteMany, on
                       </span>
                     </div>
                   </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+                  {/* More columns on every width: phones 2, tablets 3, desktops 4. */}
+                  <div className={`grid ${compact ? 'grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 lg:grid-cols-4 lg:gap-5' : 'grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3'}`}>
                     {grouped[group].map((card) => {
                       const items = cardRecords(card);
                       const cover = items[0];
@@ -361,15 +367,15 @@ export function GalleryGrid({ records, loading, error, onRetry, onDeleteMany, on
                           <div className="relative overflow-hidden rounded-xl aspect-[4/3] bg-surface-container border border-outline-variant/25">
                             <button
                               type="button"
-                              className="w-full h-full block"
+                              className="absolute inset-0 block"
                               title={title}
                               aria-label={selecting ? `选择${series ? '系列' : '作品'}: ${title}` : `检视${series ? '系列' : '作品'}: ${title}`}
                               aria-pressed={selecting ? checked : undefined}
                               onClick={() => { if (selecting) toggle(items); else openViewer(card); }}
                             >
-                              <RecordImage
+                              <RecordFrameImage
                                 alt={title}
-                                className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                                className="transition-transform duration-500 group-hover:scale-[1.02]"
                                 record={cover}
                                 loading="lazy"
                               />

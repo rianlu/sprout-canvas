@@ -7,6 +7,7 @@ import { StitchIcon } from '../components/ui/StitchIcon';
 import { SegmentedControl } from '../components/ui/SegmentedControl';
 import { StyleExampleImage } from '../components/image/StyleExampleImage';
 import { useToasts } from '../components/ui/Toasts';
+import { ColumnToggle, useCompactGrid } from '../components/ui/ColumnToggle';
 import type { StyleRecord } from '../../shared/style-contract.mjs';
 
 interface StylesLibraryProps {
@@ -17,7 +18,7 @@ export function StylesLibrary({ onUseInStudio }: StylesLibraryProps) {
   const { styles, categories, loading, error, refresh } = useStyleCatalog();
   const [search, setSearch] = useState('');
   const [category, setCategory] = useState('全部');
-  const [compact, setCompact] = useState(false);
+  const [compact, toggleCompact] = useCompactGrid('styles');
   const [detail, setDetail] = useState<StyleRecord | null>(null);
   const [fullWindow, setFullWindow] = useState(false);
   const [copied, setCopied] = useState('');
@@ -79,7 +80,7 @@ export function StylesLibrary({ onUseInStudio }: StylesLibraryProps) {
             options={groups.map((group) => ({ id: group, label: `${group} ${group === '全部' ? styles.length : styles.filter((style) => (style.category || '未分类') === group).length}` }))}
             itemClassName={(active) => `shrink-0 whitespace-nowrap px-3 py-1.5 rounded-lg font-meta-sm text-meta-sm ${active ? 'bg-primary text-on-primary' : 'bg-surface-container-low text-on-surface-variant hover:bg-surface-container'}`}
           />
-          <button type="button" className="shrink-0 p-2 rounded-lg bg-surface-container-low hover:bg-surface-container text-primary" aria-label={compact ? '切换为较少列' : '切换为较多列'} title={compact ? '较少列' : '较多列'} aria-pressed={compact} onClick={() => setCompact((value) => !value)}><StitchIcon name={compact ? 'view_module' : 'grid_view'} size={20} /></button>
+          <ColumnToggle compact={compact} onToggle={toggleCompact} className="p-2 bg-surface-container-low hover:bg-surface-container" />
         </div>
       </div>
     </section>

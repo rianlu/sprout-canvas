@@ -22,7 +22,7 @@ import { useImageMetadata } from '../../hooks/useImageMetadata';
 import { formatRequestSize, QUALITY_OPTIONS, qualityLabel, resolveSize, STANDARD_ASPECTS, supportsRequest } from '../../lib/api/generation';
 import { LOCK_UNSUPPORTED_IMAGE_OPTIONS } from '../../lib/image/channel-limits';
 import { imageFileExtension } from '../../lib/image/format';
-import { RecordImage } from '../gallery/RecordImage';
+import { RecordFrameImage } from '../gallery/RecordImage';
 import type { ImageCapabilities } from '../../types/provider';
 import { MAX_PROMPT_LENGTH } from '../../../shared/generation-contract.mjs';
 import { CreditStatus } from '../ui/CreditStatus';
@@ -710,8 +710,8 @@ export function StitchCanvasStream(props: StitchCanvasStreamProps) {
                   title="查看作品详情"
                   onClick={() => onFullscreen(record)}
                 >
-                  <RecordImage
-                    className="pointer-events-none h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.02]"
+                  <RecordFrameImage
+                    className="pointer-events-none transition-transform duration-500 group-hover:scale-[1.02]"
                     record={record}
                     alt=""
                   />
