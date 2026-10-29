@@ -573,10 +573,26 @@ try {
   const styleDialog = page.getByRole('dialog', { name: /风格详情/ });
   assert.match(await styleDialog.innerText(), /CC BY 4.0/);
   assert.doesNotMatch(await styleDialog.innerText(), /CFG|Seed|步数/);
+  // Same frame as the work viewer: about 80% of the window, capped at 80rem.
+  const styleWindow = page.viewportSize(), styleBox = await styleDialog.boundingBox();
+  assert.ok(Math.abs(styleBox.width - Math.min(styleWindow.width * 0.8, 1280)) < 2, `style detail matches the viewer width: ${styleBox.width}`);
+  await until(async () => await styleDialog.locator('img.gallery-viewer-image').evaluate((image) => image.complete && image.naturalWidth > 0 && getComputedStyle(image).visibility === 'visible'), 'style example loads');
   await screenshot(page, 'style-detail');
+  const styleFullButton = styleDialog.getByRole('button', { name: '全屏查看', exact: true });
+  await styleFullButton.click();
+  const styleFull = page.getByRole('dialog', { name: '全屏查看图片', exact: true });
+  const styleFullBox = await styleFull.boundingBox();
+  assert.ok(styleFullBox && styleFullBox.x <= 0.5 && styleFullBox.y <= 0.5 && styleFullBox.width >= styleWindow.width - 1 && styleFullBox.height >= styleWindow.height - 1, `style full-window preview covers the window: ${JSON.stringify(styleFullBox)}`);
+  assert.match(await styleFull.innerText(), /作者/);
+  assert.equal(await styleFull.getByRole('button', { name: /下载|复制/ }).count(), 0, 'style examples are for viewing, not for download');
+  await until(async () => await styleFull.locator('img').evaluate((image) => image.complete && image.naturalWidth > 0), 'style full-window image loads');
+  await page.keyboard.press('Escape');
+  await styleFull.waitFor({ state: 'detached' });
+  assert.ok(await styleDialog.isVisible(), 'Escape leaves the style detail open');
+  assert.equal(await styleFullButton.evaluate((button) => button === document.activeElement), true, 'focus returns to the full-window button');
   await page.getByLabel('关闭详情').click();
   await page.getByLabel('搜索风格').fill('');
-  checks.push('风格 36 款和七类真实计数, 卡片完整显示示例图且不放大, 搜索, 署名, 移除不支持的参数');
+  checks.push('风格 36 款和七类真实计数, 卡片完整显示示例图且不放大, 搜索, 署名, 移除不支持的参数; 详情与查看器同宽, 全屏查看只看图, Esc 回到详情');
 
   // Use the real clipboard and persisted drafts to cover both library actions.
   for (const style of styles) assert.match(style.prompt, /\p{Script=Han}/u, `${style.name} has a Chinese template`);

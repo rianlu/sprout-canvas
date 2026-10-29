@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Dialog, overlayOpen } from '../components/ui/Dialog';
 import { ImageViewport } from '../components/gallery/ImageViewport';
+import { ImagePreviewDialog } from '../components/image/ImagePreviewDialog';
 import { useStyleCatalog } from '../hooks/useStyleCatalog';
 import { StitchIcon } from '../components/ui/StitchIcon';
 import { SegmentedControl } from '../components/ui/SegmentedControl';
@@ -17,6 +18,7 @@ export function StylesLibrary({ onUseInStudio }: StylesLibraryProps) {
   const [category, setCategory] = useState('全部');
   const [compact, setCompact] = useState(false);
   const [detail, setDetail] = useState<StyleRecord | null>(null);
+  const [fullWindow, setFullWindow] = useState(false);
   const [copied, setCopied] = useState('');
   const [applying, setApplying] = useState('');
   const [actionError, setActionError] = useState('');
@@ -47,6 +49,7 @@ export function StylesLibrary({ onUseInStudio }: StylesLibraryProps) {
     catch (error) { setActionError(error instanceof Error ? error.message : '模板载入失败, 请重试'); }
     finally { applyLock.current = false; setApplying(''); }
   }
+  const closeDetail = () => { setFullWindow(false); setDetail(null); };
   const actions = (style: StyleRecord, iconOnly = false) => {
     const labelClass = iconOnly ? 'hidden lg:inline' : undefined;
     const copyLabel = copied === style.id ? '已复制' : '复制模板';
@@ -96,17 +99,17 @@ export function StylesLibrary({ onUseInStudio }: StylesLibraryProps) {
       {!loading && !error && filtered.length === 0 && <p className="py-12 text-center text-on-surface-variant">{styles.length ? '没有匹配的风格, 可清空搜索或切换分类.' : '风格库暂无已上架内容.'}</p>}
       <p className="mt-space-xl font-meta-sm text-meta-sm text-outline">示例图用于展示创作案例, 不会自动作为生图参考图. 来源与许可请查看各条详情.</p>
     </main>
-    {detail && <Dialog label={`风格详情 ${detail.name}`} onClose={() => setDetail(null)} backdropClassName="fixed inset-0 z-50 bg-inverse-surface/50 backdrop-blur-sm" viewportClassName="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6" className="relative flex h-[min(92dvh,calc(100dvh-1.5rem))] w-[min(100%,calc(100vw-1.5rem))] max-w-5xl flex-col overflow-hidden rounded-2xl bg-surface shadow-[0_20px_60px_rgba(40,48,36,0.20)] sm:h-[min(88dvh,56rem)] sm:w-[min(80vw,64rem)]">
+    {detail && <Dialog label={`风格详情 ${detail.name}`} onClose={closeDetail} backdropClassName="fixed inset-0 z-50 bg-inverse-surface/50 backdrop-blur-sm" viewportClassName="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6" className="relative flex h-[min(92dvh,calc(100dvh-1.5rem))] w-[min(100%,calc(100vw-1.5rem))] max-w-7xl flex-col overflow-hidden rounded-2xl bg-surface shadow-[0_20px_60px_rgba(40,48,36,0.20)] sm:h-[min(88dvh,56rem)] sm:w-[min(80vw,80rem)]">
         <div className="h-16 px-3 md:px-space-lg bg-surface-container-lowest border-b border-outline-variant/30 flex items-center justify-between gap-2 shrink-0">
           <div className="min-w-0 flex-1">
             <h2 className="font-headline-sm text-headline-sm text-on-surface truncate">{detail.name}</h2>
             <p className="mt-0.5 truncate font-meta-sm text-meta-sm text-on-surface-variant">{detail.category || '未分类'} · 作者 {detail.author || '未注明'}</p>
           </div>
-          <button type="button" aria-label="关闭详情" className="viewer-tool-button" onClick={() => setDetail(null)}><StitchIcon name="close" size={20} /></button>
+          <button type="button" aria-label="关闭详情" className="viewer-tool-button" onClick={closeDetail}><StitchIcon name="close" size={20} /></button>
         </div>
         <div className="flex min-h-0 flex-1 flex-col items-stretch overflow-hidden lg:flex-row">
           <div className="flex min-h-0 flex-1 flex-col">
-            <ImageViewport key={detail.id} src={detail.image} alt={detail.name} />
+            <ImageViewport key={detail.id} src={detail.image} alt={detail.name} onFullscreen={() => setFullWindow(true)} />
           </div>
           <aside className="flex max-h-[46%] min-h-0 w-full flex-col overflow-hidden border-t border-outline-variant/30 bg-surface-container-lowest lg:h-full lg:max-h-none lg:w-80 lg:flex-none lg:border-l lg:border-t-0">
             <div className="min-h-0 flex-1 space-y-space-md overflow-y-auto p-space-lg">
@@ -123,6 +126,17 @@ export function StylesLibrary({ onUseInStudio }: StylesLibraryProps) {
             <div className="shrink-0 border-t border-outline-variant/30 px-space-lg py-space-md">{actions(detail)}</div>
           </aside>
         </div>
+      {fullWindow && <ImagePreviewDialog
+        fullWindow
+        label="全屏查看图片"
+        title={detail.name}
+        subtitle={`${detail.category || '未分类'} · 作者 ${detail.author || '未注明'}`}
+        imageKey={detail.id}
+        src={detail.image}
+        alt={detail.name}
+        closeLabel="退出全屏查看"
+        onClose={() => setFullWindow(false)}
+      />}
     </Dialog>}
   </div>;
 }
