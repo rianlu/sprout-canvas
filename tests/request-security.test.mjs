@@ -228,7 +228,7 @@ test('text requests enforce shared-user and global concurrency and release faile
     release();
     assert.equal((await one).status, 200); assert.equal((await two).status, 200);
     assert.equal((await text(third)).status, 200);
-    app.controls.respond = async (_call, res) => { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: { message: 'fixture failure' } })); return true; };
+    app.controls.respond = async (_call, res) => { res.writeHead(503, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: { message: 'fixture overloaded' } })); return true; };
     const failure = await text(first);
     assert.equal(failure.status, 502); assert.equal(failure.data.credit.state, 'refunded');
     app.controls.respond = async (_call, res) => { res.writeHead(500); res.end('fixture gateway failure'); return true; };

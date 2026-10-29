@@ -33,15 +33,24 @@ async function unusedUrl() {
 }
 const sendJson = (response, status, body) => { response.writeHead(status, { 'Content-Type': 'application/json' }); response.end(JSON.stringify(body)); return true; };
 
+// Relays answer 5xx with JSON when they lost the upstream mid-request, so those bodies stay unknown like gateway pages.
+const UNKNOWN_RESPONSES = [
+  ...[408, 504, 524, 502, 500].map((status) => ({ status, type: 'text/html', body: '<html>Gateway did not return a result</html>' })),
+  { status: 500, type: 'application/json', body: JSON.stringify({ error: { message: 'Post "https://upstream.invalid/v1/images/generations": context deadline exceeded', type: 'new_api_error' } }) },
+  { status: 502, type: 'application/json', body: JSON.stringify({ error: { message: 'upstream_error', type: 'upstream_error' } }) },
+  { status: 503, type: 'application/json', body: JSON.stringify({ error: { message: 'upstream connect error or disconnect/reset before headers' } }) },
+  { status: 500, type: 'application/json', body: JSON.stringify({ error: { message: 'The server had an error processing your request.', type: 'server_error' } }) },
+];
+
 test('网关超时或未知网关错误不换通道, 图片和文字各调用一次并自动返还', async (t) => {
-  for (const status of [408, 504, 524, 502, 500]) await t.test('HTTP ' + status, async () => {
+  for (const { status, type, body } of UNKNOWN_RESPONSES) await t.test(`HTTP ${status} ${type}`, async () => {
     const app = await startHarness();
     try {
       const cookie = await app.login();
       app.config.textProviders.push({ ...app.config.textProviders[0], id: 'backup', name: 'backup' }); await saveConfig(app);
       app.controls.respond = (_call, response) => {
-        response.writeHead(status, { 'Content-Type': 'text/html' });
-        response.end('<html>Gateway did not return a result</html>'); return true;
+        response.writeHead(status, { 'Content-Type': type });
+        response.end(body); return true;
       };
       const input = imageInput(app, cookie), accepted = await postImage(app, cookie, input);
       const job = await completed(app, cookie, accepted.data.id);
@@ -96,7 +105,8 @@ test('上游明确拒绝返还点数, 安全切换通道成功时只扣一次', 
       app.config.textProviders[0].id = 'text-' + status;
       await saveConfig(app);
       const callsBefore = app.calls.length;
-      app.controls.respond = (_call, response) => sendJson(response, status, { error: { message: 'fixture rejected' } });
+      // A 5xx only counts as a definite refusal when it says the request never started.
+      app.controls.respond = (_call, response) => sendJson(response, status, { error: { message: status >= 500 ? 'fixture overloaded' : 'fixture rejected' } });
       const input = imageInput(app, cookie, { providerId: 'primary' });
       const image = await completed(app, cookie, (await postImage(app, cookie, input)).data.id);
       assert.equal(image.credit.state, 'refunded', 'image HTTP ' + status);
@@ -122,6 +132,24 @@ test('上游明确拒绝返还点数, 安全切换通道成功时只扣一次', 
     await checkBalance(app, cookie, [999989, 0, 11]);
     await checkLedger(app, cookie, image.credit, ['reserve', 'charge']);
     await checkLedger(app, cookie, text.data.credit, ['reserve', 'charge']);
+  } finally { await app.close(); }
+});
+
+test('5xx 只有说明未开始执行时才换通道, 换通道成功只扣一次', async () => {
+  const app = await startHarness();
+  try {
+    const cookie = await app.login();
+    app.controls.respond = (call, response) => call.path.startsWith('/primary/')
+      ? sendJson(response, 503, { error: { message: '当前分组上游负载已饱和, 请稍后再试', type: 'new_api_error' } }) : false;
+    const image = await completed(app, cookie, (await postImage(app, cookie, imageInput(app, cookie))).data.id);
+    assert.equal(image.status, 'succeeded'); assert.equal(image.providerId, 'secondary');
+    assert.equal(image.credit.state, 'charged'); assert.equal(app.calls.length, 2);
+    await checkLedger(app, cookie, image.credit, ['reserve', 'charge']);
+    app.controls.respond = (call, response) => call.path.startsWith('/primary/')
+      ? sendJson(response, 500, { error: { message: 'do request failed: EOF' } }) : false;
+    const unknown = await completed(app, cookie, (await postImage(app, cookie, imageInput(app, cookie))).data.id);
+    assert.equal(unknown.outcomeUnknown, true); assert.equal(unknown.credit.state, 'refunded');
+    assert.equal(app.calls.length, 3);
   } finally { await app.close(); }
 });
 

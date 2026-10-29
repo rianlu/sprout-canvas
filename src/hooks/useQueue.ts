@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { archiveQueueJob, archiveQueueJobs, cancelQueueJob, getQueueJob, listQueueJobs, prioritizeQueueJob, resumeQueueJob, submitQueueJob, submitQueueBatch, updateQueueJob, type QueueSubmitInput } from '../lib/api/queue';
 import { ApiError } from '../lib/api/client';
-import { attachLocalReference, getOutboxInput, isJobConsumed, listOutbox, removeOutbox, saveOutbox, saveOutboxBatch, markOutboxAccepted, collectUnusedReferences, replaceWorkspaceRequest } from '../lib/storage/gallery-db';
+import { attachLocalReference, getOutboxInput, isJobConsumed, latestSeriesRecord, linkOutboxRetry, listOutbox, recordReference, removeOutbox, saveOutbox, saveOutboxBatch, markOutboxAccepted, collectUnusedReferences, replaceWorkspaceRequest } from '../lib/storage/gallery-db';
 import { randomId } from '../lib/random/id';
 import { generationRecipe, validateGenerationSubmission } from '../../shared/generation-contract.mjs';
 import type { GenerationRecipe, ResultRecord } from '../types/generation';
@@ -18,8 +18,14 @@ function sameEdit(job: QueueJob, input: QueueSubmitInput) {
   return Boolean(job.recipe && JSON.stringify(job.clientContext) === JSON.stringify(input.clientContext) && intent(job.recipe) === intent(generationRecipe(input)));
 }
 
-function localJob(input: QueueSubmitInput, savedAt: number, jobId?: string, submitting = false): QueueJob {
-  return { id: jobId || `local_${input.requestId}`, requestId: input.requestId, status: submitting ? 'submitting' : jobId ? 'interrupted' : 'unsubmitted', localOnly: true, outcomeUnknown: Boolean(jobId), clientContext: input.clientContext, error: submitting ? '' : jobId ? '服务端任务记录已过期, 可从本地配方重新生成' : '尚未确认提交, 可继续提交', canRetry: !submitting, retryOf: input.retryOf || '', providerId: '', providerName: '', yourPosition: 0, yourQueued: 0, globalActive: 0, globalQueued: 0, averageMs: 0, estimatedWaitMs: 0, serverNow: 0, queuedAt: savedAt, startedAt: 0, finishedAt: 0, elapsedMs: 0 };
+// Requests that the server rejected outright were never created, so their local copy can go.
+const DEFINITE_REJECTIONS = new Set([400, 402, 403, 404, 409, 413, 422]);
+
+function localJob(input: QueueSubmitInput, savedAt: number, ownerId: string, jobId?: string, submitting = false): QueueJob {
+  // The server only lists the signed-in identity's jobs, so another identity's request is hidden rather than expired.
+  const otherIdentity = Boolean(jobId) && input.creditQuote?.userId !== ownerId;
+  const error = submitting ? '' : !jobId ? '尚未确认提交, 可继续提交' : otherIdentity ? '此任务属于其他访问码或浏览器身份, 切换回原访问码可查看和领取' : '服务端任务记录已过期, 可从本地配方重新生成';
+  return { id: jobId || `local_${input.requestId}`, requestId: input.requestId, status: submitting ? 'submitting' : jobId ? 'interrupted' : 'unsubmitted', localOnly: true, outcomeUnknown: Boolean(jobId), clientContext: input.clientContext, error, canRetry: !submitting, retryOf: input.retryOf || '', providerId: '', providerName: '', yourPosition: 0, yourQueued: 0, globalActive: 0, globalQueued: 0, averageMs: 0, estimatedWaitMs: 0, serverNow: 0, queuedAt: savedAt, startedAt: 0, finishedAt: 0, elapsedMs: 0 };
 }
 
 export function useQueue(onResult: (records: ResultRecord[], jobId: string) => Promise<unknown>, enabled = true, ownerId = '') {
@@ -87,7 +93,7 @@ export function useQueue(onResult: (records: ResultRecord[], jobId: string) => P
       for (const job of latest) if (historyCache.current.has(job.id)) historyCache.current.set(job.id, job);
       const serverJobs = [...new Map([...historyCache.current.values(), ...latest].map((job) => [job.id, job])).values()];
       const visible = serverJobs.filter((job) => !job.archivedAt).map((job) => ({ ...job, canRetry: !job.supersededBy && ['failed', 'expired', 'interrupted'].includes(job.status) && outbox.some((row) => row.requestId === job.requestId) }));
-      for (const row of outbox) if (!serverJobs.some((job) => job.requestId === row.requestId) && !(row.jobId && await isJobConsumed(row.jobId))) visible.push(localJob(row.input, row.savedAt, row.jobId, submitting.current.get(row.requestId)?.ownerId === scope.ownerId));
+      for (const row of outbox) if (!serverJobs.some((job) => job.requestId === row.requestId) && !(row.jobId && await isJobConsumed(row.jobId))) visible.push(localJob(row.input, row.savedAt, scope.ownerId, row.jobId, submitting.current.get(row.requestId)?.ownerId === scope.ownerId));
       if (!isCurrent() || mutation.current !== version) return;
       setJobs(visible);
       jobsRef.current = visible;
@@ -100,7 +106,8 @@ export function useQueue(onResult: (records: ResultRecord[], jobId: string) => P
         const source = job.retryOf && serverJobs.find((item) => item.id === job.retryOf);
         if (source && outbox.some((row) => row.requestId === source.requestId)) await replaceWorkspaceRequest(source.requestId, job.requestId);
       }
-      const replaced = outbox.filter((row) => serverJobs.some((job) => job.requestId === row.requestId && job.supersededBy));
+      const replaced = outbox.filter((row) => serverJobs.some((job) => job.requestId === row.requestId && job.supersededBy)
+        || row.retryRequestId && !serverJobs.some((job) => job.requestId === row.requestId) && serverJobs.some((job) => job.requestId === row.retryRequestId));
       for (const row of replaced) { if (!isCurrent()) return; await removeOutbox(row.requestId); }
       if (replaced.length) await collectUnusedReferences();
       if (isCurrent()) { delivery.enqueue(serverJobs); setError(''); }
@@ -122,14 +129,27 @@ export function useQueue(onResult: (records: ResultRecord[], jobId: string) => P
     async function poll() {
       window.clearTimeout(timer);
       await tick();
-      if (!stopped && !document.hidden) { window.clearTimeout(timer); timer = window.setTimeout(poll, workRef.current ? 2000 : 5000); }
+      // A hidden page keeps collecting outstanding results, which expire 30 minutes after they finish; idle pages stop.
+      if (!stopped && (!document.hidden || workRef.current)) { window.clearTimeout(timer); timer = window.setTimeout(poll, document.hidden ? 10_000 : workRef.current ? 2000 : 5000); }
     }
-    function reconnect() { window.clearTimeout(timer); if (!document.hidden) void poll(); }
+    function reconnect() { window.clearTimeout(timer); if (!document.hidden || workRef.current) void poll(); }
     void poll();
     document.addEventListener('visibilitychange', reconnect);
     window.addEventListener('online', reconnect);
     return () => { stopped = true; window.clearTimeout(timer); document.removeEventListener('visibilitychange', reconnect); window.removeEventListener('online', reconnect); };
   }, [enabled, tick]);
+
+  /** Drop the local copies of a refused submission, keeping any request the server already holds from an earlier attempt. */
+  const discardRejected = useCallback(async (inputs: QueueSubmitInput[], userId: string) => {
+    const requestIds = inputs.map((input) => input.requestId);
+    const listed = await listQueueJobs({ requestIds, limit: 1 });
+    if (listed?.userId !== userId || !Array.isArray(listed.jobs)) return new Set<string>();
+    const rows = await listOutbox();
+    const discarded = new Set(requestIds.filter((id) => !listed.jobs.some((job) => job.requestId === id) && !rows.some((row) => row.requestId === id && row.jobId)));
+    for (const id of discarded) await removeOutbox(id);
+    if (discarded.size) await collectUnusedReferences();
+    return discarded;
+  }, []);
 
   const send = useCallback(async (inputs: QueueSubmitInput[], userId: string, post: () => Promise<QueueJob[]>, onAccepted?: () => void) => {
     if (inputs.some((input) => submitting.current.has(input.requestId))) throw new Error('请求正在提交, 请稍候');
@@ -141,11 +161,12 @@ export function useQueue(onResult: (records: ResultRecord[], jobId: string) => P
     mutation.current++;
     let saved = false;
     let accepted: QueueJob[] = [];
+    let discarded = new Set<string>();
     try {
       await saveOutboxBatch(inputs.map((input) => ({ input })));
       saved = true;
       if (!isCurrent()) throw new Error('访问身份已变化, 请重新确认提交');
-      const local = inputs.map((input) => localJob(input, jobsRef.current.find((job) => job.requestId === input.requestId)?.queuedAt || Date.now(), undefined, true));
+      const local = inputs.map((input) => localJob(input, jobsRef.current.find((job) => job.requestId === input.requestId)?.queuedAt || Date.now(), userId, undefined, true));
       jobsRef.current = [...local, ...jobsRef.current.filter((job) => !requestIds.has(job.requestId))];
       setJobs(jobsRef.current); workRef.current = true;
       const response = await post();
@@ -173,19 +194,24 @@ export function useQueue(onResult: (records: ResultRecord[], jobId: string) => P
       }
       return accepted;
     } catch (cause) {
-      if (!accepted.length) throw cause;
+      if (!accepted.length) {
+        // A refusal (no credits, changed price, invalid input) created nothing, so it must not linger as an unconfirmed submission.
+        if (saved && cause instanceof ApiError && DEFINITE_REJECTIONS.has(cause.status)) discarded = await discardRejected(inputs, userId).catch(() => new Set<string>());
+        throw cause;
+      }
       if (isCurrent()) setError('任务已受理, 本地提交记录同步未完成, 正在重新核对');
       return accepted;
     } finally {
       for (const id of requestIds) if (submitting.current.get(id) === token) submitting.current.delete(id);
       mutation.current++;
       if (saved && isCurrent()) {
-        jobsRef.current = jobsRef.current.map((job) => requestIds.has(job.requestId) && job.localOnly && job.status === 'submitting' ? { ...job, status: 'unsubmitted', canRetry: true, error: '尚未确认提交, 可继续提交' } : job);
+        jobsRef.current = jobsRef.current.filter((job) => !(job.localOnly && discarded.has(job.requestId)))
+          .map((job) => requestIds.has(job.requestId) && job.localOnly && job.status === 'submitting' ? { ...job, status: 'unsubmitted', canRetry: true, error: '尚未确认提交, 可继续提交' } : job);
         setJobs(jobsRef.current);
       }
       void tick();
     }
-  }, [tick, syncActivity]);
+  }, [tick, syncActivity, discardRejected]);
 
   const submit = useCallback(async (value: QueueSubmitInput, onAccepted?: () => void) => {
     const quote = bindCreditQuote(value.creditQuote);
@@ -236,20 +262,39 @@ export function useQueue(onResult: (records: ResultRecord[], jobId: string) => P
       await tick();
       return job;
     }
-    const queuedRetry = (await listOutbox()).find((row) => row.input.retryOf === jobId);
+    const rows = await listOutbox();
+    const queuedRetry = rows.find((row) => row.input.retryOf === jobId);
     if (queuedRetry) {
       const retryInput = await getOutboxInput(queuedRetry.requestId);
       if (retryInput) return submit(retryInput);
     }
+    // A local-only card has no server ID to link its retry, so the outbox remembers it and a lost response resubmits the same request.
+    const linkedRetry = source.localOnly && rows.find((row) => row.requestId === source.requestId)?.retryRequestId;
+    const linkedInput = linkedRetry ? await getOutboxInput(linkedRetry) : undefined;
+    if (linkedInput) {
+      const job = await submit(linkedInput);
+      await replaceWorkspaceRequest(source.requestId, job.requestId);
+      await removeOutbox(source.requestId);
+      await tick();
+      return job;
+    }
     const next = { ...input, creditQuote: quote, requestId: randomId(), providerId: input.request.mask ? input.providerId : undefined, retryOf: source.localOnly ? undefined : jobId, clientContext: { ...input.clientContext, placeholderId: randomId(), parentId: input.clientContext.placeholderId, version: (input.clientContext.version || 1) + 1 } };
     if (next.referenceJobId && input.clientContext.kind === 'series') {
+      // Later scenes follow the first scene. Its original job may have failed or left this list, so find what replaced it.
       const original = jobsRef.current.find((job) => job.id === next.referenceJobId || job.requestId === next.referenceJobId);
-      if (original && ['failed', 'canceled', 'interrupted'].includes(original.status)) {
-        const replacement = jobsRef.current.filter((job) => job.id !== original.id && job.clientContext?.seriesId === original.clientContext?.seriesId && job.clientContext?.sceneId === original.clientContext?.sceneId)
+      if (!original || ['failed', 'canceled', 'interrupted'].includes(original.status)) {
+        const seriesId = input.clientContext.seriesId;
+        const replacement = jobsRef.current.filter((job) => job.id !== original?.id && !job.localOnly && job.clientContext?.seriesId === seriesId && job.clientContext?.sceneIndex === 0)
           .sort((a, b) => (b.clientContext?.version || 1) - (a.clientContext?.version || 1) || b.queuedAt - a.queuedAt)[0];
-        if (!replacement || !['pending', 'running', 'succeeded', 'expired'].includes(replacement.status)) throw new Error('请先重试首镜, 再重试后续分镜');
-        next.referenceJobId = replacement.id;
-        delete next.referenceImage;
+        const saved = seriesId ? await latestSeriesRecord(seriesId, 0) : undefined;
+        if (replacement && ['pending', 'running'].includes(replacement.status) || replacement && !saved && ['succeeded', 'expired'].includes(replacement.status)) {
+          next.referenceJobId = replacement.id;
+          delete next.referenceImage;
+        } else if (saved) {
+          const { id, recordId, name, dataUrl } = await recordReference(saved, '首镜主体参考');
+          next.referenceImage = { id, recordId, name, dataUrl };
+          delete next.referenceJobId;
+        } else if (original) throw new Error('请先重试首镜, 再重试后续分镜');
       }
     }
     if (source.localOnly && next.referenceJobId) {
@@ -262,6 +307,7 @@ export function useQueue(onResult: (records: ResultRecord[], jobId: string) => P
       }
       delete next.referenceJobId;
     }
+    if (source.localOnly) await linkOutboxRetry(source.requestId, next.requestId);
     const job = await submit(next);
     await replaceWorkspaceRequest(source.requestId, job.requestId);
     if (source.localOnly) await removeOutbox(source.requestId);
@@ -292,7 +338,10 @@ export function useQueue(onResult: (records: ResultRecord[], jobId: string) => P
   const prioritize = useCallback(async (jobId: string) => { await prioritizeQueueJob(jobId); await tick(); }, [tick]);
   const archive = useCallback(async () => { await archiveQueueJobs(); historyCache.current.clear(); historyExpanded.current = false; await tick(); }, [tick]);
   const archiveJob = useCallback(async (jobId: string) => {
-    await archiveQueueJob(jobId);
+    const source = jobsRef.current.find((job) => job.id === jobId);
+    // A cleared card no longer offers a retry, so its local recipe goes too; otherwise it returns as a local card once the server forgets the job.
+    if (!source?.localOnly) await archiveQueueJob(jobId);
+    if (source?.requestId) { await removeOutbox(source.requestId); await collectUnusedReferences(); }
     historyCache.current.delete(jobId);
     await tick();
   }, [tick]);

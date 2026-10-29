@@ -422,6 +422,7 @@ export function CreativeStudio({ onOpenStyles, onOpenGallery, onSubmitBatch, onC
         settlementPending: job.settlementPending,
         delivery: job.delivery,
         status: job.status === 'succeeded' ? 'receiving' : job.status === 'submitting' || job.status === 'unsubmitted' ? job.status : job.status === 'running' ? 'running' : job.status === 'pending' ? 'queued' : 'failed',
+        expired: job.status === 'expired',
         prompt: job.clientContext?.prompt ?? '',
         timing: job,
         position: job.yourPosition,

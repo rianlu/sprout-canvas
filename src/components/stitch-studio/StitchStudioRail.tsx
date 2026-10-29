@@ -538,6 +538,8 @@ export interface QueueJobView {
   delivery?: QueueDelivery;
   id: string;
   status: 'queued' | 'running' | 'receiving' | 'failed' | 'submitting' | 'unsubmitted';
+  /** Generated and charged, but not saved before the server released it; distinct from a failed generation. */
+  expired?: boolean;
   prompt: string;
   timing: QueueTiming;
   position: number;
@@ -610,7 +612,7 @@ export function StitchCanvasStream(props: StitchCanvasStreamProps) {
                     <div className="w-12 h-12 rounded-full bg-error/10 text-error flex items-center justify-center mb-space-sm">
                       <StitchIcon name="gpp_bad" size={28} />
                     </div>
-                    <h4 className="font-headline-sm text-headline-sm text-on-error-container mb-1">生成未完成</h4>
+                    <h4 className="font-headline-sm text-headline-sm text-on-error-container mb-1">{job.expired ? '结果已过期' : '生成未完成'}</h4>
                     <CreditStatus credit={job.credit} pending={job.settlementPending} />
                     <p className="font-body-sm text-body-sm text-on-surface-variant max-w-sm mb-space-md leading-relaxed">
                       {job.error || '生成暂时不可用, 请稍后重试'}
@@ -631,13 +633,13 @@ export function StitchCanvasStream(props: StitchCanvasStreamProps) {
                         onClick={() => onRetryJob(job.id)}
                       >
                         <RefreshCw size={16} aria-hidden />
-                        <span>{job.retrying ? '正在提交...' : '一键重试'}</span>
+                        <span>{job.retrying ? '正在提交...' : job.expired ? '重新生成' : '一键重试'}</span>
                         <CreditCost points={job.recoveryPoints} unlimited={job.recoveryUnlimited} />
                       </button>
                     </div>
                   </div>
                   <div className="flex items-center justify-between pt-space-md text-on-surface-variant font-meta-sm text-meta-sm">
-                    <span className="truncate">任务已停止 · 可重试</span>
+                    <span className="truncate">{job.expired ? '未及时保存 · 可重新生成' : '任务已停止 · 可重试'}</span>
                     <span>{relativeTime(job.createdAt)}</span>
                   </div>
                 </article>

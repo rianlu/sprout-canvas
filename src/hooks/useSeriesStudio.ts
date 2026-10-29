@@ -127,12 +127,14 @@ export function useSeriesStudio({ onSubmit, onSubmitBatch, onUpdate, results, jo
     const record = seriesResults.find((item) => sceneId ? item.sceneId === sceneId : item.id === shotIds[index]);
     const job = seriesJobs.filter((item) => sceneId ? item.clientContext?.sceneId === sceneId : item.clientContext?.placeholderId === shotIds[index]).sort((a, b) => (b.clientContext?.version || 1) - (a.clientContext?.version || 1) || b.queuedAt - a.queuedAt)[0];
     let kind: ShotState['kind'] = record ? 'done' : 'planned';
-    if (job && (!record || (job.clientContext?.version || 1) >= (record.version || 1))) {
+    // A result saved from this very job stays done, even if the server marks it expired before the ack lands.
+    const saved = Boolean(record && job && (record.jobId === job.id || record.requestId === job.requestId));
+    if (job && !saved && (!record || (job.clientContext?.version || 1) >= (record.version || 1))) {
       if (job.status === 'submitting' || job.status === 'unsubmitted') kind = job.status;
       else if (job.status === 'running') kind = 'generating';
       else if (job.status === 'pending') kind = 'waiting';
       else if (['failed', 'expired', 'interrupted'].includes(job.status)) kind = 'failed';
-      else if (job.status === 'succeeded' && !job.acknowledgedAt && record?.jobId !== job.id && record?.requestId !== job.requestId) kind = 'receiving';
+      else if (job.status === 'succeeded' && !job.acknowledgedAt) kind = 'receiving';
     }
     return { kind, task, record, job };
   });

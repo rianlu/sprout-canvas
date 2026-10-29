@@ -268,6 +268,41 @@ try {
     IDBObjectStore.prototype.put = function (...args) { if (this.name === 'records') window.__recordWrites++; return put.apply(this, args); };
   });
 
+  await scenario('明确拒绝的提交不留下待确认卡片, 修正后重新提交只生成一次', async (page) => {
+    await page.route(submitRoute, (route) => route.fulfill({ status: 402, contentType: 'application/json', body: JSON.stringify({ error: '灵感点不足, 本次需要 10 点, 当前可用 0 点', code: 'INSUFFICIENT_CREDITS' }) }));
+    const before = calls();
+    await submit(page, '余额不足时提交的画稿');
+    await page.getByText(/灵感点不足/).first().waitFor();
+    await until(async () => !(await rows(page, 'outbox')).length, 'refused request leaves no local submission');
+    assert.equal(await page.getByRole('heading', { name: '提交待确认', exact: true }).count(), 0);
+    assert.equal(await page.getByLabel('画面提示词', { exact: true }).inputValue(), '余额不足时提交的画稿');
+    await page.unroute(submitRoute);
+    await submit(page, '余额不足时提交的画稿');
+    await settled(page, 1);
+    assert.equal(calls(), before + 1);
+  });
+
+  await scenario('页面在后台时仍领取已完成的作品, 不等切回前台', async (page) => {
+    const upstream = gate();
+    app.controls.respond = async (call) => { if (call.path.includes('/images/')) await upstream.promise; return false; };
+    try {
+      await submit(page, '切到后台时完成的画稿');
+      await until(async () => (await serverJobs(page)).some((job) => job.status === 'running'), 'generation started');
+      // Results expire 30 minutes after they finish, so a hidden page must still collect them.
+      await page.evaluate(() => {
+        Object.defineProperty(document, 'hidden', { configurable: true, get: () => true });
+        Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'hidden' });
+        document.dispatchEvent(new Event('visibilitychange'));
+      });
+      upstream.release();
+      await settled(page, 1);
+      assert.equal(await page.evaluate(() => document.hidden), true, 'saved while the page stayed hidden');
+    } finally {
+      upstream.release(); app.controls.respond = null;
+      await page.evaluate(() => { delete document.hidden; delete document.visibilityState; document.dispatchEvent(new Event('visibilitychange')); }).catch(() => {});
+    }
+  });
+
   await scenario('上传中刷新后显示待确认, 沿用原请求继续提交且只生成一次', async (page) => {
     const paused = gate(); const ids = [];
     await page.route(submitRoute, async (route) => {

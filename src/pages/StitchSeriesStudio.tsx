@@ -308,6 +308,7 @@ export function SeriesStudio(props: SeriesStudioProps) {
                 const running = shot.kind === 'generating';
                 const waiting = shot.kind === 'waiting';
                 const failed = shot.kind === 'failed';
+                const expired = failed && shot.job?.status === 'expired';
                 const sending = shot.kind === 'submitting';
                 const unconfirmed = shot.kind === 'unsubmitted';
                 const receiving = shot.kind === 'receiving';
@@ -356,7 +357,7 @@ export function SeriesStudio(props: SeriesStudioProps) {
                             : waiting
                               ? '等待队列中'
                               : failed
-                                ? '生成失败'
+                                ? expired ? '结果已过期' : '生成失败'
                                 : awaitingReview ? '待确认' : '待规划'}
                       </span>
                     </div>
@@ -466,7 +467,7 @@ export function SeriesStudio(props: SeriesStudioProps) {
                                   void onRetry(shot.job.id).catch((error) => pushToast('error', error instanceof Error ? error.message : '重试失败'));
                               }}
                             >
-                              重新尝试<CreditCost points={shot.job?.interruptionReason === 'pending-restart' ? shot.job.credit?.points : undefined} unlimited={shot.job?.interruptionReason === 'pending-restart' ? shot.job.credit?.unlimited : undefined} />
+                              {expired ? '重新生成' : '重新尝试'}<CreditCost points={shot.job?.interruptionReason === 'pending-restart' ? shot.job.credit?.points : undefined} unlimited={shot.job?.interruptionReason === 'pending-restart' ? shot.job.credit?.unlimited : undefined} />
                             </button>
                           )}
                           {failed && shot.record && <button type="button" className="mt-2 font-meta-sm text-meta-sm text-primary hover:underline" onClick={() => setPreview(shot.record!)}>查看上一版图片</button>}

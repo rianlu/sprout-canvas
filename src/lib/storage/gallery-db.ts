@@ -475,6 +475,24 @@ export async function getOutboxInput(requestId: string): Promise<GenerationSubmi
   return input;
 }
 
+/** Remember which new request a local-only card was retried as, so a lost response resubmits that request instead of a second one. */
+export async function linkOutboxRetry(requestId: string, retryRequestId: string) {
+  const db = await openGalleryDb();
+  await transact(db, ['outbox'], async (tx) => {
+    const outbox = tx.objectStore('outbox');
+    const row: Outbox | undefined = await request(outbox.get(requestId));
+    if (row) outbox.put({ ...row, retryRequestId }, requestId);
+  });
+}
+
+/** The newest saved version of one series scene, used when its original job is no longer listed. */
+export async function latestSeriesRecord(seriesId: string, sceneIndex: number): Promise<ResultRecord | undefined> {
+  const db = await openGalleryDb();
+  const records: Metadata[] = await request(db.transaction('records').objectStore('records').index('seriesId').getAll(seriesId));
+  const meta = records.filter((record) => record.sceneIndex === sceneIndex).sort((a, b) => (b.version || 1) - (a.version || 1) || b.createdAt - a.createdAt)[0];
+  return meta && { ...meta, dataUrl: '' };
+}
+
 export async function removeOutbox(requestId: string) {
   const db = await openGalleryDb();
   await transact(db, ['outbox'], (tx) => { tx.objectStore('outbox').delete(requestId); });

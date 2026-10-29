@@ -581,6 +581,25 @@ try {
     assert.equal(record.recipe.referenceImage.recordId, anchor.clientContext.placeholderId);
   });
 
+  await scenario('原首镜任务已清除时, 后续分镜重试改用本地保存的新首镜', async (page) => {
+    await fillPlan(page); rejectImage = true;
+    await confirmation(page).getByRole('button', { name: /^确认并生成 4 张图片/ }).click();
+    await until(async () => { const all = await jobs(page); return all.length === 4 && all.every((job) => job.status === 'failed'); }, 'initial series failed');
+    const original = (await jobs(page)).find((job) => job.clientContext.sceneIndex === 0);
+    await closeQueue(page);
+    rejectImage = false;
+    await cards(page).first().getByRole('button', { name: /^重新尝试/ }).click();
+    await settled(page, 1);
+    // Clearing the failed first scene removes it from this page's list, so its replacement must be found another way.
+    assert.equal((await page.context().request.post(`${app.base}/api/jobs/${original.id}/archive`)).status(), 200);
+    await page.reload(); await page.locator('#series-story-prompt').waitFor();
+    const anchor = (await rows(page)).find((row) => row.sceneIndex === 0);
+    await cards(page).nth(1).getByRole('button', { name: /^重新尝试/ }).click();
+    await settled(page, 2);
+    const record = (await rows(page)).find((row) => row.sceneIndex === 1);
+    assert.equal(record.recipe.referenceImage.recordId, anchor.id, 'the retry follows the saved replacement, not the cleared failure');
+  });
+
   await scenario('单镜新版本失败时不误报整套完成, 仍保留旧版本', async (page) => {
     await completePlan(page);
     rejectImage = true;

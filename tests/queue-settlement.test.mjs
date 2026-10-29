@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { createStateStore } from '../server/state-store.mjs';
 import { isDefiniteConnectionFailure } from '../server/upstream-outcome.mjs';
-import { PNG_BASE64, submission } from './fixtures.mjs';
+import { PNG as PNG_BYTES, PNG_BASE64, PNG_URL, MASK_URL, submission } from './fixtures.mjs';
 import { until } from './server-harness.mjs';
 
 async function fixture(t, { fakeTimers = false, timeout = false, respond, limits = {} } = {}) {
@@ -145,6 +145,84 @@ test('单个浏览器不能占满全站待处理图片预算, 失败任务立即
     submit(f.session); submit(f.session);
     assert.equal(f.store.credits.balance(f.access.id).available, 80);
   } finally { release(); }
+});
+
+/** A valid PNG padded with an ancillary chunk, so budgets can be exercised with realistic sizes. */
+function bulky(bytes) {
+  const pad = Buffer.alloc(bytes, 7);
+  const header = Buffer.alloc(4); header.writeUInt32BE(pad.length);
+  const iend = PNG_BYTES.length - 12;
+  return Buffer.concat([PNG_BYTES.subarray(0, iend), header, Buffer.from('teXt'), pad, Buffer.alloc(4), PNG_BYTES.subarray(iend)]);
+}
+const imageResponse = (bytes) => new Response(JSON.stringify({ data: [{ b64_json: bytes.toString('base64') }] }), { headers: { 'Content-Type': 'application/json' } });
+const promptOf = (options) => JSON.parse(options.body).prompt;
+const statusOf = (f, job, userId) => f.queue.getJobStatus(job.id, userId).status;
+
+test('一个浏览器未领取的结果超过个人份额时, worker 改为执行其他人的任务', async (t) => {
+  const result = bulky(20_000);
+  const f = await fixture(t, { respond: async () => imageResponse(result), limits: { JOB_TTL_MS: 60 * 60 * 1000, MAX_USER_RETAINED_BYTES: 40_000, MAX_RETAINED_BYTES: 1_000_000 } });
+  const other = { ...f.session, userId: randomUUID() };
+  const submit = (session, prompt) => f.queue.submitGeneration({ ...submission(randomUUID(), { prompt }), creditQuote: { accessCodeId: f.access.id, userId: session.userId, version: 1 } }, session.userId, { id: 'fixture', name: 'fixture' }, session);
+  const own = ['A1', 'A2', 'A3', 'A4'].map((prompt) => submit(f.session, prompt));
+  await until(() => own.slice(0, 2).every((job) => statusOf(f, job, f.session.userId) === 'succeeded'), 'two unclaimed results');
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  assert.equal(f.calls.length, 2, 'two unclaimed results exceed this browser share, so its third task waits');
+  assert.equal(statusOf(f, own[2], f.session.userId), 'pending');
+  const neighbour = submit(other, 'B1');
+  await until(() => statusOf(f, neighbour, other.userId) === 'succeeded', 'another browser is still served');
+  f.queue.acknowledge(own[0].id, f.session.userId);
+  await until(() => statusOf(f, own[2], f.session.userId) === 'succeeded', 'claiming a result frees the share');
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  assert.equal(statusOf(f, own[3], f.session.userId), 'pending');
+});
+
+test('取消排队任务释放预算后立即唤醒 worker', async (t) => {
+  let release;
+  const gate = new Promise((resolve) => { release = resolve; });
+  const result = bulky(20_000);
+  const f = await fixture(t, {
+    respond: async (_url, options) => { if (promptOf(options) === 'A1') await gate; return imageResponse(result); },
+    limits: { JOB_TTL_MS: 60 * 60 * 1000, MAX_USER_RETAINED_BYTES: 1_000_000, MAX_RETAINED_BYTES: 50_000 },
+  });
+  const other = { ...f.session, userId: randomUUID() };
+  const reference = { id: 'big-ref', name: 'big.png', dataUrl: `data:image/png;base64,${bulky(20_000).toString('base64')}` };
+  const submit = (session, prompt, request = {}) => f.queue.submitGeneration({ ...submission(randomUUID(), { prompt, ...request }), creditQuote: { accessCodeId: f.access.id, userId: session.userId, version: 1 } }, session.userId, { id: 'fixture', name: 'fixture' }, session);
+  try {
+    const first = submit(f.session, 'A1');
+    await until(() => f.calls.length === 1, 'A1 holds the worker');
+    const large = submit(f.session, 'P', { references: [reference] });
+    const waiting = submit(other, 'C1');
+    release();
+    await until(() => statusOf(f, first, f.session.userId) === 'succeeded', 'A1 result retained');
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    assert.equal(statusOf(f, waiting, other.userId), 'pending', 'the site budget is full');
+    assert.equal(f.queue.cancel(large.id, f.session.userId).ok, true);
+    await until(() => statusOf(f, waiting, other.userId) === 'succeeded', 'cancel wakes the worker');
+  } finally { release(); }
+});
+
+test('首镜已失败时后续分镜在受理时拒绝, 不预占点数', async (t) => {
+  const f = await fixture(t, { respond: async () => rejection('content_policy_violation') });
+  const anchor = f.start();
+  await failedJob(f, anchor.id, f.session.userId);
+  const before = f.store.credits.balance(f.access.id);
+  const later = { ...submission(randomUUID()), creditQuote: f.input.creditQuote, referenceJobId: anchor.id, clientContext: { ...f.input.clientContext, kind: 'series', seriesId: 's', sceneId: 'scene-2', sceneIndex: 1, placeholderId: 'art-later' } };
+  assert.throws(() => f.queue.submitGeneration(later, f.session.userId, { id: 'fixture', name: 'fixture' }, f.session), { statusCode: 409, message: /首镜/ });
+  assert.deepEqual(f.store.credits.balance(f.access.id), before);
+  assert.equal(f.calls.length, 1);
+});
+
+test('局部重绘只用提交时的通道, 明确过载也不切换备用通道', async (t) => {
+  const overloaded = () => new Response(JSON.stringify({ error: { message: 'fixture overloaded' } }), { status: 503, headers: { 'Content-Type': 'application/json' } });
+  const f = await fixture(t, { respond: async () => overloaded() });
+  const plain = f.start();
+  await failedJob(f, plain.id, f.session.userId);
+  assert.equal(f.calls.length, 2, 'an ordinary request may switch to the backup channel');
+  const edit = { ...submission(randomUUID(), { references: [{ id: 'source', name: 'source.png', dataUrl: PNG_URL }], mask: MASK_URL }), creditQuote: f.input.creditQuote };
+  const job = f.queue.submitGeneration(edit, f.session.userId, { id: 'fixture', name: 'fixture' }, f.session);
+  const failed = await failedJob(f, job.id, f.session.userId);
+  assert.equal(failed.providerId, 'fixture');
+  assert.equal(f.calls.length, 3, 'a mask edit stays on its channel');
 });
 
 test('关闭服务时不再切换备用通道, 明确拒绝按失败返还', async (t) => {

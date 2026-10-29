@@ -133,6 +133,8 @@ function prepareGeneration(input, userId, selectedProvider, prepared = new Map()
   if (input.referenceJobId) {
     const source = referenceSource;
     if (!source || source.userId !== userId) throw requestError('参考任务不存在', 404);
+    // The worker would fail a scene whose anchor can no longer succeed, so refuse it before reserving credits.
+    if (['failed', 'canceled', 'interrupted'].includes(source.status)) throw requestError('首镜未生成成功, 请先重试首镜, 再重试后续分镜', 409);
     validateReferenceSnapshot(source, input.referenceImage);
     if (['succeeded', 'expired'].includes(source.status) && !source.result && !input.referenceImage) throw requestError('参考任务的临时图片已释放, 请从本地作品选择参考图', 409);
   }
@@ -146,7 +148,7 @@ function prepareGeneration(input, userId, selectedProvider, prepared = new Map()
   const job = {
     id: nextJobId(), userId, requestId: input.requestId, requestHash: hash, submission: input,
     status: 'pending', method: 'POST', upstreamPath: '/v1/images/generations', contentType: 'application/json',
-    autoProviderRouting: !input.providerId, excludeProviderId: input.retryOf ? retryExcludeProviderIds(imageJobs.get(input.retryOf)) : '', clientContext: input.clientContext,
+    autoProviderRouting: !input.providerId && !input.request.mask, excludeProviderId: input.retryOf ? retryExcludeProviderIds(imageJobs.get(input.retryOf)) : '', clientContext: input.clientContext,
     queuedAt: Date.now(), startedAt: 0, finishedAt: 0, error: '', result: null,
     providerId: selectedProvider.id, providerName: selectedProvider.name,
     recipe: generationRecipe(input, selectedProvider), referenceJobId: referenceSource ? referenceSource.id : '', retryOf: input.retryOf || '',
@@ -198,7 +200,7 @@ export function resumeGeneration(jobId, userId, input, session) {
     if (!['pending', 'running'].includes(source.status) && !source.result && !input.referenceImage) throw requestError('请先在此浏览器保存首镜原图, 再恢复后续分镜', 409);
   }
   assertCapacity(userId, Buffer.byteLength(JSON.stringify(input)));
-  const next = { ...job, submission: input, status: 'pending', method: 'POST', upstreamPath: '/v1/images/generations', contentType: 'application/json', autoProviderRouting: !input.providerId, queuedAt: Date.now(), startedAt: 0, finishedAt: 0, error: '', interruptionReason: '', ...(session ? { codeEpoch: session.codeEpoch } : {}) };
+  const next = { ...job, submission: input, status: 'pending', method: 'POST', upstreamPath: '/v1/images/generations', contentType: 'application/json', autoProviderRouting: !input.providerId && !input.request.mask, queuedAt: Date.now(), startedAt: 0, finishedAt: 0, error: '', interruptionReason: '', ...(session ? { codeEpoch: session.codeEpoch } : {}) };
   if (session) stateStore.transaction(() => {
     if (next.creditId) { stateStore.credits.resume(next, session, input.creditQuote); persist(next); }
     else stateStore.acceptImageJobs([next], session);
@@ -327,7 +329,7 @@ export function enqueue(job, { persisted = false, start = true } = {}) {
   return publicJob(job, job.userId);
 }
 
-export function cancel(jobId, viewerUserId) {
+export function cancel(jobId, viewerUserId, { wake = true } = {}) {
   const job = imageJobs.get(jobId);
   if (!job || job.userId !== viewerUserId) return { ok: false, status: 404, error: '任务不存在或已过期' };
   if (job.status === 'pending') {
@@ -342,6 +344,8 @@ export function cancel(jobId, viewerUserId) {
     cleanupJobLater(job.id);
     releaseClaimedResults();
     logLine('INFO', `[image-job] canceled ${job.id} user=${viewerUserId}`);
+    // Cancelling frees budget the worker may have been waiting for.
+    if (wake) runWorker();
     return { ok: true, job: publicJob(job, viewerUserId) };
   }
   if (job.status === 'running') {
@@ -356,12 +360,14 @@ export function revokeAccessCode(accessCodeId) {
     // Replaying an earlier administrative request must not cancel work from a newer login.
     try { stateStore.credits.authorized({ accessCodeId, codeEpoch: job.codeEpoch }); continue; }
     catch { /* Only jobs whose authorization was revoked need cancellation. */ }
-    if (job.status === 'pending') cancel(job.id, job.userId);
+    // Wake once after the loop so the worker cannot start another job of the code being revoked.
+    if (job.status === 'pending') cancel(job.id, job.userId, { wake: false });
     else if (job.status === 'interrupted' && !job.outcomeUnknown) {
       const next = { ...job, status: 'canceled', error: '访问码已停用或重置, 未执行任务已取消', finishedAt: Date.now() };
       persist(next); Object.assign(job, next);
     }
   }
+  runWorker();
 }
 
 export function getJobsForUser(userId, { cursor = '', limit = 30, requestIds = [] } = {}) {
@@ -523,6 +529,8 @@ function pickNextJob() {
     const userId = users[(startIdx + i) % users.length];
     const queue = pendingByUser.get(userId);
     if (!queue || !queue.length) continue;
+    // Unclaimed results above the per-browser share wait for that browser's ack or expiry, which both wake the worker.
+    if (retainedBytes(userId) > MAX_USER_RETAINED_BYTES) continue;
     const index = queue.findIndex((candidate) => !candidate.referenceJobId || !['pending', 'running'].includes(imageJobs.get(candidate.referenceJobId)?.status));
     if (index < 0) continue;
     lastServedUserId = userId;
