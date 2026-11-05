@@ -57,7 +57,7 @@ app.controls.respond = async (call, res) => {
   }
   if (imageGate) await imageGate.promise;
   if (!rejectImage) return false;
-  if (rejectImage === 'following' && call.body.toString('utf8').includes('当前第 1/')) return false;
+  if (rejectImage === 'following' && call.body.toString('utf8').includes('小熊在森林第 1 处寻找朋友')) return false;
   res.writeHead(rejectImage === 'unknown' ? 504 : 400, { 'Content-Type': 'application/json' });
   res.end(JSON.stringify({ error: 'invalid_request_error: 分镜绘制失败' }));
   return true;
@@ -256,7 +256,8 @@ try {
     assert.ok(artifacts.includes(`ref-${latest.recipe.referenceImage.id}`), 'continuity snapshot survives cleanup');
     await cards(page).nth(1).getByTitle('查看作品详情', { exact: true }).click();
     const viewer = page.getByRole('dialog', { name: '作品检视', exact: true });
-    assert.ok(requests[4].request.prompt.includes('系列创作需求'), 'the generation prompt carries the series context');
+    assert.ok(requests[4].request.prompt.startsWith(latest.prompt), 'generation starts from the scene text shown on the card');
+    assert.equal(requests[4].request.prompt.includes('系列创作需求'), false);
     await viewer.getByRole('complementary', { name: '作品详情' }).getByText(latest.prompt, { exact: true }).waitFor();
     await viewer.getByRole('button', { name: '复用配方', exact: true }).click();
     await until(async () => await page.getByLabel('画面提示词', { exact: true }).inputValue() === latest.prompt, 'recipe reuse loads the scene text, not the wrapped generation prompt');
@@ -338,7 +339,7 @@ try {
     }));
     await page.getByRole('button', { name: /^智能拆解分镜/ }).click();
     await until(() => confirmation(page).getByRole('button', { name: /^确认并生成 4 张图片/ }).isEnabled(), 'recovered plan');
-    assert.equal(textCalls(), before + 1, 'recover without another paid text request');
+    assert.equal(textCalls(), before + 2, 'recover without another paid text request');
   });
 
   await scenario('本地保存失败后保留原文字请求并免费重领', async (page) => {
@@ -352,7 +353,7 @@ try {
     await page.evaluate(() => { window.failSeriesSave = false; });
     await page.getByRole('button', { name: /^智能拆解分镜/ }).click();
     await until(() => confirmation(page).getByRole('button', { name: /^确认并生成 4 张图片/ }).isEnabled(), 'saved original text result');
-    assert.equal(textCalls(), before + 1);
+    assert.equal(textCalls(), before + 2);
     await page.reload();
     await until(() => confirmation(page).getByRole('button', { name: /^确认并生成 4 张图片/ }).isEnabled(), 'durable reviewed plan');
   }, () => {

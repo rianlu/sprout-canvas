@@ -38,8 +38,10 @@ export function parseSeriesPlan(text, count) {
   return value.map((item) => ({ title: item.title.trim().replace(/\s+/g, ' '), prompt: item.prompt.trim() }));
 }
 
-export function scenePrompt({ brief, prompt, index, count, referenceCount = 0, hasContinuityReference = false }) {
-  const references = referenceCount ? `\n前 ${referenceCount} 张图片是用户按顺序提供的参考图, 对应图 1 到图 ${referenceCount}, 按文案指定的用途参考, 不交换编号或混淆不同主体.` : '';
-  const continuity = hasContinuityReference ? '\n最后一张图片是已生成分镜的衔接参考, 用于保持相关主体外观和画风, 不替换用户参考图的编号. 不照搬其场景, 动作或构图, 以当前分镜要求为准.' : '';
-  return `系列创作需求: ${brief}\n根据创作需求保持相关主体的关键特征和共同视觉要求, 尊重明确指定的变化. 系列需求仅提供上下文, 只绘制下面的当前分镜.\n当前第 ${index + 1}/${count} 幕: ${prompt}${references}${continuity}\n本次只生成当前幕的一张独立静态画面, 不生成拼版或多个分格. 只呈现用户要求的画面文字, 不将系列说明, 分镜标题或编号画进图片.`;
+// The card shows `prompt`. Attached images are not on the card, so only their order is noted after the user's words.
+export function scenePrompt({ prompt, referenceCount = 0, hasContinuityReference = false }) {
+  const notes = [];
+  if (referenceCount) notes.push(`前 ${referenceCount} 张图片是用户按顺序提供的参考图, 对应图 1 到图 ${referenceCount}. 产品或角色的颜色, 款式和外观以这些图为准, 不改颜色, 不换款式.`);
+  if (hasContinuityReference) notes.push('最后一张图片是已生成的分镜, 只用来保持已经出现的主体的颜色, 款式或外观. 本镜的场景, 动作和构图以本镜提示词为准.');
+  return notes.length ? `${prompt}\n${notes.join('\n')}` : prompt;
 }

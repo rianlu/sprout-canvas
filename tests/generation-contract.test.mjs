@@ -49,10 +49,15 @@ assert.throws(() => parseSeriesPlan(JSON.stringify(plan.map((item) => ({ ...item
 assert.throws(() => parseSeriesPlan(JSON.stringify(plan.map((item) => ({ ...item, prompt: '长'.repeat(MAX_SCENE_PROMPT_LENGTH + 1) }))), 4), /提示词/);
 assert.throws(() => parseSeriesPlan(JSON.stringify(plan.map((item) => ({ ...item, prompt: '   ' }))), 4));
 const scene = scenePrompt({ brief: '棕色短毛小狐狸在森林旅行', prompt: '沿着河边行走', index: 0, count: 4 });
-assert.match(scene, /棕色短毛小狐狸在森林旅行/);
-assert.match(scene, /沿着河边行走/);
-assert.match(scene, /不生成拼版/);
+assert.equal(scene, '沿着河边行走');
+const withImages = scenePrompt({ prompt: '沿着河边行走', referenceCount: 4, hasContinuityReference: true });
+assert.match(withImages, /^沿着河边行走\n/);
+assert.match(withImages, /图 1 到图 4/);
+assert.match(withImages, /不改颜色/);
+assert.doesNotMatch(withImages, /系列创作需求/);
 const largestScene = scenePrompt({ brief: '需'.repeat(MAX_SERIES_BRIEF_LENGTH), prompt: '画'.repeat(MAX_SCENE_PROMPT_LENGTH), index: 7, count: 8, referenceCount: 4, hasContinuityReference: true });
+assert.ok(largestScene.startsWith('画'.repeat(MAX_SCENE_PROMPT_LENGTH)));
+assert.equal(largestScene.includes('需'.repeat(20)), false);
 assert.ok(largestScene.length <= 24000, 'accepted planning text fits the generation request limit');
 const series = validateGenerationSubmission({ ...submission('free-series'), clientContext: { ...input.clientContext, kind: 'series', seriesId: 'series', sceneId: 'scene' } });
 assert.equal(series.clientContext.template, undefined);

@@ -224,7 +224,7 @@ export function useSeriesStudio({ onSubmit, onSubmitBatch, onUpdate, results, jo
         currentDraftRef.current = next;
         setTaskText(next.taskText!); setSeriesId(next.seriesId); setSceneIds(next.sceneIds); setShotIds([]); setOverrides({}); setStaged([]); setStagedIds([]);
         pushToast('success', `已拆解 ${parsed.length} 幕, 请逐镜检查后确认生成图片`);
-      });
+      }, references.length);
       return true;
     } catch (error) {
       if (alive.current) pushToast('error', error instanceof Error ? error.message : '分镜拆解失败, 请重试');
