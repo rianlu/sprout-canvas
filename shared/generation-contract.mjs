@@ -1,4 +1,5 @@
 import { validateCreditQuote } from './credits-contract.mjs';
+import { SERIES_SCENES } from './series-scenes.mjs';
 
 export const GENERATION_DEFAULTS = Object.freeze({
   size: '1024x1024', quality: 'auto', outputFormat: 'png', background: 'auto', outputCompression: 90,
@@ -106,7 +107,7 @@ export function validateGenerationSubmission(value) {
     if (!normalized.mask.startsWith('data:image/png;')) throw requestError('蒙版必须使用带透明通道的 PNG');
   }
   const context = object(input.clientContext, '作品信息');
-  onlyKeys(context, ['kind', 'placeholderId', 'prompt', 'mode', 'seriesId', 'masterPrompt', 'sceneId', 'sceneIndex', 'version', 'parentId', 'template', 'styleId', 'styleName', 'tone', 'batchId'], '作品信息');
+  onlyKeys(context, ['kind', 'placeholderId', 'prompt', 'mode', 'seriesId', 'masterPrompt', 'sceneId', 'sceneIndex', 'version', 'parentId', 'template', 'scene', 'styleId', 'styleName', 'tone', 'batchId'], '作品信息');
   const clientContext = {
     kind: choice(context.kind, ['single', 'series'], 'single', '作品类型'),
     placeholderId: id(context.placeholderId, '作品 ID', true),
@@ -116,6 +117,8 @@ export function validateGenerationSubmission(value) {
   for (const key of ['seriesId', 'sceneId', 'parentId', 'styleId', 'batchId']) if (context[key]) clientContext[key] = id(context[key], key);
   for (const [key, max] of [['masterPrompt', MAX_PROMPT_LENGTH], ['styleName', 200], ['tone', 80]]) if (context[key]) clientContext[key] = text(context[key], key, max);
   if (context.template) clientContext.template = choice(context.template, SERIES_TEMPLATES, '', '系列模板');
+  // The scene decides how a queued scene's text is re-wrapped after an edit; absent means general.
+  if (context.scene !== undefined && context.scene !== 'general') clientContext.scene = choice(context.scene, SERIES_SCENES, '', '系列场景');
   for (const key of ['sceneIndex', 'version']) {
     if (context[key] !== undefined) {
       if (!Number.isInteger(context[key]) || context[key] < 0 || context[key] > 100000) throw requestError(`${key} 无效`);

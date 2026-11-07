@@ -8,18 +8,19 @@ interface TextResult { text: string; providerName?: string; attempts?: unknown[]
 // The server has settled these requests. Clear them so the next click creates a new request instead of replaying.
 const SETTLED = ['TEXT_FAILED', 'OUTCOME_UNKNOWN', 'TEXT_RESULT_EXPIRED'];
 // The server composes the instructions for each kind, so a pending request matches on the user's content and scene count only.
-export async function requestTextGeneration(content: string, kind: 'prompt' | 'series' = 'prompt', sceneCount?: number, onResult?: (result: TextResult) => Promise<void>, referenceCount?: number) {
+export async function requestTextGeneration(content: string, kind: 'prompt' | 'series' = 'prompt', sceneCount?: number, onResult?: (result: TextResult) => Promise<void>, referenceCount?: number, scene = 'general') {
   const creditQuote = getCreditQuote();
   const key = `text-request-${kind}-${creditQuote.userId}`;
-  const signature = JSON.stringify({ content, referenceCount: referenceCount ?? 0 });
+  // Defaults stay out of the signature, so a pending request from an older page is still recognized as the same intent.
+  const signature = JSON.stringify({ content, ...(referenceCount ? { referenceCount } : {}), ...(scene !== 'general' ? { scene } : {}) });
   const previous = await readWorkspaceDraft<PendingText>(key);
   let pending: PendingText | undefined;
   if (previous) {
     try {
       // Older pages also stored their instructions in the signature; those requests are still the same intent.
-      const original = JSON.parse(previous.signature) as { system?: unknown; content?: unknown; referenceCount?: number };
+      const original = JSON.parse(previous.signature) as { system?: unknown; content?: unknown; referenceCount?: number; scene?: string };
       const previousCount = previous.sceneCount ?? (typeof original.system === 'string' ? Number(original.system.match(/恰好 (\d+) 项/)?.[1]) : undefined);
-      if (original.content === content && (original.referenceCount ?? 0) === (referenceCount ?? 0) && (kind === 'prompt' || previousCount === sceneCount)) pending = previous;
+      if (original.content === content && (original.referenceCount ?? 0) === (referenceCount ?? 0) && (original.scene ?? 'general') === scene && (kind === 'prompt' || previousCount === sceneCount)) pending = previous;
     } catch { /* A malformed local entry cannot describe a recoverable request. */ }
   }
   const clearPending = async (requestId: string) => {
@@ -45,7 +46,7 @@ export async function requestTextGeneration(content: string, kind: 'prompt' | 's
     const result = await apiFetch<TextResult>('/api/text', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ requestId: request.requestId, kind, creditQuote, content, ...(kind === 'series' ? { sceneCount, referenceCount: referenceCount ?? 0 } : {}) }),
+      body: JSON.stringify({ requestId: request.requestId, kind, creditQuote, content, ...(kind === 'series' ? { sceneCount, referenceCount: referenceCount ?? 0, scene } : {}) }),
     });
     if (!result.text) throw new Error('文字任务仍在处理, 请稍后再次查看');
     await onResult?.(result);

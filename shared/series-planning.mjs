@@ -35,13 +35,20 @@ export function parseSeriesPlan(text, count) {
   validateCount(count);
   const value = JSON.parse(String(text).trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, ''));
   if (!Array.isArray(value) || value.length !== count || value.some((item) => !item || typeof item.title !== 'string' || typeof item.prompt !== 'string' || !item.title.trim() || !item.prompt.trim() || item.title.trim().length > 80 || item.prompt.length > MAX_SCENE_PROMPT_LENGTH)) throw new Error(`拆解结果需要 ${count} 幕完整分镜, 标题最多 80 字, 每镜提示词最多 ${MAX_SCENE_PROMPT_LENGTH} 字, 请重试`);
-  return value.map((item) => ({ title: item.title.trim().replace(/\s+/g, ' '), prompt: item.prompt.trim() }));
+  return value.map((item) => ({ title: item.title.trim().replace(/\s+/g, ' '), prompt: item.prompt.trim(), ...(typeof item.note === 'string' && item.note.trim() ? { note: item.note.trim().slice(0, 120) } : {}) }));
 }
 
-// The card shows `prompt`. Attached images are not on the card, so only their order is noted after the user's words.
-export function scenePrompt({ prompt, referenceCount = 0, hasContinuityReference = false }) {
-  const notes = [];
-  if (referenceCount) notes.push(`前 ${referenceCount} 张图片是用户按顺序提供的参考图, 对应图 1 到图 ${referenceCount}. 产品或角色的颜色, 款式和外观以这些图为准, 不改颜色, 不换款式.`);
-  if (hasContinuityReference) notes.push('最后一张图片是已生成的分镜, 只用来保持已经出现的主体的颜色, 款式或外观. 本镜的场景, 动作和构图以本镜提示词为准.');
-  return notes.length ? `${prompt}\n${notes.join('\n')}` : prompt;
+// General scenes wrap the card text in the series brief; this wording was compared on real models (2026-10-29), keep it.
+// Structured scenes already carry their visual rules and wording on the card, so only the image order is appended.
+export function scenePrompt({ brief, prompt, index, count, referenceCount = 0, hasContinuityReference = false, scene = 'general' }) {
+  if (scene && scene !== 'general') {
+    const notes = [];
+    if (referenceCount) notes.push(`前 ${referenceCount} 张图片是用户按顺序提供的参考图, 对应图 1 到图 ${referenceCount}. ${scene === 'character' ? '角色的外观, 配色和标志物' : '商品的颜色, 款式和外观'}以这些图为准, 不改颜色, 不换款式.`);
+    if (hasContinuityReference) notes.push(`最后一张图片是本系列已生成的第 1 张, 只用来保持${scene === 'character' ? '角色的外观, 配色和画风' : '商品的外观和整体视觉'}. 本张的${scene === 'character' ? '表情, 动作' : '场景'}和构图以本张提示词为准.`);
+    notes.push(scene === 'character' && /三视图/.test(prompt) ? '本张按提示词画三视图.' : '本次只生成一张独立画面, 不生成拼版或多个分格.');
+    return `${prompt}\n${notes.join('\n')}`;
+  }
+  const references = referenceCount ? `\n前 ${referenceCount} 张图片是用户按顺序提供的参考图, 对应图 1 到图 ${referenceCount}, 按文案指定的用途参考, 不交换编号或混淆不同主体.` : '';
+  const continuity = hasContinuityReference ? '\n最后一张图片是已生成分镜的衔接参考, 用于保持相关主体外观和画风, 不替换用户参考图的编号. 不照搬其场景, 动作或构图, 以当前分镜要求为准.' : '';
+  return `系列创作需求: ${brief}\n根据创作需求保持相关主体的关键特征和共同视觉要求, 尊重明确指定的变化. 系列需求仅提供上下文, 只绘制下面的当前分镜.\n当前第 ${index + 1}/${count} 幕: ${prompt}${references}${continuity}\n本次只生成当前幕的一张独立静态画面, 不生成拼版或多个分格. 只呈现用户要求的画面文字, 不将系列说明, 分镜标题或编号画进图片.`;
 }

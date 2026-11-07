@@ -12,6 +12,7 @@ import { RecordImage } from '../components/gallery/RecordImage';
 import { useSeriesStudio, seriesAspects, MIN_BATCH_COUNT, MAX_BATCH_COUNT, type SeriesActions } from '../hooks/useSeriesStudio';
 import { LOCK_UNSUPPORTED_IMAGE_OPTIONS } from '../lib/image/channel-limits';
 import { MAX_SERIES_BRIEF_LENGTH, MAX_SCENE_PROMPT_LENGTH } from '../../shared/series-planning.mjs';
+import { SCENE_PRESETS, SERIES_SCENES } from '../../shared/series-scenes.mjs';
 import { useCredits } from '../lib/credits';
 import { CreditStatus } from '../components/ui/CreditStatus';
 import { CreditCost } from '../components/ui/CreditCost';
@@ -30,8 +31,11 @@ export interface SeriesStudioProps extends SeriesActions {
 export function SeriesStudio(props: SeriesStudioProps) {
   const { prices } = useCredits();
   const { onEditRecord, onUseRecipe, onRetry, onCancel, onPrioritize } = props;
-  const { models, imageCapabilities, ready, brief, setBrief, count, setCount, config, setConfig, busy, submitting, referenceBusy, pushToast, seriesId, seriesResults, allSeriesResults, activeJobs, canContinue, submissionCount, metadata, view, setView, preview, setPreview, shots, shotIds, splitStory, submitBatch, exportSeries, updateTask, removeShot, resetSeries, redrawShot, references, maxReferences, removeReference, uploadReferences, editing, setEditing, beginEdit, saveEdit } = useSeriesStudio(props);
+  const { models, imageCapabilities, ready, scene, setScene, brief, setBrief, count, setCount, config, setConfig, busy, submitting, referenceBusy, pushToast, seriesId, seriesResults, allSeriesResults, activeJobs, canContinue, submissionCount, metadata, view, setView, preview, setPreview, shots, shotIds, splitStory, submitBatch, exportSeries, updateTask, removeShot, resetSeries, redrawShot, references, maxReferences, removeReference, uploadReferences, editing, setEditing, beginEdit, saveEdit } = useSeriesStudio(props);
   const storyboardRef = useRef<HTMLElement>(null);
+  const preset = SCENE_PRESETS[scene];
+  const structured = scene !== 'general';
+  const commerce = scene === 'ecommerce-main' || scene === 'ecommerce-detail';
   const shotLabel = '分镜看板';
   const plannedTotal = shots.length;
   const filledPrompts = shots.filter((shot) => shot.task.prompt.trim()).length;
@@ -87,6 +91,25 @@ export function SeriesStudio(props: SeriesStudioProps) {
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-space-lg items-stretch">
               {/* 左: 叙事编辑 */}
               <div className="lg:col-span-7 flex flex-col justify-between bg-surface-container-low/40 rounded-xl p-space-md border border-outline-variant/25">
+                {/* 场景: 决定拆解规则, 画面字段和默认张数/画幅 */}
+                <div className="flex flex-col gap-1.5 mb-space-sm">
+                  <span className="font-body-sm text-body-sm font-medium text-on-surface flex items-center gap-1">
+                    <StitchIcon name="layers" size={16} className="text-primary" />
+                    系列场景
+                  </span>
+                  <SegmentedControl
+                    label="系列场景"
+                    className="grid grid-cols-2 sm:grid-cols-4 gap-1.5"
+                    disabled={planLocked}
+                    value={scene}
+                    onChange={(next) => { void setScene(next); }}
+                    options={SERIES_SCENES.map((id) => ({ id, label: SCENE_PRESETS[id].label }))}
+                    itemClassName={(active) => active
+                      ? 'min-w-0 py-1.5 px-1 rounded-lg bg-secondary-container text-on-secondary-container border border-primary/30 font-meta-sm text-meta-sm font-semibold text-center disabled:opacity-60 disabled:cursor-not-allowed'
+                      : 'min-w-0 py-1.5 px-1 rounded-lg bg-surface-container-lowest hover:bg-surface-container text-on-surface-variant border border-outline-variant/30 font-meta-sm text-meta-sm text-center transition-colors disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-surface-container-lowest'}
+                  />
+                  <p className="font-meta-sm text-meta-sm text-outline">{preset.hint}</p>
+                </div>
                 <div className="flex flex-wrap items-center justify-between gap-2 mb-space-xs">
                   <label
                     className="flex items-center gap-1.5 font-body-sm text-body-sm font-medium text-on-surface"
@@ -100,13 +123,9 @@ export function SeriesStudio(props: SeriesStudioProps) {
                       type="button"
                       className="text-primary hover:text-on-primary-fixed-variant text-body-sm font-meta-sm flex items-center gap-1 transition-colors px-2 py-0.5 rounded hover:bg-surface-container"
                       disabled={planLocked}
-                      onClick={() =>
-                        setBrief(
-                          '秋日微风吹拂金色落叶，一只背着编织草袋的小狐狸从橡树洞轻快出发。在斑驳晨光中穿过落叶小径，在青苔岩石下意外拾得一颗金光闪烁的神秘松果。随着夕阳西斜，它与林间小雀同聚在壁炉木屋前，享用热烘坚果茶。',
-                        )
-                      }
+                      onClick={() => setBrief(preset.sample)}
                     >
-                      灵感示例: 森林秋日拾果
+                      {preset.sampleLabel}
                     </button>
                     <button
                       type="button"
@@ -123,7 +142,7 @@ export function SeriesStudio(props: SeriesStudioProps) {
                     className="w-full h-52 lg:h-full p-space-sm bg-surface-container-lowest rounded-xl border border-outline-variant/40 focus:border-primary focus:ring-2 focus:ring-primary/20 text-on-surface font-body-md text-body-md leading-relaxed resize-none transition-all placeholder:text-outline/60"
                     id="series-story-prompt"
                     maxLength={MAX_SERIES_BRIEF_LENGTH}
-                    placeholder="描述想做的一组图片, 写明主题, 用途, 主体和画风要求. 也可以直接粘贴完整分镜剧本. 有参考图时, 可说明图 1, 图 2 各自的用途."
+                    placeholder={preset.placeholder}
                     value={brief}
                     disabled={planLocked}
                     onChange={(event) => setBrief(event.target.value)}
@@ -167,6 +186,7 @@ export function SeriesStudio(props: SeriesStudioProps) {
                 </div>
 
                 <SeriesReferences references={references} maxReferences={maxReferences} disabled={planLocked} busy={referenceBusy} onUpload={uploadReferences} onRemove={removeReference} />
+                {commerce && references.length === 0 && <p role="note" className="-mt-space-sm font-meta-sm text-meta-sm text-on-surface-variant">建议上传商品实拍图. 规划看不到图片, 生图时商品外观以参考图为准; 没有参考图时画出的商品只能当概念稿.</p>}
 
                 {/* 模型: 两个以上模型时显示, 默认自动, 全系列统一 */}
                 {models.length > 1 && <div className="flex flex-col gap-1.5">
@@ -309,6 +329,7 @@ export function SeriesStudio(props: SeriesStudioProps) {
                 itemClassName={(active) => `flex items-center gap-1 hover:text-primary ${active ? 'text-primary font-medium' : ''}`}
               />
             </div>
+            {commerce && filledPrompts > 0 && <p role="note" className="font-meta-sm text-meta-sm text-on-surface-variant flex items-center gap-1"><StitchIcon name="info" size={14} className="text-primary" />画面文字按你提供的事实改写, 生成前请核对卖点和参数; 图片中的文字也可能有错字, 发布前请检查.</p>}
             <div
               className={
                 view === 'grid'
@@ -501,7 +522,7 @@ export function SeriesStudio(props: SeriesStudioProps) {
                           className="block font-meta-sm text-meta-sm text-outline mb-1"
                           htmlFor={`scene-prompt-${index}`}
                         >
-                          分镜画面提示词
+                          {structured ? '画面提示词 (含视觉规范与画面文字)' : '分镜画面提示词'}
                         </label>
                         <textarea
                           id={`scene-prompt-${index}`}
@@ -513,6 +534,7 @@ export function SeriesStudio(props: SeriesStudioProps) {
                           readOnly={busy || submitting || running || waiting || transferring || unconfirmed || failed}
                           onChange={(event) => updateTask(index, event.target.value)}
                         />
+                        {shot.task.note && <p className="mt-1 font-meta-sm text-meta-sm text-on-surface-variant flex items-start gap-1"><StitchIcon name="info" size={14} className="text-primary mt-0.5" />{shot.task.note}</p>}
                       </div>
                       <div className="flex items-center justify-between gap-2 pt-space-xs border-t border-outline-variant/20 font-meta-sm text-meta-sm text-on-surface-variant">
                         {receiptError && done ? (

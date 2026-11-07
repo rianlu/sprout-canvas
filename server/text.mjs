@@ -7,10 +7,16 @@ import { requestError, MAX_PROMPT_LENGTH, MAX_REFERENCE_IMAGES } from '../shared
 import { createTextLimiter } from './request-guards.mjs';
 import { creditError, creditRequestId, validateCreditQuote } from '../shared/credits-contract.mjs';
 import { secretHash, UNKNOWN_OUTCOME_REFUND } from './credits-store.mjs';
-import { parseSeriesPlan, MAX_SERIES_BRIEF_LENGTH } from '../shared/series-planning.mjs';
-import { classifySeriesInstruction, parseSeriesType, reviewSeriesPlan, seriesRewriteInstruction, seriesShotInstruction, skillForType } from '../shared/series-skills.mjs';
+import { MAX_SERIES_BRIEF_LENGTH } from '../shared/series-planning.mjs';
+import { SERIES_SCENES, normalizeScene, parseScene, planningMessages, reviewScene, rewriteMessages } from '../shared/series-scenes.mjs';
 import { PROMPT_POLISH_INSTRUCTIONS, validatePolishedPrompt } from '../shared/prompt-polish.mjs';
 const TEXT_UPSTREAM_TIMEOUT_MS = 60_000;
+// Streaming channels are judged by silence, not by total length: a reply that keeps arriving may run up to the cap.
+const TEXT_STREAM_IDLE_MS = 60_000;
+const TEXT_STREAM_TOTAL_MS = 180_000;
+const TEXT_REPLY_LIMIT = 1024 * 1024;
+// A slow first draft is returned as is, so one request never waits for two long calls.
+const SERIES_REWRITE_BUDGET_MS = 90_000;
 const textLimits = createTextLimiter();
 let stateStore;
 let stopping = false;
@@ -57,21 +63,13 @@ function extractChatText(data) {
 }
 
 // The server owns the instructions, so the text endpoint only runs polishing and series planning, never a caller-supplied system prompt.
-function textMessages(payload) {
-  if (payload.kind === 'series') return seriesShotMessages(payload, skillForType('open'));
+function polishMessages(payload) {
   return [{ role: 'system', content: PROMPT_POLISH_INSTRUCTIONS }, { role: 'user', content: payload.content }];
-}
-
-function seriesShotMessages(payload, skill) {
-  return [
-    { role: 'system', content: seriesShotInstruction(payload.sceneCount, skill, payload.referenceCount, payload.content) },
-    { role: 'user', content: `系列梗概: ${payload.content}` },
-  ];
 }
 
 async function askText(textProvider, model, messages, execution) {
   execution.outcomeUnknown = true;
-  const data = await callJsonUpstream(textProvider, '/v1/chat/completions', { model, messages, stream: false });
+  const data = await callChat(textProvider, { model, messages });
   const text = extractChatText(data);
   const replied = data?.choices?.[0]?.message?.content != null;
   if (!text || text.length > 128000) throw Object.assign(new Error('文字通道未返回可用内容'), { definiteFailure: true, contentFailure: replied });
@@ -79,34 +77,97 @@ async function askText(textProvider, model, messages, execution) {
   return text;
 }
 
-function parseShotText(text, count) {
-  try { return parseSeriesPlan(text, count); }
+function parsePlan(scene, text, count) {
+  try { return parseScene(scene, text, count); }
   catch { throw Object.assign(new Error(`分镜拆解未返回 ${count} 幕完整分镜`), { definiteFailure: true, contentFailure: true }); }
 }
 
-// One series request stays one credit charge. Classify, write, then check; rewrite failing shots at most once.
+// One series request stays one credit charge: write once, check, and rewrite the flagged shots at most once.
+// A valid first draft is never lost; a failed or worse rewrite falls back to it.
 async function planSeries(textProvider, model, payload, execution) {
-  const type = parseSeriesType(await askText(textProvider, model, [
-    { role: 'system', content: classifySeriesInstruction() },
-    { role: 'user', content: payload.content },
-  ], execution));
-  const skill = skillForType(type);
-  logLine('INFO', `[series-plan] type=${skill.id}`);
-  const draft = parseShotText(await askText(textProvider, model, seriesShotMessages(payload, skill), execution), payload.sceneCount);
-  const issues = reviewSeriesPlan(draft, skill, payload.referenceCount);
-  if (!issues.length) return JSON.stringify(draft);
+  const input = { scene: payload.scene, count: payload.sceneCount, content: payload.content, referenceCount: payload.referenceCount };
+  const started = Date.now();
+  const draft = parsePlan(payload.scene, await askText(textProvider, model, planningMessages(input), execution), payload.sceneCount);
+  const issues = reviewScene(payload.scene, draft.raw, payload.referenceCount);
+  if (!issues.length) return JSON.stringify(draft.tasks);
+  if (Date.now() - started > SERIES_REWRITE_BUDGET_MS) {
+    logLine('INFO', `[series-plan] rewrite skipped, first draft took ${Math.round((Date.now() - started) / 1000)}s scene=${normalizeScene(payload.scene)} issues=${issues.length}`);
+    return JSON.stringify(draft.tasks);
+  }
+  logLine('INFO', `[series-plan] rewrite scene=${normalizeScene(payload.scene)} issues=${issues.length}`);
   try {
-    const revised = parseShotText(await askText(textProvider, model, [
-      { role: 'system', content: seriesRewriteInstruction(payload.sceneCount) },
-      { role: 'user', content: `系列梗概: ${payload.content}\n待改分镜: ${issues.map((issue) => `第 ${issue.index + 1} 镜 ${issue.reason}`).join('; ')}\n当前分镜: ${JSON.stringify(draft)}` },
-    ], execution), payload.sceneCount);
-    if (reviewSeriesPlan(revised, skill, payload.referenceCount).length <= issues.length) return JSON.stringify(revised);
+    const revised = parsePlan(payload.scene, await askText(textProvider, model, rewriteMessages(input, draft.raw, issues), execution), payload.sceneCount);
+    if (reviewScene(payload.scene, revised.raw, payload.referenceCount).length <= issues.length) return JSON.stringify(revised.tasks);
   } catch (error) {
-    if (!error.contentFailure) logLine('WARN', `[series-plan] rewrite skipped type=${skill.id} error=${error.message || error}`);
-    else throw error;
+    logLine('WARN', `[series-plan] rewrite kept first draft scene=${normalizeScene(payload.scene)} error=${String(error.message || error).slice(0, 160)}`);
   }
   execution.outcomeUnknown = false;
-  return JSON.stringify(draft);
+  return JSON.stringify(draft.tasks);
+}
+
+function callChat(config, payload) {
+  return config.stream ? callStreamUpstream(config, { ...payload, stream: true }) : callJsonUpstream(config, '/v1/chat/completions', { ...payload, stream: false });
+}
+
+// Server-sent events from /v1/chat/completions. Only a reply that reached its finish signal is usable; a cut stream
+// or silence is an unknown outcome and is refunded without another call. An error event is a definite failure.
+async function callStreamUpstream(config, payload) {
+  const controller = new AbortController();
+  let idleTimer, reason = '';
+  const abort = (why) => { reason = why; controller.abort(); };
+  const totalTimer = setTimeout(() => abort('total'), TEXT_STREAM_TOTAL_MS);
+  const touch = () => { clearTimeout(idleTimer); idleTimer = setTimeout(() => abort('idle'), TEXT_STREAM_IDLE_MS); };
+  totalTimer.unref?.();
+  try {
+    touch();
+    const upstream = await fetchGeneration(`${config.baseUrl}/v1/chat/completions`, { method: 'POST', headers: upstreamHeaders(config, 'application/json'), body: JSON.stringify(payload), signal: controller.signal });
+    // Some relays ignore stream:true and answer with plain JSON; anything else that succeeded is read as events.
+    if (!upstream.ok || String(upstream.headers.get('content-type') || '').includes('json')) {
+      const body = await readLimitedBody(upstream, TEXT_REPLY_LIMIT, '文字结果过长, 无法读取完整结果');
+      const failure = upstreamFailure(upstream.status, body, { strictServerErrors: false });
+      if (failure) throw Object.assign(new Error(formatUpstreamFailure(failure, config, '文字服务')), { definiteFailure: !failure.outcomeUnknown, outcomeUnknown: failure.outcomeUnknown, upstreamStatus: upstream.status, detail: upstreamFailureDetail(failure, config) });
+      return JSON.parse(body.toString('utf8'));
+    }
+    const decoder = new TextDecoder();
+    let buffer = '', content = '', size = 0, finished = false;
+    const handle = (line) => {
+      if (!line.startsWith('data:')) return;
+      const data = line.slice(5).trim();
+      if (!data) return;
+      if (data === '[DONE]') { finished = true; return; }
+      let event;
+      try { event = JSON.parse(data); } catch { return; }
+      const failure = event?.error ? upstreamFailure(200, event, { strictServerErrors: false }) : null;
+      if (failure) throw Object.assign(new Error(formatUpstreamFailure(failure, config, '文字服务')), { definiteFailure: !failure.outcomeUnknown, outcomeUnknown: failure.outcomeUnknown, upstreamStatus: 200, detail: upstreamFailureDetail(failure, config) });
+      const choice = event?.choices?.[0];
+      content += choice?.delta?.content || choice?.message?.content || '';
+      if (choice?.finish_reason) finished = true;
+    };
+    for await (const chunk of upstream.body) {
+      touch();
+      size += chunk.length;
+      if (size > TEXT_REPLY_LIMIT) throw new Error('文字结果过长, 无法读取完整结果');
+      buffer += decoder.decode(chunk, { stream: true });
+      const lines = buffer.split(/\r?\n/);
+      buffer = lines.pop();
+      for (const line of lines) handle(line.trim());
+    }
+    buffer += decoder.decode();
+    for (const line of buffer.split(/\r?\n/)) handle(line.trim());
+    if (!finished) throw Object.assign(new Error('文本上游的流式回复中途结束, 结果未知'), { outcomeUnknown: true });
+    return { choices: [{ message: { content } }] };
+  } catch (error) {
+    if (reason) {
+      const timeoutError = new Error(reason === 'idle' ? `文本上游 ${TEXT_STREAM_IDLE_MS / 1000}s 内没有新内容, 结果未知` : `文本上游 ${TEXT_STREAM_TOTAL_MS / 1000}s 内未完成, 结果未知`);
+      throw Object.assign(timeoutError, { isTextTimeout: true, outcomeUnknown: true });
+    }
+    if (!error.definiteFailure) error.outcomeUnknown = true;
+    throw error;
+  } finally {
+    clearTimeout(idleTimer); clearTimeout(totalTimer);
+    // Releases the connection when an error event or a size limit ended the read early.
+    controller.abort();
+  }
 }
 
 async function callJsonUpstream(config, upstreamPath, payload) {
@@ -117,7 +178,7 @@ async function callJsonUpstream(config, upstreamPath, payload) {
       body: JSON.stringify(payload),
       signal: timeoutSignal(TEXT_UPSTREAM_TIMEOUT_MS),
     });
-    const body = await readLimitedBody(upstream, 1024 * 1024, '文字结果过长, 无法读取完整结果');
+    const body = await readLimitedBody(upstream, TEXT_REPLY_LIMIT, '文字结果过长, 无法读取完整结果');
     const failure = upstreamFailure(upstream.status, body, { strictServerErrors: false });
     if (failure) throw Object.assign(new Error(formatUpstreamFailure(failure, config, '文字服务')), { definiteFailure: !failure.outcomeUnknown, outcomeUnknown: failure.outcomeUnknown, upstreamStatus: upstream.status, detail: upstreamFailureDetail(failure, config) });
     return JSON.parse(body.toString('utf8'));
@@ -137,14 +198,15 @@ function validateTextInput(payload) {
   if (!payload || typeof payload !== 'object' || Array.isArray(payload)) throw requestError('文字请求格式无效');
   // Pages built before the server composed the instructions still send their own messages.
   if ('input' in payload) throw requestError('页面版本已更新, 请刷新页面后重试');
-  if (Object.keys(payload).some((key) => !['requestId', 'kind', 'creditQuote', 'content', 'sceneCount', 'referenceCount'].includes(key))) throw requestError('文字请求格式无效');
+  if (Object.keys(payload).some((key) => !['requestId', 'kind', 'creditQuote', 'content', 'sceneCount', 'referenceCount', 'scene'].includes(key))) throw requestError('文字请求格式无效');
   if (!['prompt', 'series'].includes(payload.kind)) throw requestError('文字任务类型无效');
   if (payload.kind === 'series' && (!Number.isInteger(payload.sceneCount) || payload.sceneCount < 3 || payload.sceneCount > 8)) throw requestError('分镜数量缺失或无效, 请刷新页面后重试');
   if (payload.kind === 'prompt' && payload.sceneCount !== undefined) throw requestError('提示词处理不能携带分镜数量');
   if (payload.referenceCount !== undefined && (payload.kind !== 'series' || !Number.isInteger(payload.referenceCount) || payload.referenceCount < 0 || payload.referenceCount > MAX_REFERENCE_IMAGES)) throw requestError('参考图数量无效');
+  if (payload.scene !== undefined && (payload.kind !== 'series' || !SERIES_SCENES.includes(payload.scene))) throw requestError('系列场景无效, 请刷新页面后重试');
   const limit = payload.kind === 'series' ? MAX_SERIES_BRIEF_LENGTH : MAX_PROMPT_LENGTH;
   if (typeof payload.content !== 'string' || !payload.content.trim() || payload.content.length > limit) throw requestError(`文字内容为空或超过 ${limit} 字`);
-  return { requestId: creditRequestId(payload.requestId), kind: payload.kind, creditQuote: validateCreditQuote(payload.creditQuote), content: payload.content, sceneCount: payload.sceneCount, referenceCount: payload.referenceCount };
+  return { requestId: creditRequestId(payload.requestId), kind: payload.kind, creditQuote: validateCreditQuote(payload.creditQuote), content: payload.content, sceneCount: payload.sceneCount, referenceCount: payload.referenceCount, scene: payload.kind === 'series' ? normalizeScene(payload.scene) : undefined };
 }
 
 function commitResult(op, response) {
@@ -187,7 +249,8 @@ export async function handleTextResult(req, res, userId, requestId) {
 
 export async function handleTextGeneration(req, res, session) {
   const payload = validateTextInput(await readJson(req, 256 * 1024));
-  const hash = secretHash(JSON.stringify({ kind: payload.kind, content: payload.content, sceneCount: payload.sceneCount, referenceCount: payload.referenceCount ?? null }));
+  // Defaults are left out so a request from a page built before scenes and reference counts keeps its original identity.
+  const hash = secretHash(JSON.stringify({ kind: payload.kind, content: payload.content, sceneCount: payload.sceneCount, ...(payload.referenceCount ? { referenceCount: payload.referenceCount } : {}), ...(payload.scene && payload.scene !== 'general' ? { scene: payload.scene } : {}) }));
   const existing = stateStore.credits.byRequest(session.userId, payload.requestId);
   stateStore.credits.checkQuote(session, payload.creditQuote, !existing);
   if (existing) {
@@ -229,10 +292,7 @@ async function generateText(payload, op, session, execution) {
       let text;
       if (payload.kind === 'series') text = await planSeries(textProvider, model, payload, execution);
       else {
-        const data = await callJsonUpstream(textProvider, '/v1/chat/completions', { model, messages: textMessages(payload), stream: false });
-        text = extractChatText(data);
-        const replied = data?.choices?.[0]?.message?.content != null;
-        if (!text || text.length > 128000) throw Object.assign(new Error('文字通道未返回可用内容'), { definiteFailure: true, contentFailure: replied });
+        text = await askText(textProvider, model, polishMessages(payload), execution);
         try { text = validatePolishedPrompt(text); }
         catch (error) { throw Object.assign(error, { definiteFailure: true, contentFailure: true }); }
       }

@@ -263,11 +263,12 @@ test('系列拆解先校验数量和完整分镜, 无效文字返还且成功只
       const failure = await app.api('/api/text', { cookie, method: 'POST', body: input });
       assert.equal(failure.status, 502); assert.equal(failure.data.credit.state, 'refunded');
       assert.equal((await app.api('/api/text', { cookie, method: 'POST', body: input })).data.credit.id, failure.data.credit.id);
-      assert.equal(app.calls.length, callsBefore + 2, 'an invalid plan still classifies before the shot write fails');
+      assert.equal(app.calls.length, callsBefore + 1);
       await checkBalance(app, cookie, [1000000, 0, 0]);
       await checkLedger(app, cookie, failure.data.credit, ['reserve', 'refund']);
     }
     await app.stop(); await app.start();
+    // Distinct shots pass the program check, so the plan is written with one call and charged once.
     const valid = Array.from({ length: 4 }, (_, index) => ({ title: '第 ' + (index + 1) + ' 幕', prompt: `${scene.prompt} ${index + 1}` }));
     app.controls.respond = (_call, response) => sendJson(response, 200, { choices: [{ message: { content: JSON.stringify(valid) } }] });
     const input = { ...app.textInput(cookie), kind: 'series', sceneCount: 4 };
@@ -276,12 +277,12 @@ test('系列拆解先校验数量和完整分镜, 无效文字返还且成功只
     assert.deepEqual(JSON.parse(success.data.text), valid);
     assert.equal((await app.api('/api/text', { cookie, method: 'POST', body: { ...input, sceneCount: 5 } })).status, 409);
     assert.equal((await app.api('/api/text/' + input.requestId, { cookie })).data.text, success.data.text);
-    await checkBalance(app, cookie, [999999, 0, 1]); assert.equal(app.calls.length, 8);
+    await checkBalance(app, cookie, [999999, 0, 1]); assert.equal(app.calls.length, 4);
     for (const sceneCount of [undefined, 2, 9]) {
       assert.equal((await app.api('/api/text', { cookie, method: 'POST', body: { ...app.textInput(cookie), kind: 'series', sceneCount } })).status, 400);
     }
     assert.equal((await app.api('/api/text', { cookie, method: 'POST', body: { ...app.textInput(cookie), sceneCount: 4 } })).status, 400);
-    assert.equal(app.calls.length, 8); await checkBalance(app, cookie, [999999, 0, 1]);
+    assert.equal(app.calls.length, 4); await checkBalance(app, cookie, [999999, 0, 1]);
   } finally { await app.close(); }
 });
 
@@ -295,7 +296,7 @@ test('用户输入导致的无效拆解或润色结果不熔断文字通道, 其
       const failure = await app.api('/api/text', { cookie, method: 'POST', body: { ...app.textInput(cookie), kind: 'series', sceneCount: 4 } });
       assert.equal(failure.status, 502); assert.equal(failure.data.credit.state, 'refunded');
     }
-    assert.equal(app.calls.length, 16, 'each invalid plan classifies and writes on every text channel');
+    assert.equal(app.calls.length, 8, 'each invalid plan may still try the backup channel');
     app.controls.respond = (_call, response) => sendJson(response, 200, { choices: [{ message: { content: '   ' } }] });
     assert.equal((await app.api('/api/text', { cookie, method: 'POST', body: app.textInput(cookie) })).status, 502);
     app.controls.respond = null;

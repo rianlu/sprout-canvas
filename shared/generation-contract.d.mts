@@ -14,7 +14,7 @@ export type SeriesTemplate = 'picture-book' | 'ecommerce' | 'video-board' | 'bra
 export interface GenerationContext {
   kind: 'single' | 'series'; placeholderId: string; prompt: string; mode: 'text' | 'reference' | 'edit';
   seriesId?: string; masterPrompt?: string; sceneId?: string; sceneIndex?: number; version?: number;
-  parentId?: string; template?: SeriesTemplate; styleId?: string; styleName?: string; tone?: string; batchId?: string;
+  parentId?: string; template?: SeriesTemplate; scene?: import('./series-scenes.mjs').SeriesScene; styleId?: string; styleName?: string; tone?: string; batchId?: string;
 }
 export interface GenerationSubmission { requestId: string; request: GenerationRequest; clientContext: GenerationContext; providerId?: string; modelName?: string; referenceJobId?: string; referenceImage?: GenerationReference; retryOf?: string; creditQuote?: CreditQuote }
 export interface GenerationRecipe extends Omit<GenerationRequest, 'references' | 'mask'> {

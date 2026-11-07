@@ -64,7 +64,9 @@ function normalizeTextProvider(provider = {}) {
     apiKey: String(provider.apiKey || '').trim(),
     textModel: String(provider.textModel || provider.model || 'gpt-5-mini').trim(),
     requestHeaders: provider.requestHeaders && typeof provider.requestHeaders === 'object' ? provider.requestHeaders : {},
+    stream: provider.stream === true,
   };
+  if (provider.stream !== undefined && typeof provider.stream !== 'boolean') throw new Error(`文本服务商 ${name} 的 stream 必须是 true 或 false`);
   if (!config.apiKey) throw new Error(`文本服务商 ${name} 缺少 apiKey. 请检查 ${path.relative(ROOT, LOCAL_CONFIG_PATH)}`);
   if (!config.textModel) throw new Error(`文本服务商 ${name} 缺少 model/textModel. 请检查 ${path.relative(ROOT, LOCAL_CONFIG_PATH)}`);
   return config;
@@ -148,6 +150,7 @@ export async function readLocalConfig(providerId) {
     apiKey: (index === 0 && process.env.TEXT_API_KEY) || provider.apiKey || primaryTextProvider.apiKey,
     textModel: (index === 0 && process.env.TEXT_MODEL) || provider.textModel || provider.model || primaryTextProvider.textModel,
     requestHeaders: provider.requestHeaders || {},
+    stream: provider.stream,
   }));
   const textProvider = textProviders[0];
 

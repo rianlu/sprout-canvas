@@ -49,8 +49,13 @@ function gate() {
 app.controls.respond = async (call, res) => {
   if (call.path.endsWith('/chat/completions')) {
     if (textGate) await textGate.promise;
-    const count = Number(call.json.messages[0].content.match(/恰好 (\d+) 项/)?.[1] || 4);
-    const plan = textPlan || Array.from({ length: count }, (_, index) => ({ title: `林间故事 ${index + 1}`, prompt: `戴红围巾的小熊在森林第 ${index + 1} 处停留, 柔和的绘本插画.` }));
+    const system = call.json.messages[0].content;
+    const count = Number(system.match(/恰好 (\d+) [项张屏]/)?.[1] || 4);
+    // Scene instructions ask for an object with shared rules; the general instruction asks for an array.
+    const plan = textPlan || (system.includes('电商详情页套图') ? {
+      concept: '通勤保温杯', visualRules: '雾霾蓝配浅木色, 柔和侧光, 主标题在左上.',
+      shots: Array.from({ length: count }, (_, index) => ({ role: index === count - 1 ? '规格屏' : '场景', title: `详情第 ${index + 1} 屏`, headline: `早上的热水 ${index + 1}`, subline: '12 小时保温, 暖到工位', labels: ['12 小时保温 → 杯身'], prompt: `MORI 保温杯在第 ${index + 1} 个通勤场景.` })),
+    } : Array.from({ length: count }, (_, index) => ({ title: `林间故事 ${index + 1}`, prompt: `戴红围巾的小熊在森林第 ${index + 1} 处停留, 柔和的绘本插画.` })));
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ choices: [{ message: { content: JSON.stringify(plan) } }] }));
     return true;
@@ -135,6 +140,50 @@ async function scenario(name, body, init, contextOptions = {}) {
 }
 
 try {
+  await scenario('电商详情场景套用默认张数与画幅, 卡片带画面文字, 切换场景先确认', async (page) => {
+    const sceneGroup = page.getByRole('group', { name: '系列场景', exact: true });
+    assert.equal(await sceneGroup.getByRole('button', { name: '通用', exact: true }).getAttribute('aria-pressed'), 'true');
+    await sceneGroup.getByRole('button', { name: '电商详情', exact: true }).click();
+    // The toast is brief; the applied count and aspect are what matter.
+    await until(async () => await page.getByRole('group', { name: '默认画幅', exact: true }).getByRole('button', { name: /^3:4/ }).getAttribute('aria-pressed') === 'true' && await cards(page).count() === 6, 'detail defaults applied');
+    await page.getByRole('note').filter({ hasText: '建议上传商品实拍图' }).waitFor();
+    assert.match(await page.locator('#series-story-prompt').getAttribute('placeholder'), /文案只会改写你给的事实/);
+    await page.getByRole('button', { name: '示例: 降噪耳机详情', exact: true }).click();
+    const sent = page.waitForRequest((request) => request.url().endsWith('/api/text') && request.method() === 'POST');
+    await page.getByRole('button', { name: /^智能拆解分镜/ }).click();
+    const body = (await sent).postDataJSON();
+    assert.deepEqual([body.scene, body.sceneCount, body.referenceCount], ['ecommerce-detail', 6, 0]);
+    await until(() => confirmation(page).getByRole('button', { name: /^确认并生成 6 张图片/ }).isEnabled(), 'detail plan ready');
+    const card = await page.locator('#scene-prompt-0').inputValue();
+    assert.ok(card.startsWith('雾霾蓝配浅木色'));
+    assert.match(card, /主标题 "早上的热水 1"/);
+    await page.getByRole('note').filter({ hasText: '画面文字按你提供的事实改写' }).waitFor();
+    assert.match(app.calls.filter((call) => call.path.endsWith('/chat/completions')).at(-1).json.messages[0].content, /电商详情页套图/);
+    await page.reload(); await page.locator('#series-story-prompt').waitFor();
+    assert.equal(await sceneGroup.getByRole('button', { name: '电商详情', exact: true }).getAttribute('aria-pressed'), 'true', 'the scene is part of the draft');
+    assert.equal(await page.locator('#scene-prompt-0').inputValue(), card);
+    await sceneGroup.getByRole('button', { name: '角色 IP', exact: true }).click();
+    const switching = page.getByRole('alertdialog', { name: '切换为角色 IP', exact: true });
+    await switching.getByRole('button', { name: '取消', exact: true }).click();
+    assert.equal(await page.locator('#scene-prompt-0').inputValue(), card, 'cancel keeps the plan');
+    assert.equal(await sceneGroup.getByRole('button', { name: '电商详情', exact: true }).getAttribute('aria-pressed'), 'true');
+    const requests = [];
+    page.on('request', (request) => { if (request.method() === 'POST' && /\/api\/jobs(?:\/batch)?$/.test(request.url())) { const data = request.postDataJSON(); requests.push(...(data.jobs || [data])); } });
+    await confirmation(page).getByRole('button', { name: /^确认并生成 6 张图片/ }).click();
+    await until(() => requests.length === 6, 'detail series submitted');
+    assert.ok(requests.every((request) => request.clientContext.scene === 'ecommerce-detail'));
+    assert.ok(requests[0].request.prompt.startsWith(card), 'the image prompt starts with the card text');
+    assert.equal(requests.some((request) => request.request.prompt.includes('系列创作需求')), false, 'structured scenes do not repeat the brief');
+    assert.equal(requests[0].request.size, '768x1024');
+    await settled(page, 6);
+    assert.ok((await rows(page)).every((record) => record.scene === 'ecommerce-detail'));
+    await sceneGroup.getByRole('button', { name: '角色 IP', exact: true }).click();
+    await page.getByRole('alertdialog', { name: '切换为角色 IP', exact: true }).getByRole('button', { name: '切换并清空分镜', exact: true }).click();
+    await until(async () => await page.getByRole('group', { name: '默认画幅', exact: true }).getByRole('button', { name: /^1:1/ }).getAttribute('aria-pressed') === 'true' && await page.locator('#scene-prompt-0').inputValue() === '', 'character defaults applied, plan cleared');
+    assert.equal((await rows(page)).length, 6, 'finished works stay in the gallery');
+    await screenshot(page, 'scene-switch');
+  });
+
   await scenario('自由策划保留长剧本, 标题冒号与提示词换行, 拆解后等待确认', async (page) => {
     assert.equal(await page.getByText('应用场景模板', { exact: true }).count(), 0);
     const brief = '创作一组植物结构说明图, 保留英文品牌 SproutCanvas 和 {{name}}.\n' + '按原顺序展示叶片, 茎, 根和花, 不添加价格或人物.\n'.repeat(45);
@@ -256,8 +305,8 @@ try {
     assert.ok(artifacts.includes(`ref-${latest.recipe.referenceImage.id}`), 'continuity snapshot survives cleanup');
     await cards(page).nth(1).getByTitle('查看作品详情', { exact: true }).click();
     const viewer = page.getByRole('dialog', { name: '作品检视', exact: true });
-    assert.ok(requests[4].request.prompt.startsWith(latest.prompt), 'generation starts from the scene text shown on the card');
-    assert.equal(requests[4].request.prompt.includes('系列创作需求'), false);
+    assert.ok(requests[4].request.prompt.includes('系列创作需求'), 'general scenes carry the series brief, as measured on 2026-10-29');
+    assert.ok(requests[4].request.prompt.includes(latest.prompt));
     await viewer.getByRole('complementary', { name: '作品详情' }).getByText(latest.prompt, { exact: true }).waitFor();
     await viewer.getByRole('button', { name: '复用配方', exact: true }).click();
     await until(async () => await page.getByLabel('画面提示词', { exact: true }).inputValue() === latest.prompt, 'recipe reuse loads the scene text, not the wrapped generation prompt');
@@ -339,7 +388,7 @@ try {
     }));
     await page.getByRole('button', { name: /^智能拆解分镜/ }).click();
     await until(() => confirmation(page).getByRole('button', { name: /^确认并生成 4 张图片/ }).isEnabled(), 'recovered plan');
-    assert.equal(textCalls(), before + 2, 'recover without another paid text request');
+    assert.equal(textCalls(), before + 1, 'recover without another paid text request');
   });
 
   await scenario('本地保存失败后保留原文字请求并免费重领', async (page) => {
@@ -353,7 +402,7 @@ try {
     await page.evaluate(() => { window.failSeriesSave = false; });
     await page.getByRole('button', { name: /^智能拆解分镜/ }).click();
     await until(() => confirmation(page).getByRole('button', { name: /^确认并生成 4 张图片/ }).isEnabled(), 'saved original text result');
-    assert.equal(textCalls(), before + 2);
+    assert.equal(textCalls(), before + 1);
     await page.reload();
     await until(() => confirmation(page).getByRole('button', { name: /^确认并生成 4 张图片/ }).isEnabled(), 'durable reviewed plan');
   }, () => {

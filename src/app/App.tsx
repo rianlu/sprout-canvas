@@ -148,11 +148,11 @@ export function App() {
       const reference = await recordReference(first, '原系列主体参考');
       const overrides = Object.fromEntries(card.records.map((record, index) => [sceneIds[index], record.recipe ? { ...sizePreset(record.recipe.size), quality: record.recipe.quality, outputFormat: record.recipe.outputFormat, background: record.recipe.background, outputCompression: record.recipe.outputCompression } : {}]));
       const tasks = JSON.stringify(card.records.map((record, index) => ({ title: `分镜 ${index + 1}`, prompt: record.prompt })));
-      await writeWorkspaceDraft('series', { version: 1, seriesId, references: [reference], sceneIds, shotIds: [], overrides, config, stagedIds: [], brief: card.masterPrompt, taskText: tasks, count: card.records.length });
+      await writeWorkspaceDraft('series', { version: 1, seriesId, references: [reference], sceneIds, shotIds: [], overrides, config, stagedIds: [], brief: card.masterPrompt, taskText: tasks, count: card.records.length, scene: first.scene || 'general' });
       const drafts = {
         batch_transfer: '', batch_brief: card.masterPrompt,
         batch_tasks: tasks,
-        batch_count: String(card.records.length), batch_template: '',
+        batch_count: String(card.records.length), batch_template: '', batch_scene: first.scene || 'general',
         batch_style: '', batch_quality: config.quality, batch_output_format: config.outputFormat,
         batch_aspect_ratio: config.aspectRatio, batch_series_id: seriesId, batch_scene_ids: JSON.stringify(sceneIds), batch_shot_ids: '',
       };

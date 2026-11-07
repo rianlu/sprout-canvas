@@ -35,6 +35,7 @@ try {
   assert.equal(parsed.textProvider.baseUrl, 'https://text-override.invalid');
   assert.equal(parsed.textProvider.textModel, 'override-text');
   assert.equal(parsed.textProviders[1].apiKey, 'fixture-text-secondary');
+  assert.equal(parsed.textProviders[0].stream, false, 'text channels read whole replies unless stream is set');
   assert.equal(parsed.secureCookies, false);
   assert.equal(parsed.trustProxy, true, 'the file value applies without an environment override');
   assert.doesNotMatch(JSON.stringify(publicConfig(parsed)), /fixture-env-|apiKey/);
@@ -90,6 +91,11 @@ try {
   await assert.rejects(readLocalConfig(), /modelName/);
   await writeProviders([provider({ modelName: ' ' })]);
   await assert.rejects(readLocalConfig(), /modelName/);
+  const writeText = (changes) => writeFile(path.join(directory, 'config/local.config.json'), JSON.stringify({ ...config, textProviders: [{ ...config.textProviders[0], ...changes }] }));
+  await writeText({ stream: true });
+  assert.equal((await readLocalConfig()).textProviders[0].stream, true);
+  await writeText({ stream: 'yes' });
+  await assert.rejects(readLocalConfig(), /stream 必须是 true 或 false/);
   console.log('Provider-specific environment overrides and configuration validation passed');
 } finally {
   for (const [key, value] of Object.entries(previous)) {

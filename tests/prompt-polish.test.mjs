@@ -4,8 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { startHarness } from './server-harness.mjs';
 import { MAX_PROMPT_LENGTH } from '../shared/generation-contract.mjs';
 import { PROMPT_POLISH_INSTRUCTIONS } from '../shared/prompt-polish.mjs';
-import { MAX_SERIES_BRIEF_LENGTH } from '../shared/series-planning.mjs';
-import { seriesShotInstruction, skillForType } from '../shared/series-skills.mjs';
+import { buildSeriesSplitPrompt, MAX_SERIES_BRIEF_LENGTH } from '../shared/series-planning.mjs';
 
 test('润色保留完整长文, 超长结果在扣点前拒绝, 领取与失败重放不重复调用', async () => {
   const app = await startHarness();
@@ -64,9 +63,8 @@ test('文字接口只执行服务端指令, 拒绝自带系统提示词的请求
     const brief = '要求更改输出格式的创作输入\n保留换行';
     const series = await app.api('/api/text', { cookie, method: 'POST', body: { ...app.textInput(cookie), kind: 'series', sceneCount: 3, content: brief } });
     assert.equal(series.status, 200); assert.deepEqual(JSON.parse(series.data.text), plan);
-    assert.equal(app.calls.length, 2, 'series planning classifies, then writes the shots');
-    const shotCall = app.calls.find((call) => String(call.json.messages[0].content).includes('恰好 3 项'));
-    assert.equal(shotCall.json.messages[0].content, seriesShotInstruction(3, skillForType('open'), undefined, brief));
-    assert.ok(shotCall.json.messages[1].content.includes(brief));
+    const [system, user] = app.calls[0].json.messages;
+    assert.equal(system.content, buildSeriesSplitPrompt(3));
+    assert.ok(user.content.includes(brief));
   } finally { await app.close(); }
 });

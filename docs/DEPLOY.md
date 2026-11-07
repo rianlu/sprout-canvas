@@ -45,6 +45,7 @@
 | `capabilities.transparent` | 布尔值, 默认 false. 只有真实返回带透明通道的 PNG/WebP 后才设 true | 不使用 |
 | `capabilities.customSizes` | 布尔值. 是否接受 1:1, 3:2, 2:3 以外的画幅 (如 16:9, 3:4, 21:9). 默认 Images 模式且 imageModel 属于 gpt-image-2 系列 (含 2.5) 时为 true, 其他为 false | 不使用 |
 | `requestHeaders` | 可选请求头对象, 支持 `{{timestamp}}` 和 `{{sessionId}}` 替换 | 同左 |
+| `stream` | 不使用 | 可选布尔值, 默认 false. true 时以流式读取回复: 60 秒没有新内容或 180 秒未完成按结果未知返还, 只有收到结束信号且通过校验才扣点; 流中返回错误按明确失败处理. 适合回复较慢且网关会在约 30 秒断开非流式请求的通道 |
 
 - 当前两个图像通道均按真实文件检查设为 `outputFormats: ["png"]`, `exactSize: false`, `transparent: true`, 实测记录见 `docs/REAL_API_VALIDATION.md`. 透明底仅在对应通道 `transparent: true` 时启用.
 - `exactSize` 控制尺寸说明, 不改变上游实际能力. 自定义画幅只路由到 `customSizes: true` 的通道.
@@ -353,7 +354,7 @@ docker compose up -d --wait
 | `POST /api/jobs/:id/ack` | 确认本地事务已保存图片 |
 | `POST /api/jobs/:id/resume` | 使用原请求恢复重启前尚未执行的任务 |
 | `POST /api/jobs/archive` | 持久化收起已保存/已取消任务 |
-| `POST /api/text` | 文字处理, 含 requestId, kind(prompt/series), content (用户原文) 和 creditQuote; series 额外携带 sceneCount(3-8). 润色/拆解指令由服务端组装, 携带 input 等旧字段时返回 400 |
+| `POST /api/text` | 文字处理, 含 requestId, kind(prompt/series), content (用户原文) 和 creditQuote; series 额外携带 sceneCount(3-8), referenceCount(0-4) 和 scene (general/ecommerce-main/ecommerce-detail/character, 缺省为 general). 润色/拆解指令由服务端组装, 携带 input 等旧字段时返回 400 |
 | `GET /api/text/:requestId` | 按原请求编号读取文字结果, 不再次调用模型 |
 | `GET /api/credits` | 当前码可用/占用/累计消耗与点值版本 |
 | `/api/auth/status`, `login`, `logout` | 工作台会话状态, 访问码登录和退出; 登录 body 仅接受 code |

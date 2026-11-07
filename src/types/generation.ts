@@ -1,5 +1,6 @@
 import type { GenerationMode } from './provider';
 import type { GenerationRecipe, SeriesTemplate } from '../../shared/generation-contract.mjs';
+import type { SeriesScene } from '../../shared/series-scenes.mjs';
 export type { GenerationRecipe, SeriesTemplate } from '../../shared/generation-contract.mjs';
 
 export type StudioMode = 'text' | 'reference' | 'edit';
@@ -62,6 +63,8 @@ export interface ResultRecord {
   version?: number;
   parentId?: string;
   template?: SeriesTemplate;
+  /** Series scene used to plan this work; absent means general. */
+  scene?: SeriesScene;
   /** 系列聚合 (v3.5): 同一 seriesId 的记录在展馆归为一张叠层卡 */
   seriesId?: string;
   /** 系列主提示词 (世界观) */

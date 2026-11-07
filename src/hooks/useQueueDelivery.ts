@@ -59,7 +59,7 @@ export function useQueueDelivery(onResult: (records: ResultRecord[], jobId: stri
           jobId: job.id, requestId: job.requestId, seriesId: context.seriesId, masterPrompt: context.masterPrompt,
           batchId: context.batchId, submittedAt: job.queuedAt,
           sceneId: context.sceneId, sceneIndex: context.sceneIndex, version: context.version,
-          parentId: context.parentId, template: context.template, recipe: job.recipe || undefined,
+          parentId: context.parentId, template: context.template, ...(context.scene ? { scene: context.scene } : {}), recipe: job.recipe || undefined,
           revisedPrompt: result.data?.[index]?.revised_prompt,
           width: result.data?.[index]?.width, height: result.data?.[index]?.height, bytes: result.data?.[index]?.bytes,
         }));
