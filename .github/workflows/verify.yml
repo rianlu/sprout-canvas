@@ -4,12 +4,13 @@ permissions:
   contents: read
 jobs:
   verify:
-    runs-on: ubuntu-latest
+    # Pinned like the Docker base image, so a runner OS upgrade is a deliberate edit instead of a silent move of ubuntu-latest.
+    runs-on: ubuntu-26.04
     env:
       SPROUT_TEST_OUTPUT: /tmp/sprout-browser-check
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: '22'
           cache: npm
@@ -19,7 +20,7 @@ jobs:
       - run: npm run test:browser
       - run: docker build -t sprout-canvas:verify .
       - run: npm run test:docker
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: browser-verification
