@@ -39,7 +39,9 @@ async function openQueue(page) {
   if (!(await queueDrawer(page).isVisible())) await page.getByRole('button', { name: /^任务队列,/ }).click();
   await queueDrawer(page).waitFor({ state: 'visible' });
 }
-async function closeQueue(page) { const close = page.getByLabel('关闭队列抽屉'); if (await close.isVisible()) await close.click(); }
+// A closed drawer stays mounted for a frame or more while Base UI finishes its exit, so wait it out; otherwise
+// openQueue sees the leaving drawer as open, skips the click and then waits for a drawer that is gone.
+async function closeQueue(page) { const close = page.getByLabel('关闭队列抽屉'); if (await close.isVisible()) { await close.click(); await queueDrawer(page).waitFor({ state: 'hidden' }); } }
 async function submit(page, prompt, count = 1) {
   await closeQueue(page);
   await page.getByLabel('画面提示词', { exact: true }).fill(prompt);

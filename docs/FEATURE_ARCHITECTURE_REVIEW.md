@@ -575,6 +575,7 @@ flowchart LR
 
 - [x] 问题: 6cc5d5e 的 Verify 通过, 但有两条警告: checkout, setup-node, upload-artifact 的 v4 以 Node.js 20 运行, 已被强制改用 Node.js 24; `ubuntu-latest` 正从 Ubuntu 24.04 逐步迁到 26.04 (2026-10-19 至 11-19), 该次运行已在 26.04 上通过.
 - [x] 处理: 三个 action 升到 v7 (均为 node24). 核对 v5 到 v7 的不兼容项: 凭据另存, 禁止 `pull_request_target` 检出 fork, `NODE_AUTH_TOKEN` 与自动缓存调整, 均不涉及本工作流. 运行环境固定为 `ubuntu-26.04`, 与按 digest 固定基础镜像一致, 系统升级时显式修改.
+- [x] 修正: 升级后首次 Verify (5d47658) 两条警告已消失, 但 queue-visibility 浏览器验收超时. 原因是测试关闭任务抽屉后不等 Base UI 退场结束, 随后打开时把仍在退场的抽屉当成已打开而跳过点击. 两次运行的 Node 22.23.4 与 Chromium 153.0.8010.12 相同, 与 action 升级无关. 关闭后改为等待抽屉隐藏, 与其他四个浏览器测试一致; 将退场强制为 300ms 的复现中旧写法 3/3 失败, 新写法 3/3 通过.
 
 ## 9. 当前剩余验收与处理清单
 
