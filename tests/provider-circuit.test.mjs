@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { createStateStore } from '../server/state-store.mjs';
-import { formatUpstreamFailure, upstreamFailure, upstreamFailureDetail } from '../server/upstream-outcome.mjs';
+import { formatUpstreamFailure, relayNotice, upstreamFailure, upstreamFailureDetail } from '../server/upstream-outcome.mjs';
 import { PNG_BASE64, submission } from './fixtures.mjs';
 
 const MINUTE = 60_000;
@@ -155,6 +155,22 @@ test('文字通道的上游失败使用文字服务说法, 日志细节保留原
   const embedded = upstreamFailure(200, Buffer.from(JSON.stringify({ type: 'error', error: { message: 'failed at text.relay.example with sk-text-secret' } })));
   assert.equal(formatUpstreamFailure(embedded, config, '文字服务'), '文字服务返回生成错误: failed at 上游服务 with [redacted]');
   assert.equal(upstreamFailureDetail(embedded, config), 'HTTP 200: failed at text.relay.example with [redacted]');
+});
+
+test('中转以 200 回复的额度或限流提示识别为未执行, 提到余额或限流的正常润色不误判', () => {
+  const config = { baseUrl: 'https://text.relay.example', apiKey: 'sk-text-secret' };
+  for (const notice of ["You've used your daily chat limit. Please try again later.", '当前分组上游负载已饱和，请稍后再试', '服务器繁忙，请稍后再试。', '今日额度已用完, 请明天再试', 'Error: rate_limit_exceeded']) {
+    for (const source of ['Please draw your daily routine', '一只猫在窗台上晒太阳', '猫、狗']) {
+      assert.deepEqual(relayNotice(notice, source), { status: 429, upstreamStatus: 200, message: notice, outcomeUnknown: false }, `${notice} / ${source}`);
+    }
+  }
+  assert.equal(formatUpstreamFailure(relayNotice('今日额度已用完, 请明天再试', '一只猫'), config, '文字服务'), '文字服务返回生成错误: 今日额度已用完, 请明天再试');
+  // A polished prompt keeps the user's subject, so a declined payment or a rate-limited screen in the picture is still a result.
+  assert.equal(relayNotice('超市收银台前, 年轻人看着手机上余额不足的提示, 尴尬地挠头, 暖色顶灯, 中景', '超市结账时发现钱不够的尴尬瞬间'), null);
+  assert.equal(relayNotice('节假日高速收费站前车辆排成长龙, 交警在路口限流疏导, 傍晚逆光', '收费站拥堵'), null);
+  assert.equal(relayNotice('A tired programmer stares at a monitor showing a rate limit error, cold blue light', 'a programmer staring at an error screen'), null);
+  assert.equal(relayNotice('一片在晨光里舒展的绿叶', '一片叶子'), null);
+  assert.equal(relayNotice(`今日额度已用完. ${'补充说明. '.repeat(60)}`, '一只猫'), null, 'a long reply is never a notice');
 });
 
 test('很快返回的 ETIMEDOUT 按普通失败连续 3 次才冷却, 不因错误名含 timeout 而 1 次停用', async (t) => {

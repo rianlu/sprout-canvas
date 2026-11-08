@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
+import { writeFile } from 'node:fs/promises';
+import path from 'node:path';
 import { startHarness } from './server-harness.mjs';
 import { MAX_PROMPT_LENGTH } from '../shared/generation-contract.mjs';
 import { PROMPT_POLISH_INSTRUCTIONS } from '../shared/prompt-polish.mjs';
@@ -37,6 +39,45 @@ test('润色保留完整长文, 超长结果在扣点前拒绝, 领取与失败�
     assert.deepEqual((await app.api('/api/credits', { cookie })).data.credits, balance);
     assert.equal((await app.api('/api/text', { cookie, method: 'POST', body: input(longId) })).data.credit.state, 'refunded');
     assert.equal(app.calls.length, 2);
+  } finally { await app.close(); }
+});
+
+test('中转以 200 回复额度提示时不扣点, 换备用通道并计入熔断; 拆解同样处理, 所有通道都是提示时返还', async () => {
+  const app = await startHarness();
+  try {
+    const primary = app.config.textProviders[0];
+    app.config.textProviders = [primary, { ...primary, id: 'backup', name: 'backup', baseUrl: primary.baseUrl + '/backup' }];
+    await writeFile(path.join(app.directory, 'config/local.config.json'), JSON.stringify(app.config));
+    const cookie = await app.login();
+    const notice = "You've used your daily chat limit. Please try again later.";
+    let backup = JSON.stringify(Array.from({ length: 4 }, (_, index) => ({ title: `第 ${index + 1} 幕`, prompt: `小狐狸第 ${index + 1} 处` })));
+    app.controls.respond = (call, response) => {
+      response.writeHead(200, { 'Content-Type': 'application/json' });
+      response.end(JSON.stringify({ choices: [{ message: { content: call.path.startsWith('/backup/') ? backup : notice }, finish_reason: 'stop' }] }));
+      return true;
+    };
+    const available = async () => (await app.api('/api/credits', { cookie })).data.credits.available;
+    const start = await available();
+    const series = await app.api('/api/text', { cookie, method: 'POST', body: { ...app.textInput(cookie), kind: 'series', sceneCount: 4, content: '小狐狸在森林里找回丢失的围巾' } });
+    assert.equal(series.status, 200); assert.equal(series.data.providerName, 'backup'); assert.equal(JSON.parse(series.data.text).length, 4);
+    backup = '窗台上一只橘猫蜷成一团, 午后斜阳';
+    const polish = () => app.api('/api/text', { cookie, method: 'POST', body: { ...app.textInput(cookie), content: '一只猫在窗台上' } });
+    for (let index = 0; index < 2; index++) {
+      const result = await polish();
+      assert.equal(result.status, 200); assert.equal(result.data.text, backup); assert.equal(result.data.providerName, 'backup');
+      assert.equal(result.data.credit.state, 'charged');
+    }
+    assert.equal(app.calls.length, 6, 'each request asked the primary channel first');
+    assert.match(app.logs(), /circuit-open provider=text failures=3/);
+    assert.equal((await polish()).data.providerName, 'backup');
+    assert.equal(app.calls.length, 7, 'the cooled primary channel is skipped');
+    assert.equal(await available(), start - 4, 'only the backup results are charged');
+    backup = notice;
+    const failed = await polish();
+    assert.equal(failed.status, 502); assert.equal(failed.data.code, 'TEXT_FAILED'); assert.equal(failed.data.credit.state, 'refunded');
+    assert.equal(failed.data.text, undefined, 'the notice never becomes the polished prompt');
+    assert.equal(await available(), start - 4);
+    assert.match(app.logs(), /failed provider=backup mode=chat_completions error=HTTP 200: You've used your daily chat limit/);
   } finally { await app.close(); }
 });
 

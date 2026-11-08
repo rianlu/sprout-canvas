@@ -52,6 +52,33 @@ export function upstreamFailure(status, body, { strictServerErrors = true } = {}
   return { status: effectiveStatus, upstreamStatus: status, message: String(message), outcomeUnknown };
 }
 
+// Some relays answer a used-up quota with HTTP 200 and the notice as an ordinary reply, e.g. "You've used your daily chat
+// limit. Please try again later." Nothing ran, so it is a refusal like a 429. A notice is short and, apart from its own
+// wording, shares nothing with the user's text; a polished prompt that shows a declined card or a rate-limited screen still
+// repeats the user's subject and stays a result.
+const RELAY_NOTICE = /you(?:'|’)?(?:ve| have) (?:used|reached|exceeded|hit|run out of)\b.{0,40}?\b(?:limit|quota|cap|credits?|balance)\b|\b(?:limit|quota|cap)s? (?:has been |have been |was |is )?(?:reached|exceeded|exhausted|used up)\b|insufficient (?:balance|quota|credits?|funds)\b|too many requests|\brate[ _-]?limit|\b(?:server|service|model)s? (?:is |are )?(?:currently )?(?:overloaded|at capacity)\b|no available (?:channel|provider|account)s?\b|(?:额度|配额|余额|次数|用量|积分|点数|限额)(?:已经?|均已|已被)?(?:用完|用尽|耗尽|不足|超限|超出|达到?上限)|请求(?:过于|太过?)?频繁|负载已?(?:饱和|已满|过高)|无可用的?(?:渠道|通道|账号|账户)|限流|(?:服务器|服务|模型)(?:繁忙|过载)/gi;
+const RETRY_WORDING = /please (?:try again|retry)(?: later)?|try again later|请?(?:稍后|明天|过一会儿?)(?:再试|重试)/gi;
+const RELAY_NOTICE_LENGTH = 300;
+
+// Latin words of four or more letters and Han character pairs; a lone Han character counts on its own.
+function contentGrams(value, everyHanCharacter) {
+  const text = String(value || '').toLowerCase();
+  const grams = new Set(text.match(/[a-z\d]{4,}/g));
+  for (const run of text.match(/\p{Script=Han}+/gu) || []) {
+    if (everyHanCharacter || run.length === 1) for (const character of run) grams.add(character);
+    for (let index = 1; index < run.length; index++) grams.add(run.slice(index - 1, index + 1));
+  }
+  return grams;
+}
+
+export function relayNotice(reply, source = '') {
+  const text = String(reply || '').trim();
+  if (!text || text.length > RELAY_NOTICE_LENGTH || !text.match(RELAY_NOTICE)) return null;
+  const rest = contentGrams(text.replace(RELAY_NOTICE, ' ').replace(RETRY_WORDING, ' '), true);
+  for (const gram of contentGrams(source, false)) if (rest.has(gram)) return null;
+  return { status: 429, upstreamStatus: 200, message: text, outcomeUnknown: false };
+}
+
 const STATUS_LABELS = new Map([[400, '拒绝了请求'], [401, '鉴权失败'], [403, '拒绝访问'], [404, '接口或模型不存在'], [408, '响应超时'], [413, '请求内容过大'], [429, '请求过多'], [500, '内部错误'], [502, '网关错误'], [503, '暂时不可用'], [504, '响应超时'], [520, '网关错误'], [522, '连接超时'], [524, '响应超时']]);
 const HTML_BODY = /<\s*(?:!doctype|html|head|body|title|div|p|h\d)\b/i;
 const URL_TEXT = /\b(?:https?|wss?):\/\/[^\s"'<>)\]]+/gi;

@@ -1,7 +1,7 @@
 import { readLocalConfig } from './config.mjs';
 import { json, logLine, readJson, upstreamHeaders, timeoutSignal, isTimeoutError } from './http.mjs';
 import { readLimitedBody } from './image-result.mjs';
-import { fetchGeneration, upstreamFailure, formatUpstreamFailure, upstreamFailureDetail, publicUpstreamText } from './upstream-outcome.mjs';
+import { fetchGeneration, upstreamFailure, formatUpstreamFailure, upstreamFailureDetail, publicUpstreamText, relayNotice } from './upstream-outcome.mjs';
 import { rankedTextProviders, recordTextProviderFailure, recordTextProviderSuccess } from './text-routing.mjs';
 import { requestError, MAX_PROMPT_LENGTH, MAX_REFERENCE_IMAGES } from '../shared/generation-contract.mjs';
 import { createTextLimiter } from './request-guards.mjs';
@@ -67,12 +67,15 @@ function polishMessages(payload) {
   return [{ role: 'system', content: PROMPT_POLISH_INSTRUCTIONS }, { role: 'user', content: payload.content }];
 }
 
-async function askText(textProvider, model, messages, execution) {
+// `source` is the user's text, so a reply that ignores it and only states a used-up quota is a channel error, not a result.
+async function askText(textProvider, model, messages, execution, source) {
   execution.outcomeUnknown = true;
   const data = await callChat(textProvider, { model, messages });
   const text = extractChatText(data);
   const replied = data?.choices?.[0]?.message?.content != null;
   if (!text || text.length > 128000) throw Object.assign(new Error('文字通道未返回可用内容'), { definiteFailure: true, contentFailure: replied });
+  const notice = relayNotice(text, source);
+  if (notice) throw Object.assign(new Error(formatUpstreamFailure(notice, textProvider, '文字服务')), { definiteFailure: true, upstreamStatus: 200, detail: upstreamFailureDetail(notice, textProvider) });
   execution.outcomeUnknown = false;
   return text;
 }
@@ -87,7 +90,7 @@ function parsePlan(scene, text, count) {
 async function planSeries(textProvider, model, payload, execution) {
   const input = { scene: payload.scene, count: payload.sceneCount, content: payload.content, referenceCount: payload.referenceCount };
   const started = Date.now();
-  const draft = parsePlan(payload.scene, await askText(textProvider, model, planningMessages(input), execution), payload.sceneCount);
+  const draft = parsePlan(payload.scene, await askText(textProvider, model, planningMessages(input), execution, payload.content), payload.sceneCount);
   const issues = reviewScene(payload.scene, draft.raw, payload.referenceCount);
   if (!issues.length) return JSON.stringify(draft.tasks);
   if (Date.now() - started > SERIES_REWRITE_BUDGET_MS) {
@@ -96,7 +99,7 @@ async function planSeries(textProvider, model, payload, execution) {
   }
   logLine('INFO', `[series-plan] rewrite scene=${normalizeScene(payload.scene)} issues=${issues.length}`);
   try {
-    const revised = parsePlan(payload.scene, await askText(textProvider, model, rewriteMessages(input, draft.raw, issues), execution), payload.sceneCount);
+    const revised = parsePlan(payload.scene, await askText(textProvider, model, rewriteMessages(input, draft.raw, issues), execution, payload.content), payload.sceneCount);
     if (reviewScene(payload.scene, revised.raw, payload.referenceCount).length <= issues.length) return JSON.stringify(revised.tasks);
   } catch (error) {
     logLine('WARN', `[series-plan] rewrite kept first draft scene=${normalizeScene(payload.scene)} error=${String(error.message || error).slice(0, 160)}`);
@@ -292,7 +295,7 @@ async function generateText(payload, op, session, execution) {
       let text;
       if (payload.kind === 'series') text = await planSeries(textProvider, model, payload, execution);
       else {
-        text = await askText(textProvider, model, polishMessages(payload), execution);
+        text = await askText(textProvider, model, polishMessages(payload), execution, payload.content);
         try { text = validatePolishedPrompt(text); }
         catch (error) { throw Object.assign(error, { definiteFailure: true, contentFailure: true }); }
       }
