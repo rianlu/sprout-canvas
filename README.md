@@ -42,13 +42,13 @@ sc_J3L9sv4YYnhv5lRbzgzA7PK4gwUbzZoc
 
 ## 页面预览
 
-以下为当前版本的实际界面, 点击图片可查看原尺寸. 作品和参考图使用仓库演示素材, 分镜为待确认草稿, 灵感点与后台统计为隔离演示数据.
+以下为当前版本的实际界面, 点击图片可查看原尺寸. 电脑端按页面分开, 手机端分别收在工作台和后台管理的最后一张里. 创作画卷和展馆里的作品是占位图, 用来展示有内容时的样子; 点开后可以放大检视. 卡片上的 JPEG 是这些示例文件本身的格式, 新生成的单图固定为 PNG. 风格库和仪表盘来自一套已经维护过的素材, 数量和部分分类名与首次导入的 36 款不同. 访问码的名称, 额度和点值是另一套示例, 不与仪表盘上的数字对应, 也不是真实账号或产品默认值.
 
 ### 单图创作
 
 在同一页完成提示词润色, 模板预览和多图参考. 最多添加 4 张参考图, 可逐张更换或移除. 创作画卷展示最近 4 个记录, 完整作品保存在展馆.
 
-[![单图创作: 提示词模板预览, 多图参考与近期创作画卷](docs/images/studio.webp)](docs/images/studio.webp)
+[![单图创作: 提示词, 参考图与最近作品](docs/images/studio.webp)](docs/images/studio.webp)
 
 ### 访问码登录
 
@@ -60,25 +60,25 @@ sc_J3L9sv4YYnhv5lRbzgzA7PK4gwUbzZoc
 
 先将故事梗概或分镜剧本拆解为可编辑的提示词, 检查后再确认生图. 后续分镜通过首镜参考保持画面关联.
 
-[![系列策划: 创作需求, 参考图与待确认分镜](docs/images/series.webp)](docs/images/series.webp)
+[![系列策划: 创作需求与分镜设置](docs/images/series.webp)](docs/images/series.webp)
 
 ### 风格库
 
-按分类或关键词寻找模板, 复制原文提示词, 或直接发送到单图创作. 内容由管理后台维护.
+按分类或关键词寻找模板, 复制原文提示词, 或直接发送到单图创作. 内容由管理后台维护. 截图里能看到维护时留下的旧分类名.
 
-[![风格库: 分类筛选, 示例图与提示词模板](docs/images/styles.webp)](docs/images/styles.webp)
+[![风格库: 分类筛选与模板卡片](docs/images/styles.webp)](docs/images/styles.webp)
 
 ### 本地展馆
 
 集中查看当前浏览器保存的单图和系列作品, 支持搜索, 筛选, 批量下载与删除.
 
-[![本地展馆: 作品筛选与画稿浏览](docs/images/gallery.webp)](docs/images/gallery.webp)
+[![本地展馆: 单图与系列作品](docs/images/gallery.webp)](docs/images/gallery.webp)
 
-### 作品详情
+### 工作台手机端
 
-放大检视原图, 查看生成配方和系列版本, 下载图片或进入蒙版编辑. 缩放图片时, 工具按钮保持固定大小.
+四个工作台页面在手机上的布局.
 
-[![作品详情: 大图检视, 缩放工具与生成配方](docs/images/viewer.webp)](docs/images/viewer.webp)
+[![手机端: 单图创作, 系列策划, 风格库与展馆](docs/images/mobile.webp)](docs/images/mobile.webp)
 
 ## 后台管理
 
@@ -90,25 +90,25 @@ sc_J3L9sv4YYnhv5lRbzgzA7PK4gwUbzZoc
 
 ### 仪表盘
 
-查看风格数量和访问码状态. 创作次数与灵感点用量分别支持今日 / 本月 / 累计切换, 热力图展示最近 365 天的成功结算记录.
+查看风格数量, 已启用访问码和灵感点用量. 创作活跃度按最近 365 天展示, 图片生成与文字处理可在今日 / 本月 / 累计之间切换.
 
-[![管理仪表盘: 创作热力图, 时段用量与最近风格](docs/images/admin-dashboard.webp)](docs/images/admin-dashboard.webp)
+[![管理仪表盘: 风格数量, 创作活跃度与用量](docs/images/admin-dashboard.webp)](docs/images/admin-dashboard.webp)
 
 ### 风格管理
 
-电脑端以四列卡片展示素材, 点击整张卡片即可编辑. 支持搜索, 上下架, 删除, 以及包含示例图的备份导入导出.
+以卡片展示素材, 点击整张卡片即可编辑. 支持搜索, 上下架, 删除, 以及包含示例图的备份导入导出.
 
 [![风格管理: 素材列表, 上下架和备份](docs/images/style-admin.webp)](docs/images/style-admin.webp)
 
 ### 风格编辑
 
-图片和完整提示词为必填项, 支持上传, 拖拽或直接粘贴图片. 名称, 分类, 作者, 来源和排序可选, 表单中直接展示全部字段, 保留提示词原文. 分类从 7 个固定选项中选择, 按 "先看版式, 再看质感" 的顺序取第一个符合的.
+图片和完整提示词为必填项, 支持上传, 拖拽或直接粘贴图片. 名称, 分类, 作者, 来源和排序可选, 表单中直接展示全部字段, 保留提示词原文. 新建或修改分类时, 从 7 个固定选项中选择, 按 "先看版式, 再看质感" 的顺序取第一个符合的. 截图里选中的是旧分类, 编辑时会这样标明.
 
 [![风格编辑: 图片粘贴区, 完整提示词与作者来源](docs/images/style-editor.webp)](docs/images/style-editor.webp)
 
 ### 访问码与灵感点
 
-创建一个或多个访问码, 分配有限或无限额度, 分别设置图片与文字处理的点值. 同一码可多人使用, 共用余额, 各浏览器的任务独立.
+创建一个或多个访问码, 分配有限或无限额度, 分别设置图片与文字处理的点值. 同一码可多人使用, 共用余额, 各浏览器的任务独立. 下面截图里的名称, 额度和点值都是示例. 产品默认是每张图片 10 点, 每次文字处理 1 点.
 
 [![访问码管理: 图片与文字点值设置, 额度和用量入口](docs/images/access-admin.webp)](docs/images/access-admin.webp)
 
@@ -120,9 +120,15 @@ sc_J3L9sv4YYnhv5lRbzgzA7PK4gwUbzZoc
 
 ### 用量明细
 
-从卡片上的用量图标打开独立明细, 查看预占, 成功扣除和返还记录. 结果未知的任务自动返还, 流水注明原因, 无需人工核实.
+从卡片上的用量图标打开独立明细. 流水记下预占, 成功扣除和返还; 结果未知的任务自动返还, 并写明原因. 下面这张图是示例流水, 用来展示扣除, 无限额度的等值记录和初始额度, 各行数字并不对应同一次真实结算.
 
-[![用量明细: 灵感点流水与自动返还记录](docs/images/access-usage.webp)](docs/images/access-usage.webp)
+[![用量明细: 扣除, 无限额度等值与初始额度的示例流水](docs/images/access-usage.webp)](docs/images/access-usage.webp)
+
+### 后台手机端
+
+登录, 仪表盘, 风格管理和访问码在手机上的布局. 仪表盘数字来自截图时的素材库; 访问码仍是示例数据.
+
+[![管理后台手机端: 登录, 仪表盘, 风格管理与访问码](docs/images/admin-mobile.webp)](docs/images/admin-mobile.webp)
 
 ## 功能一览
 
@@ -238,6 +244,6 @@ npm run dev
 
 ## 素材来源
 
-初始风格案例整理自 [awesome-gptimage2-prompts](https://github.com/gpt-image2/awesome-gptimage2-prompts). 原作者, 图片来源与 CC BY 4.0 许可见 [素材署名清单](public/assets/styles/ATTRIBUTION.txt). 截图中的水彩阅读示例由蜡笔进化论提供, 同样列于该清单.
+初始风格案例整理自 [awesome-gptimage2-prompts](https://github.com/gpt-image2/awesome-gptimage2-prompts). 原作者, 图片来源与 CC BY 4.0 许可见 [素材署名清单](public/assets/styles/ATTRIBUTION.txt). 首次导入的案例中, 「轻柔水彩绘本」和「层叠纸雕剧场」由蜡笔进化论提供.
 
 管理员自行添加的素材按各条记录的作者与来源维护. 示例图用于展示创作案例, 不作为模型效果承诺.
